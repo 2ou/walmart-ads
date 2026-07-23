@@ -9,6 +9,14 @@ public interface AiAnalysisProvider {
     record AiAnalysisRequest(String dataFingerprint, String metricsJson) {
     }
 
-    record AiAnalysisResult(String provider, String model, String analysisJson) {
+    record AiAnalysisResult(
+            String provider,
+            String model,
+            String requestId,
+            String analysisJson,
+            int promptTokens,
+            int completionTokens,
+            int totalTokens
+    ) {
     }
 }

@@ -458,6 +458,24 @@
     .log-time { color: var(--slate-dim); font: 10px "Cascadia Mono", monospace; }
     .log-copy { color: var(--steel-copy); font-size: 11px; }
     .log-copy strong { color: var(--frost-ink); }
+    .ai-panel { margin-top: 14px; }
+    .ai-status { display: flex; align-items: center; gap: 9px; color: var(--steel-copy); font-size: 11px; }
+    .ai-body { padding: 18px; }
+    .ai-summary { padding: 15px 16px; border: 1px solid rgba(0, 113, 206, .24); border-radius: 10px; color: var(--frost-ink); background: rgba(0, 113, 206, .08); line-height: 1.7; }
+    .ai-meta { margin-top: 8px; color: var(--slate-dim); font: 10px "Cascadia Mono", monospace; }
+    .ai-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 14px; }
+    .ai-column { padding: 14px; border: 1px solid var(--line-soft); border-radius: 10px; background: rgba(7, 16, 31, .36); }
+    .ai-column h3 { margin: 0 0 10px; font-size: 12px; }
+    .ai-insight { padding: 10px 0; border-top: 1px solid var(--line-soft); }
+    .ai-insight:first-of-type { border-top: 0; padding-top: 0; }
+    .ai-insight strong { display: block; margin-bottom: 4px; font-size: 11px; }
+    .ai-insight p { margin: 0; color: var(--steel-copy); font-size: 10px; line-height: 1.6; }
+    .ai-actions { margin-top: 14px; overflow: hidden; border: 1px solid var(--line-soft); border-radius: 10px; }
+    .ai-action { display: grid; grid-template-columns: 42px minmax(120px, .45fr) 1fr; gap: 12px; padding: 12px 14px; border-top: 1px solid var(--line-soft); align-items: start; }
+    .ai-action:first-child { border-top: 0; }
+    .ai-action-priority { color: var(--spark-yellow); font: 700 10px "Cascadia Mono", monospace; }
+    .ai-action strong { font-size: 11px; }
+    .ai-action p { margin: 3px 0 0; color: var(--steel-copy); font-size: 10px; line-height: 1.5; }
 
     .empty-state { padding: 42px 20px; text-align: center; color: var(--steel-copy); }
     .empty-state strong { display: block; margin-bottom: 5px; color: var(--frost-ink); }
@@ -501,6 +519,9 @@
       .pipeline { grid-template-columns: 1fr; }
       .agent-hero { padding: 21px; }
       .run-summary { grid-template-columns: 1fr; }
+      .ai-grid { grid-template-columns: 1fr; }
+      .ai-action { grid-template-columns: 38px 1fr; }
+      .ai-action > div:last-child { grid-column: 2; }
       .log-row { grid-template-columns: 64px 1fr; }
       .log-row .status-badge { grid-column: 2; width: max-content; }
     }
@@ -644,6 +665,13 @@
             <section class="panel" aria-labelledby="policyTitle"><div class="panel-header"><div><h2 class="panel-title" id="policyTitle">策略规则</h2><p class="panel-subtitle">原型阈值，可调整并实时重算</p></div></div><form class="policy-form" id="policyForm"><div class="form-grid"><div class="field"><label for="targetRoas">放量 ROAS</label><div class="input-wrap"><input id="targetRoas" type="number" min="1" max="20" step="0.1"><span class="input-suffix">x</span></div></div><div class="field"><label for="floorRoas">降耗 ROAS</label><div class="input-wrap"><input id="floorRoas" type="number" min="0" max="20" step="0.1"><span class="input-suffix">x</span></div></div><div class="field"><label for="minClicks">最低点击量</label><div class="input-wrap"><input id="minClicks" type="number" min="1" max="1000" step="1"><span class="input-suffix">次</span></div></div><div class="field"><label for="minSpend">最低花费</label><div class="input-wrap"><input id="minSpend" type="number" min="0" max="10000" step="1"><span class="input-suffix">USD</span></div></div></div><p class="form-note">放量还要求至少 3 个广告订单。降耗只在达到最低点击和最低花费后触发，避免小样本误判。</p></form></section>
             <section class="panel" aria-labelledby="runTitle"><div class="panel-header"><div><h2 class="panel-title" id="runTitle">本次分析运行</h2><p class="panel-subtitle" id="runSubtitle"></p></div><button class="primary-button" type="button" id="recalculateButton">重新计算</button></div><div class="run-summary" id="runSummary"></div><div class="log-list" id="runLog"></div></section>
           </div>
+          <section class="panel ai-panel" aria-labelledby="aiAnalysisTitle">
+            <div class="panel-header">
+              <div><h2 class="panel-title" id="aiAnalysisTitle">Kie AI 二次分析</h2><p class="panel-subtitle">本地规则先计算，AI 仅分析聚合指标；只在点击按钮时调用</p></div>
+              <div class="ai-status"><span class="status-badge collect" id="aiStatusBadge">读取配置</span><button class="primary-button" type="button" id="runAiButton" disabled>运行 Kie AI 分析</button></div>
+            </div>
+            <div class="ai-body" id="aiAnalysisBody"><div class="empty-state"><strong>AI 不会自动调用</strong>配置 KIE_API_KEY 后，可对当前周期的聚合数据进行二次分析。</div></div>
+          </section>
         </section>
 
         <section class="view" id="view-imports" aria-labelledby="pageTitle">
@@ -676,6 +704,7 @@
         minClicks: DATA.defaults.minClicks,
         minSpend: DATA.defaults.minSpend,
       },
+      aiStatus: null,
     };
 
     const titles = { dashboard: "经营驾驶舱", diagnosis: "广告诊断", sku: "SKU 机会矩阵", agent: "Agent 控制室", imports: "数据导入" };
@@ -924,6 +953,68 @@
       }
     }
 
+    function renderAiAnalysis(result) {
+      if (!result?.analysis) return;
+      const analysis = result.analysis;
+      const insightColumn = (title, items) => `<section class="ai-column"><h3>${title}</h3>${(items || []).map((item) => `<div class="ai-insight"><strong>${escapeHtml(item.title)}</strong><p>${escapeHtml(item.evidence)}</p><p>${escapeHtml(item.recommendation)}</p></div>`).join("") || `<div class="empty-state"><strong>暂无项目</strong></div>`}</section>`;
+      const actions = [...(analysis.actions || [])].sort((a, b) => number(a.priority) - number(b.priority));
+      $("#aiAnalysisBody").innerHTML = `
+        <div class="ai-summary">${escapeHtml(analysis.summary || "分析完成。")}</div>
+        <div class="ai-meta">${escapeHtml(result.provider)} / ${escapeHtml(result.model)} · ${result.cached ? "复用历史缓存" : "本次新调用"} · Token ${integer(result.totalTokens)}</div>
+        <div class="ai-grid">${insightColumn("机会", analysis.opportunities)}${insightColumn("风险", analysis.risks)}</div>
+        <div class="ai-actions">${actions.map((item) => `<div class="ai-action"><span class="ai-action-priority">P${integer(item.priority)}</span><strong>${escapeHtml(item.target)}</strong><div><strong>${escapeHtml(item.action)}</strong><p>${escapeHtml(item.reason)}</p></div></div>`).join("") || `<div class="empty-state"><strong>没有新增动作</strong>继续执行本地规则建议。</div>`}</div>`;
+    }
+
+    async function loadAiStatus() {
+      const badge = $("#aiStatusBadge");
+      const button = $("#runAiButton");
+      try {
+        const response = await fetch("/api/ai/status");
+        const payload = await response.json();
+        if (!response.ok || !payload.success) throw new Error(payload.message || `HTTP ${response.status}`);
+        state.aiStatus = payload.data;
+        const ready = payload.data.configured;
+        badge.textContent = ready ? `${payload.data.model} 已就绪` : payload.data.enabled ? "缺少 API Key" : "默认关闭";
+        badge.className = `status-badge ${ready ? "scale" : "collect"}`;
+        button.disabled = !ready;
+        button.title = ready ? "仅发送聚合指标并手工触发" : "设置 WALMART_ADS_AI_ENABLED=true 和 KIE_API_KEY";
+      } catch (error) {
+        badge.textContent = "状态读取失败";
+        badge.className = "status-badge reduce";
+        button.disabled = true;
+      }
+    }
+
+    async function loadLatestAiAnalysis() {
+      try {
+        const response = await fetch("/api/ai/analysis/latest");
+        const payload = await response.json();
+        if (response.ok && payload.success && payload.data) renderAiAnalysis(payload.data);
+      } catch (_) {
+        // 历史结果读取失败不影响规则分析页面。
+      }
+    }
+
+    async function runAiAnalysis() {
+      const button = $("#runAiButton");
+      button.disabled = true;
+      button.textContent = "Kie 分析中…";
+      $("#aiAnalysisBody").innerHTML = `<div class="empty-state"><strong>正在调用 Kie AI</strong>仅发送 ${state.periodDays} 天聚合指标，请稍候。</div>`;
+      try {
+        const response = await fetch(`/api/ai/analysis?days=${state.periodDays}`, { method: "POST" });
+        const payload = await response.json();
+        if (!response.ok || !payload.success) throw new Error(payload.message || `HTTP ${response.status}`);
+        renderAiAnalysis(payload.data);
+        showToast(payload.data.cached ? "已复用相同数据的 AI 分析缓存。" : "Kie AI 分析完成。");
+      } catch (error) {
+        $("#aiAnalysisBody").innerHTML = `<div class="empty-state"><strong>AI 分析失败</strong>${escapeHtml(error.message)}</div>`;
+        showToast(`AI 分析失败：${error.message}`);
+      } finally {
+        button.disabled = !state.aiStatus?.configured;
+        button.textContent = "运行 Kie AI 分析";
+      }
+    }
+
     function exportRecommendations() {
       const rows = campaignRows().filter((row) => row.decision !== "collect");
       const header = ["分析周期", "广告活动", "父SKU", "广告类型", "广告费USD", "归因销售USD", "广告订单", "ROAS", "CPC", "建议", "判断依据"];
@@ -959,6 +1050,7 @@
     $("#scanImportButton").addEventListener("click", runImport);
     $("#scanImportPageButton").addEventListener("click", runImport);
     $("#refreshBatchesButton").addEventListener("click", loadBatches);
+    $("#runAiButton").addEventListener("click", runAiAnalysis);
     $("#recalculateButton").addEventListener("click", () => {
       state.thresholds.targetRoas = number($("#targetRoas").value);
       state.thresholds.floorRoas = number($("#floorRoas").value);
@@ -974,6 +1066,8 @@
     $("#minSpend").value = state.thresholds.minSpend;
     $("#sidebarSourceTime").textContent = `最新业务日 ${DATA.meta.latestDate}`;
     loadBatches();
+    loadAiStatus();
+    loadLatestAiAnalysis();
     renderAll();
   </script>
 </body>

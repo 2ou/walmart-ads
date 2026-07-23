@@ -29,6 +29,16 @@ walmart:
   ads:
     data-root: ${WALMART_ADS_DATA_ROOT:D:/PNK/17DATA}
     archive-root: ${WALMART_ADS_ARCHIVE_ROOT:D:/PNK/17DATA/archive}
+    ai:
+      kie:
+        enabled: ${WALMART_ADS_AI_ENABLED:false}
+        api-key: ${KIE_API_KEY:}
+        base-url: ${KIE_BASE_URL:https://api.kie.ai}
+        model: ${KIE_MODEL:gemini-2.5-flash}
+        connect-timeout-seconds: ${KIE_CONNECT_TIMEOUT_SECONDS:10}
+        read-timeout-seconds: ${KIE_READ_TIMEOUT_SECONDS:120}
+        max-campaigns: ${KIE_MAX_CAMPAIGNS:25}
+        max-skus: ${KIE_MAX_SKUS:20}
 
 logging:
   level:

@@ -10,7 +10,7 @@
 - 导入批次、文件指纹、重复拦截和历史版本
 - 广告、订单、SKU 和广告活动指标
 - 基于规则的放量、降耗、优化和观察建议
-- AI 仅预留接口，不产生模型费用
+- Kie AI 分析接口；默认关闭，仅手工触发，不产生自动调用费用
 
 ## 数据目录约定
 
@@ -57,6 +57,30 @@ java -jar target\walmart-ads-1.0.0-SNAPSHOT.jar
 ```
 
 浏览器访问 `http://127.0.0.1:10020`。
+
+## Kie AI 分析
+
+AI 使用 Kie 的 OpenAI 风格 Chat Completions 接口，默认模型为低成本的
+`gemini-2.5-flash`。系统先在本地完成指标聚合和规则判断，只把最多 30 天、
+25 个广告活动和 20 个父 SKU 的聚合结果交给模型，原始订单和客户信息不会发送。
+
+默认不开启。需要时设置：
+
+```powershell
+$env:WALMART_ADS_AI_ENABLED = 'true'
+$env:KIE_API_KEY = 'your-kie-api-key'
+```
+
+可选配置：
+
+```powershell
+$env:KIE_MODEL = 'gemini-2.5-flash'
+$env:KIE_BASE_URL = 'https://api.kie.ai'
+```
+
+分析只能通过页面按钮或 `POST /api/ai/analysis?days=7` 手工触发。相同数据、
+模型和提示词版本会复用 MySQL 中的历史结果；使用 `force=true` 才会重新调用。
+API Key 只从环境变量读取，不会写入源码、数据库或前端。
 
 ## 隐私
 

@@ -245,6 +245,7 @@
     .secondary-button { border: 1px solid var(--line-strong); background: var(--navy-panel); color: var(--frost-ink); }
     .primary-button { border: 1px solid rgba(47, 144, 255, .35); background: var(--walmart-blue); color: var(--frost-ink); }
     .secondary-button:hover, .primary-button:hover { transform: translateY(-1px); }
+    .secondary-button:disabled, .primary-button:disabled { opacity: .5; cursor: not-allowed; pointer-events: none; transform: none; }
     .secondary-button svg, .primary-button svg { width: 16px; height: 16px; }
 
     .content { max-width: 1500px; margin: 0 auto; padding: 24px 30px 44px; position: relative; z-index: 5; }
@@ -477,6 +478,100 @@
     .ai-action strong { font-size: 11px; }
     .ai-action p { margin: 3px 0 0; color: var(--steel-copy); font-size: 10px; line-height: 1.5; }
 
+    .inventory-metric-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
+    .inventory-metric {
+      min-height: 116px;
+      padding: 15px;
+      border: 1px solid var(--line-soft);
+      border-radius: var(--radius-md);
+      background: linear-gradient(155deg, rgba(19, 34, 58, .78), rgba(13, 24, 43, .9));
+      box-shadow: var(--shadow-panel);
+    }
+    .inventory-metric span { display: block; color: var(--steel-copy); font-size: 11px; }
+    .inventory-metric strong { display: block; margin-top: 15px; color: var(--frost-ink); font: 750 23px/1 "Cascadia Mono", monospace; letter-spacing: -.045em; }
+    .inventory-metric small { display: block; margin-top: 10px; color: var(--slate-dim); font-size: 10px; }
+    .inventory-metric.attention strong { color: var(--signal-red); }
+    .inventory-metric.forecast strong { color: var(--walmart-blue); }
+    .inventory-layout { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(330px, .8fr); gap: 14px; margin-bottom: 14px; }
+    .inventory-forecast-body { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; background: var(--line-soft); }
+    .forecast-side { min-height: 154px; padding: 18px; background: var(--navy-panel); }
+    .forecast-side span { color: var(--steel-copy); font-size: 11px; }
+    .forecast-side strong { display: block; margin-top: 14px; font: 760 30px/1 "Cascadia Mono", monospace; letter-spacing: -.05em; }
+    .forecast-side.system strong { color: var(--spark-yellow); }
+    .forecast-side.predicted strong { color: var(--walmart-blue); }
+    .forecast-side p { margin: 12px 0 0; color: var(--steel-copy); font-size: 10px; line-height: 1.6; text-wrap: pretty; }
+    .forecast-formula { margin: 14px; padding: 12px 13px; border: 1px solid var(--line-soft); border-radius: 9px; color: var(--steel-copy); background: rgba(7, 16, 31, .45); font-size: 11px; }
+    .forecast-formula strong { color: var(--frost-ink); }
+    .inventory-target { display: flex; align-items: center; gap: 8px; }
+    .inventory-target label { color: var(--steel-copy); font-size: 11px; font-weight: 700; }
+    .compact-select {
+      height: 38px;
+      padding: 0 30px 0 10px;
+      border: 1px solid var(--line-soft);
+      border-radius: 9px;
+      color: var(--frost-ink);
+      background: var(--navy-panel);
+      font: 700 11px "Segoe UI Variable", "Microsoft YaHei UI", sans-serif;
+    }
+    .risk-list { display: grid; gap: 11px; padding: 17px; }
+    .risk-row { display: grid; grid-template-columns: 72px minmax(0, 1fr) 38px; gap: 10px; align-items: center; color: var(--steel-copy); font-size: 10px; }
+    .risk-row strong { color: var(--frost-ink); text-align: right; font: 700 11px "Cascadia Mono", monospace; }
+    .risk-track { height: 7px; overflow: hidden; border-radius: 999px; background: rgba(145, 160, 185, .11); }
+    .risk-track span { display: block; height: 100%; border-radius: inherit; background: var(--walmart-blue); }
+    .risk-row.critical .risk-track span { background: var(--signal-red); }
+    .risk-row.warning .risk-track span { background: var(--signal-orange); }
+    .risk-row.healthy .risk-track span { background: var(--signal-green); }
+    .inventory-trend { min-height: 252px; padding: 16px 14px 8px; }
+    .inventory-trend svg { width: 100%; height: 220px; }
+    .inventory-line-available { fill: none; stroke: var(--walmart-blue); stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+    .inventory-line-transit { fill: none; stroke: var(--spark-yellow); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    .inventory-table-tools { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; width: 100%; }
+    .inventory-filter-group { display: flex; flex-wrap: wrap; gap: 7px; }
+    .inventory-table { min-width: 1320px; }
+    .inventory-product { display: grid; grid-template-columns: 34px minmax(190px, 1fr); gap: 10px; align-items: center; }
+    .inventory-thumb { width: 34px; height: 42px; border: 1px solid var(--line-soft); border-radius: 7px; object-fit: cover; background: rgba(237, 244, 255, .04); }
+    .inventory-sku { display: block; max-width: 260px; overflow: hidden; color: var(--frost-ink); font-weight: 700; text-overflow: ellipsis; }
+    .inventory-item-name { display: block; max-width: 260px; margin-top: 3px; overflow: hidden; color: var(--slate-dim); font-size: 10px; text-overflow: ellipsis; }
+    .table-link { min-height: 32px; padding: 0 9px; border: 1px solid var(--line-soft); border-radius: 8px; color: var(--walmart-blue); background: transparent; cursor: pointer; font-size: 10px; font-weight: 750; }
+    .table-link:hover { border-color: rgba(47, 144, 255, .3); background: var(--blue-soft); }
+    .table-footer { min-height: 52px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 14px; border-top: 1px solid var(--line-soft); color: var(--steel-copy); font-size: 11px; }
+    .pagination { display: flex; align-items: center; gap: 8px; }
+    .pagination button { min-height: 34px; padding: 0 10px; border: 1px solid var(--line-soft); border-radius: 8px; color: var(--frost-ink); background: var(--navy-panel); cursor: pointer; }
+    .pagination button:disabled { opacity: .45; cursor: not-allowed; }
+    .inventory-dialog {
+      width: min(620px, calc(100vw - 32px));
+      padding: 0;
+      border: 1px solid var(--line-strong);
+      border-radius: var(--radius-lg);
+      color: var(--frost-ink);
+      background: var(--navy-panel);
+      box-shadow: 0 30px 90px rgba(2, 8, 19, .65);
+    }
+    .inventory-dialog::backdrop { background: rgba(2, 8, 19, .76); backdrop-filter: blur(4px); }
+    .dialog-header { display: flex; align-items: start; justify-content: space-between; gap: 18px; padding: 17px 18px; border-bottom: 1px solid var(--line-soft); }
+    .dialog-header h2 { margin: 0; font-size: 16px; }
+    .dialog-header p { margin: 4px 0 0; color: var(--steel-copy); font-size: 11px; }
+    .dialog-close { width: 38px; height: 38px; display: grid; place-items: center; border: 1px solid var(--line-soft); border-radius: 9px; color: var(--steel-copy); background: transparent; cursor: pointer; }
+    .production-form { padding: 17px 18px 0; }
+    .production-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 13px; }
+    .production-form input, .production-form textarea {
+      width: 100%;
+      border: 1px solid var(--line-soft);
+      border-radius: 9px;
+      color: var(--frost-ink);
+      background: rgba(7, 16, 31, .68);
+    }
+    .production-form input { height: 44px; padding: 0 11px; }
+    .production-form textarea { min-height: 80px; padding: 10px 11px; resize: vertical; }
+    .production-form .field-wide { grid-column: 1 / -1; }
+    .dialog-actions { display: flex; justify-content: flex-end; gap: 9px; padding: 15px 0 17px; }
+    .production-history { padding: 0 18px 18px; }
+    .production-history h3 { margin: 0 0 9px; font-size: 12px; }
+    .history-list { overflow: hidden; border: 1px solid var(--line-soft); border-radius: 9px; }
+    .history-row { display: grid; grid-template-columns: 120px 86px 1fr; gap: 10px; align-items: center; min-height: 42px; padding: 8px 11px; border-top: 1px solid var(--line-soft); color: var(--steel-copy); font-size: 10px; }
+    .history-row:first-child { border-top: 0; }
+    .history-row strong { color: var(--frost-ink); font: 700 11px "Cascadia Mono", monospace; text-align: right; }
+
     .empty-state { padding: 42px 20px; text-align: center; color: var(--steel-copy); }
     .empty-state strong { display: block; margin-bottom: 5px; color: var(--frost-ink); }
     .toast { position: fixed; right: 22px; bottom: 22px; z-index: 60; min-width: 250px; padding: 13px 15px; border: 1px solid rgba(41, 211, 162, .2); border-radius: 11px; color: var(--frost-ink); background: #10243a; box-shadow: var(--shadow-panel); opacity: 0; transform: translateY(10px); pointer-events: none; transition: opacity .22s var(--ease), transform .22s var(--ease); }
@@ -485,6 +580,7 @@
 
     @media (max-width: 1180px) {
       .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .inventory-metric-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
       .queue-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .queue-card:last-child { grid-column: 1 / -1; }
       .agent-layout { grid-template-columns: 1fr; }
@@ -499,6 +595,7 @@
       .topbar { padding: 0 18px; }
       .content { padding: 20px 18px 38px; }
       .dashboard-grid, .matrix-layout, .agent-hero { grid-template-columns: 1fr; }
+      .inventory-layout { grid-template-columns: 1fr; }
       .pipeline { grid-template-columns: repeat(2, 1fr); }
       .export-label { display: none; }
     }
@@ -508,6 +605,12 @@
       .page-heading { width: calc(100% - 52px); }
       .top-actions { width: 100%; justify-content: space-between; }
       .metric-grid, .queue-grid, .form-grid { grid-template-columns: 1fr; }
+      .inventory-metric-grid, .inventory-forecast-body, .production-form-grid { grid-template-columns: 1fr; }
+      .production-form .field-wide { grid-column: auto; }
+      .inventory-table-tools, .table-footer { align-items: stretch; flex-direction: column; }
+      .inventory-filter-group { overflow-x: auto; flex-wrap: nowrap; padding-bottom: 4px; }
+      .history-row { grid-template-columns: 1fr auto; }
+      .history-row span:last-child { grid-column: 1 / -1; }
       .queue-card:last-child { grid-column: auto; }
       .status-banner { grid-template-columns: auto 1fr; }
       .status-range { grid-column: 2; }
@@ -555,6 +658,10 @@
         <button class="nav-button" type="button" data-view="sku">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 7.5 12 3l8 4.5v9L12 21l-8-4.5z"/><path d="m4 7.5 8 4.5 8-4.5M12 12v9"/></svg>
           <span>SKU 机会矩阵</span>
+        </button>
+        <button class="nav-button" type="button" data-view="inventory">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 6.5 12 3l8 3.5v11L12 21l-8-3.5z"/><path d="m4 6.5 8 4 8-4M12 10.5V21"/><path d="M8 8.5v4l2 1"/></svg>
+          <span>库存管理</span>
         </button>
       </nav>
       <div class="nav-label">自动化准备</div>
@@ -650,6 +757,65 @@
           </div>
         </section>
 
+        <section class="view" id="view-inventory" aria-labelledby="pageTitle">
+          <div class="section-intro">
+            <div><h2>把可售、做货和路途库存放进同一套补货口径</h2><p>系统建议补货保留沃尔玛原值。预测建议补货结合近期销量、报表日销量、可售库存、做货库存和 Inbound 路途库存计算。</p></div>
+            <div class="section-summary"><strong id="inventorySkuCount">0</strong>个库存 SKU</div>
+          </div>
+          <div class="status-banner" id="inventoryStatusBanner">
+            <div class="status-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 7 12 3l8 4v10l-8 4-8-4z"/><path d="m4 7 8 4 8-4M12 11v10"/></svg></div>
+            <div class="status-copy"><strong id="inventoryStatusHeadline">正在读取库存</strong><span id="inventoryStatusDetail">请稍候。</span></div>
+            <div class="status-range mono" id="inventorySnapshotAt"></div>
+          </div>
+          <div class="inventory-metric-grid" id="inventoryMetricGrid"></div>
+          <div class="inventory-layout">
+            <section class="panel" aria-labelledby="replenishmentTitle">
+              <div class="panel-header">
+                <div><h2 class="panel-title" id="replenishmentTitle">两套补货建议</h2><p class="panel-subtitle">沃尔玛原值与本地预测分开显示，不相互覆盖</p></div>
+                <div class="inventory-target"><label for="inventoryTargetDays">目标覆盖</label><select class="compact-select" id="inventoryTargetDays"><option value="30">30天</option><option value="45" selected>45天</option><option value="60">60天</option><option value="90">90天</option></select></div>
+              </div>
+              <div class="inventory-forecast-body" id="inventoryForecastCompare"></div>
+              <div class="forecast-formula"><strong>预测公式：</strong>向上取整〔最大值（0，预测日均销量 × 目标覆盖天数－可售库存－做货库存－路途库存）〕。预测日均销量会根据销量样本天数调整近期销量与沃尔玛报表日销量的权重。</div>
+            </section>
+            <section class="panel" aria-labelledby="inventoryRiskTitle">
+              <div class="panel-header"><div><h2 class="panel-title" id="inventoryRiskTitle">库存风险分层</h2><p class="panel-subtitle">颜色与文字同时标记，避免只依赖颜色判断</p></div></div>
+              <div class="risk-list" id="inventoryRiskList"></div>
+            </section>
+          </div>
+          <section class="panel table-panel" aria-labelledby="inventoryTrendTitle">
+            <div class="panel-header">
+              <div><h2 class="panel-title" id="inventoryTrendTitle">库存快照变化</h2><p class="panel-subtitle">保留每次导入快照，展示可售库存和 Inbound 路途库存</p></div>
+              <div class="legend"><span class="legend-item"><span class="legend-dot"></span>可售库存</span><span class="legend-item"><span class="legend-dot yellow"></span>路途库存</span></div>
+            </div>
+            <div class="inventory-trend" id="inventoryTrend"></div>
+          </section>
+          <section class="panel table-panel" aria-labelledby="inventoryTableTitle">
+            <div class="panel-header">
+              <div><h2 class="panel-title" id="inventoryTableTitle">SKU 库存与补货明细</h2><p class="panel-subtitle" id="inventoryTableSubtitle">按风险优先级排序</p></div>
+              <div class="table-tools"><label class="sr-only" for="inventorySearch">搜索 SKU、商品或 Item ID</label><input class="search-input" id="inventorySearch" type="search" placeholder="搜索 SKU、商品或 Item ID"></div>
+            </div>
+            <div class="panel-header">
+              <div class="inventory-table-tools">
+                <div class="inventory-filter-group" id="inventoryFilters">
+                  <button class="filter-button active" type="button" data-inventory-risk="all">全部</button>
+                  <button class="filter-button" type="button" data-inventory-risk="OUT_OF_STOCK">缺货</button>
+                  <button class="filter-button" type="button" data-inventory-risk="URGENT,LOW">14天内风险</button>
+                  <button class="filter-button" type="button" data-inventory-risk="WATCH,REPLENISH">待补货</button>
+                  <button class="filter-button" type="button" data-inventory-risk="OVERSTOCK,NO_DEMAND">积压与无动销</button>
+                  <button class="filter-button" type="button" data-inventory-risk="HEALTHY">健康</button>
+                </div>
+              </div>
+            </div>
+            <div class="table-scroll">
+              <table class="inventory-table">
+                <thead><tr><th>商品与 SKU</th><th>风险</th><th class="num">近期销量</th><th class="num">预测日均</th><th class="num">可售</th><th class="num">预留</th><th class="num">做货</th><th class="num">路途</th><th class="num">系统建议补货</th><th class="num">预测建议补货</th><th class="num">预测可售天数</th><th>操作</th></tr></thead>
+                <tbody id="inventoryBody"></tbody>
+              </table>
+            </div>
+            <div class="table-footer"><span id="inventoryTableCount">0 条结果</span><div class="pagination"><button id="inventoryPrevPage" type="button">上一页</button><span id="inventoryPageText" class="mono">1 / 1</span><button id="inventoryNextPage" type="button">下一页</button></div></div>
+          </section>
+        </section>
+
         <section class="view" id="view-agent" aria-labelledby="pageTitle">
           <section class="agent-hero">
             <div><span class="agent-kicker">分析引擎已运行</span><h2>先把建议做对，再接入广告执行</h2><p>当前版本完成数据读取、口径校验、诊断与提案。预算与出价变更保持锁定，直到规则回测、审批流和回滚机制都通过验证。</p></div>
@@ -688,6 +854,21 @@
     </main>
   </div>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <dialog class="inventory-dialog" id="productionDialog" aria-labelledby="productionDialogTitle">
+    <div class="dialog-header">
+      <div><h2 id="productionDialogTitle">维护做货库存</h2><p id="productionDialogSku"></p></div>
+      <button class="dialog-close" id="closeProductionDialog" type="button" aria-label="关闭">×</button>
+    </div>
+    <form class="production-form" id="productionForm">
+      <div class="production-form-grid">
+        <div class="field"><label for="productionUnits">当前做货库存</label><input id="productionUnits" type="number" min="0" max="10000000" step="1" required></div>
+        <div class="field"><label for="productionSku">SKU</label><input id="productionSku" type="text" readonly></div>
+        <div class="field field-wide"><label for="productionNote">备注</label><textarea id="productionNote" maxlength="500" placeholder="例如：7月25日完成第一批"></textarea></div>
+      </div>
+      <div class="dialog-actions"><button class="secondary-button" id="cancelProductionDialog" type="button">取消</button><button class="primary-button" id="saveProductionButton" type="submit">保存做货库存</button></div>
+    </form>
+    <div class="production-history"><h3>最近历史</h3><div class="history-list" id="productionHistory"></div></div>
+  </dialog>
 
   <script type="module">
     const dashboardResponse = await fetch("/api/dashboard/data");
@@ -704,16 +885,34 @@
         minClicks: DATA.defaults.minClicks,
         minSpend: DATA.defaults.minSpend,
       },
+      inventory: null,
+      inventoryLoading: false,
+      inventoryTargetDays: 45,
+      inventoryRisk: "all",
+      inventorySearch: "",
+      inventoryPage: 0,
+      inventoryPageSize: 50,
       aiStatus: null,
     };
 
-    const titles = { dashboard: "经营驾驶舱", diagnosis: "广告诊断", sku: "SKU 机会矩阵", agent: "Agent 控制室", imports: "数据导入" };
+    const titles = { dashboard: "经营驾驶舱", diagnosis: "广告诊断", sku: "SKU 机会矩阵", inventory: "库存管理", agent: "Agent 控制室", imports: "数据导入" };
     const decisionCopy = {
       scale: { label: "建议放量", short: "放量", reason: "ROAS 达标且已有稳定广告订单，可进入小步增量测试。" },
       reduce: { label: "建议降耗", short: "降耗", reason: "达到样本门槛后仍低于降耗 ROAS，需要降低出价或暂停低效商品。" },
       optimize: { label: "继续优化", short: "优化", reason: "已有足够数据但未达到放量目标，适合调整商品、词或出价。" },
       collect: { label: "数据不足", short: "观察", reason: "点击或花费不足，暂不做预算变更，继续积累样本。" },
     };
+    const inventoryRiskCopy = {
+      OUT_OF_STOCK: { label: "缺货", badge: "reduce", group: "critical" },
+      URGENT: { label: "7天内风险", badge: "reduce", group: "critical" },
+      LOW: { label: "14天内风险", badge: "optimize", group: "warning" },
+      WATCH: { label: "30天内关注", badge: "optimize", group: "warning" },
+      REPLENISH: { label: "建议补货", badge: "optimize", group: "warning" },
+      OVERSTOCK: { label: "库存偏高", badge: "collect", group: "neutral" },
+      NO_DEMAND: { label: "近期无动销", badge: "collect", group: "neutral" },
+      HEALTHY: { label: "库存健康", badge: "scale", group: "healthy" },
+    };
+    const confidenceCopy = { HIGH: "高", MEDIUM: "中", LOW: "低" };
 
     const $ = (selector) => document.querySelector(selector);
     const $$ = (selector) => [...document.querySelectorAll(selector)];
@@ -723,6 +922,8 @@
     const integer = (value) => Math.round(number(value)).toLocaleString("en-US");
     const percent = (value, digits = 1) => `${(number(value) * 100).toFixed(digits)}%`;
     const ratio = (value) => `${number(value).toFixed(2)}x`;
+    const units = (value) => `${integer(value)} 件`;
+    const daysText = (value) => value === null || value === undefined ? "无销量" : `${number(value).toFixed(1)} 天`;
     const isoDate = (value) => new Date(`${value}T00:00:00`);
     const dateText = (value) => new Intl.DateTimeFormat("zh-CN", { month: "short", day: "numeric" }).format(isoDate(value));
     const fullDateText = (value) => new Intl.DateTimeFormat("zh-CN", { year: "numeric", month: "long", day: "numeric" }).format(isoDate(value));
@@ -898,14 +1099,198 @@
       $("#runLog").innerHTML = samples.map((row, index) => `<div class="log-row"><span class="log-time">RULE-${String(index + 1).padStart(2, "0")}</span><span class="log-copy"><strong>${escapeHtml(row.sku || row.campaign)}</strong>：${decisionCopy[row.decision].reason}</span><span class="status-badge ${row.decision}">${decisionCopy[row.decision].short}</span></div>`).join("") || `<div class="empty-state"><strong>没有触发动作规则</strong>分析已完成，当前仅保留观察项。</div>`;
     }
 
+    function renderInventory() {
+      const inventory = state.inventory;
+      if (!inventory) return;
+      const { meta, summary, riskCounts, rows } = inventory;
+      $("#inventorySkuCount").textContent = integer(meta.skuCount);
+      $("#inventorySnapshotAt").textContent = meta.snapshotAt ? `快照 ${new Date(meta.snapshotAt).toLocaleString("zh-CN")}` : "";
+      $("#inventoryStatusHeadline").textContent = meta.reliableSample ? "预测销量样本已达到基础门槛" : "预测销量样本不足";
+      $("#inventoryStatusDetail").textContent = meta.sampleDays
+        ? `当前周期包含 ${meta.sampleDays} 个销量日。${meta.reliableSample ? "预测会提高近期销量权重。" : "预测会更多参考沃尔玛报表日销量，并标注低置信度。"}`
+        : "当前没有订单销量样本，预测仅参考沃尔玛报表日销量。";
+      $("#inventoryMetricGrid").innerHTML = [
+        ["可售库存", summary.availableUnits, "沃尔玛 Available units", ""],
+        ["路途库存", summary.transitUnits, "沃尔玛 Inbound units", ""],
+        ["做货库存", summary.productionUnits, "本地维护并保留历史", ""],
+        ["预留库存", summary.reservedUnits, "不计入预测可用库存", ""],
+        ["缺货与低库存", summary.outOfStockSkus + summary.lowStockSkus, `${summary.outOfStockSkus} 个缺货 SKU`, "attention"],
+        ["预测建议补货", summary.forecastSuggestedUnits, `目标覆盖 ${meta.targetDays} 天`, "forecast"],
+      ].map(([label, value, detail, className]) => `<article class="inventory-metric ${className}"><span>${label}</span><strong>${integer(value)}</strong><small>${detail}</small></article>`).join("");
+      $("#inventoryForecastCompare").innerHTML = `
+        <div class="forecast-side system"><span>系统建议补货</span><strong>${units(summary.systemSuggestedUnits)}</strong><p>直接读取沃尔玛库存报表 Suggested units，不修改原始口径。</p></div>
+        <div class="forecast-side predicted"><span>预测建议补货</span><strong>${units(summary.forecastSuggestedUnits)}</strong><p>根据 ${meta.analysisDays} 天近期销量、报表日销量和三段库存链路计算。当前置信度：${meta.reliableSample ? "中及以上" : "低"}。</p></div>`;
+      renderInventoryRisk(riskCounts, meta.skuCount);
+      renderInventoryTrend(inventory.trend);
+      renderInventoryTable(rows);
+      updatePageMeta();
+    }
+
+    function renderInventoryRisk(counts, total) {
+      const ordered = ["OUT_OF_STOCK", "URGENT", "LOW", "WATCH", "REPLENISH", "OVERSTOCK", "NO_DEMAND", "HEALTHY"];
+      const max = Math.max(...ordered.map((key) => number(counts[key])), 1);
+      $("#inventoryRiskList").innerHTML = ordered.map((key) => {
+        const copy = inventoryRiskCopy[key];
+        const count = number(counts[key]);
+        return `<div class="risk-row ${copy.group}"><span>${copy.label}</span><div class="risk-track" title="${count} / ${total}"><span style="width:${count / max * 100}%"></span></div><strong>${integer(count)}</strong></div>`;
+      }).join("");
+    }
+
+    function renderInventoryTrend(trend) {
+      if (!trend?.length) {
+        $("#inventoryTrend").innerHTML = `<div class="empty-state"><strong>还没有库存快照</strong>扫描导入库存文件后，这里会展示历史变化。</div>`;
+        return;
+      }
+      const width = 820, height = 220, left = 54, right = 18, top = 18, bottom = 34;
+      const plotW = width - left - right, plotH = height - top - bottom;
+      const maxValue = Math.max(...trend.flatMap((row) => [number(row.availableUnits), number(row.transitUnits)]), 1) * 1.08;
+      const point = (row, index, key) => ({
+        x: trend.length === 1 ? left + plotW / 2 : left + index / (trend.length - 1) * plotW,
+        y: top + plotH - number(row[key]) / maxValue * plotH,
+        row,
+      });
+      const available = trend.map((row, index) => point(row, index, "availableUnits"));
+      const transit = trend.map((row, index) => point(row, index, "transitUnits"));
+      const path = (points) => points.map((item, index) => `${index ? "L" : "M"}${item.x.toFixed(1)},${item.y.toFixed(1)}`).join(" ");
+      const grid = [0, .25, .5, .75, 1].map((step) => {
+        const y = top + plotH * step;
+        return `<line class="chart-grid-line" x1="${left}" x2="${left + plotW}" y1="${y}" y2="${y}"/><text class="chart-axis-label" x="${left - 8}" y="${y + 3}" text-anchor="end">${integer(maxValue * (1 - step))}</text>`;
+      }).join("");
+      const labelEvery = Math.max(1, Math.ceil(trend.length / 6));
+      const labels = available.map((item, index) => index % labelEvery === 0 || index === available.length - 1
+        ? `<text class="chart-axis-label" x="${item.x}" y="${height - 9}" text-anchor="middle">${new Date(item.row.snapshotAt).toLocaleDateString("zh-CN", { month: "numeric", day: "numeric" })}</text>` : "").join("");
+      const dots = available.map((item, index) => `<circle cx="${item.x}" cy="${item.y}" r="4" fill="var(--walmart-blue)"><title>${new Date(item.row.snapshotAt).toLocaleString("zh-CN")} 可售 ${integer(item.row.availableUnits)}，路途 ${integer(item.row.transitUnits)}</title></circle><circle cx="${transit[index].x}" cy="${transit[index].y}" r="3.5" fill="var(--spark-yellow)"></circle>`).join("");
+      $("#inventoryTrend").innerHTML = `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="可售库存和路途库存快照趋势">${grid}<path class="inventory-line-available" d="${path(available)}"/><path class="inventory-line-transit" d="${path(transit)}"/>${dots}${labels}</svg>`;
+    }
+
+    function inventoryFilteredRows(rows) {
+      const query = state.inventorySearch.trim().toLowerCase();
+      const risks = state.inventoryRisk === "all" ? null : state.inventoryRisk.split(",");
+      return rows.filter((row) => {
+        const matchesRisk = !risks || risks.includes(row.risk);
+        const haystack = `${row.sku} ${row.parentSku || ""} ${row.itemId || ""} ${row.itemName || ""}`.toLowerCase();
+        return matchesRisk && (!query || haystack.includes(query));
+      });
+    }
+
+    function renderInventoryTable(rows) {
+      const filtered = inventoryFilteredRows(rows);
+      const totalPages = Math.max(1, Math.ceil(filtered.length / state.inventoryPageSize));
+      state.inventoryPage = Math.min(state.inventoryPage, totalPages - 1);
+      const start = state.inventoryPage * state.inventoryPageSize;
+      const pageRows = filtered.slice(start, start + state.inventoryPageSize);
+      $("#inventoryTableSubtitle").textContent = `${state.periodDays} 天销量窗口，目标覆盖 ${state.inventoryTargetDays} 天。预测公式和置信度可在每行查看。`;
+      $("#inventoryBody").innerHTML = pageRows.map((row) => {
+        const risk = inventoryRiskCopy[row.risk] || inventoryRiskCopy.HEALTHY;
+        const image = row.imageUrl
+          ? `<img class="inventory-thumb" src="${escapeHtml(row.imageUrl)}" alt="" loading="lazy">`
+          : `<span class="inventory-thumb" aria-hidden="true"></span>`;
+        return `<tr>
+          <td><div class="inventory-product">${image}<div><span class="inventory-sku" title="${escapeHtml(row.sku)}">${escapeHtml(row.sku)}</span><span class="inventory-item-name" title="${escapeHtml(row.itemName || "")}">${escapeHtml(row.itemName || row.itemId || "")}</span></div></div></td>
+          <td><span class="status-badge ${risk.badge}" title="预测置信度：${confidenceCopy[row.confidence] || row.confidence}">${risk.label}</span></td>
+          <td class="num">${integer(row.recentUnits)}</td>
+          <td class="num" title="近期日均 ${row.recentDailyUnits}，报表日销量 ${row.reportDailyUnits}">${number(row.forecastDailyUnits).toFixed(2)}</td>
+          <td class="num">${integer(row.availableUnits)}</td>
+          <td class="num">${integer(row.reservedUnits)}</td>
+          <td class="num">${integer(row.productionUnits)}</td>
+          <td class="num">${integer(row.transitUnits)}</td>
+          <td class="num">${integer(row.systemSuggestedUnits)}</td>
+          <td class="num" title="${escapeHtml(row.formula)}">${integer(row.forecastSuggestedUnits)}</td>
+          <td class="num">${daysText(row.projectedDaysSupply)}</td>
+          <td><button class="table-link" type="button" data-production-sku="${escapeHtml(row.sku)}">维护做货库存</button></td>
+        </tr>`;
+      }).join("") || emptyRow(12, "没有匹配的库存 SKU", "清除搜索或切换风险筛选。");
+      $("#inventoryTableCount").textContent = `${filtered.length.toLocaleString("zh-CN")} 条结果，当前显示 ${pageRows.length} 条`;
+      $("#inventoryPageText").textContent = `${state.inventoryPage + 1} / ${totalPages}`;
+      $("#inventoryPrevPage").disabled = state.inventoryPage === 0;
+      $("#inventoryNextPage").disabled = state.inventoryPage >= totalPages - 1;
+      $$("[data-production-sku]").forEach((button) => button.addEventListener("click", () => openProductionDialog(button.dataset.productionSku)));
+    }
+
+    async function loadInventory() {
+      if (state.inventoryLoading) return;
+      state.inventoryLoading = true;
+      $("#inventoryBody").innerHTML = emptyRow(12, "正在读取库存与销量", "请稍候。");
+      try {
+        const response = await fetch(`/api/inventory/data?days=${state.periodDays}&targetDays=${state.inventoryTargetDays}`);
+        const payload = await response.json();
+        if (!response.ok || !payload.success) throw new Error(payload.message || `HTTP ${response.status}`);
+        state.inventory = payload.data;
+        renderInventory();
+      } catch (error) {
+        $("#inventoryStatusHeadline").textContent = "库存读取失败";
+        $("#inventoryStatusDetail").textContent = error.message;
+        $("#inventoryBody").innerHTML = emptyRow(12, "库存读取失败", escapeHtml(error.message));
+      } finally {
+        state.inventoryLoading = false;
+      }
+    }
+
+    async function openProductionDialog(sku) {
+      const row = state.inventory?.rows.find((item) => item.sku === sku);
+      if (!row) return;
+      $("#productionSku").value = row.sku;
+      $("#productionUnits").value = Math.round(number(row.productionUnits));
+      $("#productionNote").value = row.productionNote || "";
+      $("#productionDialogSku").textContent = row.itemName ? `${row.sku} · ${row.itemName}` : row.sku;
+      $("#productionHistory").innerHTML = `<div class="empty-state"><strong>正在读取历史</strong></div>`;
+      const dialog = $("#productionDialog");
+      if (!dialog.open) dialog.showModal();
+      try {
+        const response = await fetch(`/api/inventory/production-stock/history?sku=${encodeURIComponent(row.sku)}&limit=10`);
+        const payload = await response.json();
+        if (!response.ok || !payload.success) throw new Error(payload.message || `HTTP ${response.status}`);
+        $("#productionHistory").innerHTML = payload.data.map((entry) => `<div class="history-row"><span>${new Date(entry.createdAt).toLocaleString("zh-CN")}</span><strong>${integer(entry.productionUnits)} 件</strong><span>${escapeHtml(entry.note || "无备注")}</span></div>`).join("") || `<div class="empty-state"><strong>还没有历史记录</strong>保存后会保留每次变更。</div>`;
+      } catch (error) {
+        $("#productionHistory").innerHTML = `<div class="empty-state"><strong>历史读取失败</strong>${escapeHtml(error.message)}</div>`;
+      }
+    }
+
+    async function saveProductionStock(event) {
+      event.preventDefault();
+      const button = $("#saveProductionButton");
+      button.disabled = true;
+      button.textContent = "正在保存…";
+      try {
+        const response = await fetch("/api/inventory/production-stock", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sku: $("#productionSku").value,
+            productionUnits: number($("#productionUnits").value),
+            note: $("#productionNote").value.trim(),
+          }),
+        });
+        const payload = await response.json();
+        if (!response.ok || !payload.success) throw new Error(payload.message || `HTTP ${response.status}`);
+        $("#productionDialog").close();
+        showToast(payload.message);
+        await loadInventory();
+      } catch (error) {
+        showToast(`做货库存保存失败：${error.message}`);
+      } finally {
+        button.disabled = false;
+        button.textContent = "保存做货库存";
+      }
+    }
+
+    function updatePageMeta() {
+      if (state.view === "inventory" && state.inventory?.meta.snapshotAt) {
+        const meta = state.inventory.meta;
+        $("#pageMeta").textContent = `库存快照 ${new Date(meta.snapshotAt).toLocaleString("zh-CN")} · ${state.periodDays} 天销量窗口 · ${meta.sampleDays} 个销量日`;
+        return;
+      }
+      const start = addDays(latest, -(state.periodDays - 1));
+      $("#pageMeta").textContent = `数据截至 ${DATA.meta.latestDate} · ${toIso(start)} 至 ${DATA.meta.latestDate}`;
+    }
+
     function renderAll() {
       renderMetrics();
       renderSkuSummary();
       renderDiagnosis();
       renderSkuMatrix();
       renderAgent();
-      const start = addDays(latest, -(state.periodDays - 1));
-      $("#pageMeta").textContent = `数据截至 ${DATA.meta.latestDate} · ${toIso(start)} 至 ${DATA.meta.latestDate}`;
+      updatePageMeta();
     }
 
     function switchView(view) {
@@ -913,6 +1298,7 @@
       $$(".nav-button").forEach((button) => button.classList.toggle("active", button.dataset.view === view));
       $$(".view").forEach((section) => section.classList.toggle("active", section.id === `view-${view}`));
       $("#pageTitle").textContent = titles[view];
+      updatePageMeta();
       document.body.classList.remove("sidebar-open");
       $("#menuButton").setAttribute("aria-expanded", "false");
       window.scrollTo({ top: 0, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
@@ -1037,6 +1423,7 @@
       state.periodDays = number(button.dataset.period);
       $$(".period-button").forEach((item) => item.classList.toggle("active", item === button));
       renderAll();
+      loadInventory();
     }));
     $("#campaignSearch").addEventListener("input", (event) => { state.campaignSearch = event.target.value; renderDiagnosis(); });
     $$("#campaignFilters .filter-button").forEach((button) => button.addEventListener("click", () => {
@@ -1044,6 +1431,33 @@
       $$("#campaignFilters .filter-button").forEach((item) => item.classList.toggle("active", item === button));
       renderDiagnosis();
     }));
+    $("#inventoryTargetDays").addEventListener("change", (event) => {
+      state.inventoryTargetDays = number(event.target.value);
+      state.inventoryPage = 0;
+      loadInventory();
+    });
+    $("#inventorySearch").addEventListener("input", (event) => {
+      state.inventorySearch = event.target.value;
+      state.inventoryPage = 0;
+      if (state.inventory) renderInventoryTable(state.inventory.rows);
+    });
+    $$("#inventoryFilters .filter-button").forEach((button) => button.addEventListener("click", () => {
+      state.inventoryRisk = button.dataset.inventoryRisk;
+      state.inventoryPage = 0;
+      $$("#inventoryFilters .filter-button").forEach((item) => item.classList.toggle("active", item === button));
+      if (state.inventory) renderInventoryTable(state.inventory.rows);
+    }));
+    $("#inventoryPrevPage").addEventListener("click", () => {
+      state.inventoryPage = Math.max(0, state.inventoryPage - 1);
+      if (state.inventory) renderInventoryTable(state.inventory.rows);
+    });
+    $("#inventoryNextPage").addEventListener("click", () => {
+      state.inventoryPage += 1;
+      if (state.inventory) renderInventoryTable(state.inventory.rows);
+    });
+    $("#productionForm").addEventListener("submit", saveProductionStock);
+    $("#closeProductionDialog").addEventListener("click", () => $("#productionDialog").close());
+    $("#cancelProductionDialog").addEventListener("click", () => $("#productionDialog").close());
     $("#menuButton").addEventListener("click", () => { const open = document.body.classList.toggle("sidebar-open"); $("#menuButton").setAttribute("aria-expanded", String(open)); });
     $("#mobileScrim").addEventListener("click", () => { document.body.classList.remove("sidebar-open"); $("#menuButton").setAttribute("aria-expanded", "false"); });
     $("#exportButton").addEventListener("click", exportRecommendations);
@@ -1066,6 +1480,7 @@
     $("#minSpend").value = state.thresholds.minSpend;
     $("#sidebarSourceTime").textContent = `最新业务日 ${DATA.meta.latestDate}`;
     loadBatches();
+    loadInventory();
     loadAiStatus();
     loadLatestAiAnalysis();
     renderAll();

@@ -40,7 +40,7 @@ public class ImportFile {
     @Column(length = 1200)
     private String archivePath;
 
-    @Column(nullable = false, length = 64)
+    @Column(nullable = false, length = 64, columnDefinition = "char(64)")
     private String sha256;
 
     @Column(nullable = false)

@@ -1,0 +1,15 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:walmart_ads;MODE=MySQL;DB_CLOSE_DELAY=-1;DATABASE_TO_LOWER=TRUE
+    username: sa
+    password:
+  flyway:
+    enabled: false
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+
+walmart:
+  ads:
+    data-root: ${java.io.tmpdir}/walmart-ads-test/data
+    archive-root: ${java.io.tmpdir}/walmart-ads-test/archive

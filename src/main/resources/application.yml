@@ -1,0 +1,35 @@
+server:
+  address: ${WALMART_ADS_SERVER_ADDRESS:127.0.0.1}
+  port: ${WALMART_ADS_PORT:10020}
+
+spring:
+  application:
+    name: walmart-ads
+  datasource:
+    url: ${WALMART_ADS_DB_URL:jdbc:mysql://127.0.0.1:3306/walmart_ads?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true}
+    username: ${WALMART_ADS_DB_USERNAME:root}
+    password: ${WALMART_ADS_DB_PASSWORD:}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        format_sql: false
+        jdbc:
+          time_zone: Asia/Shanghai
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+
+walmart:
+  ads:
+    data-root: ${WALMART_ADS_DATA_ROOT:D:/PNK/17DATA}
+    archive-root: ${WALMART_ADS_ARCHIVE_ROOT:D:/PNK/17DATA/archive}
+
+logging:
+  level:
+    com.ai.walmartads: INFO

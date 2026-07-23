@@ -1,0 +1,980 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>PNK Walmart 广告决策台</title>
+  <style>
+    :root {
+      --midnight-grid: #07101f; /* 午夜蓝（#07101f）· 页面背景，承载高密度经营信息。 */
+      --navy-panel: #0d182b; /* 深海面板（#0d182b）· 主卡片背景，保持层级清晰。 */
+      --navy-raised: #13223a; /* 抬升蓝（#13223a）· 悬停与二级区块。 */
+      --frost-ink: #edf4ff; /* 冷霜白（#edf4ff）· 主文本，不使用纯白。 */
+      --steel-copy: #91a0b9; /* 钢蓝灰（#91a0b9）· 次要说明文字。 */
+      --slate-dim: #5d6d88; /* 石板灰（#5d6d88）· 辅助标签与弱提示。 */
+      --walmart-blue: #2f90ff; /* 沃尔玛蓝（#2f90ff）· 唯一主交互强调色。 */
+      --spark-yellow: #ffc220; /* 星火黄（#ffc220）· 品牌辅助与成本提醒，仅作小面积使用。 */
+      --signal-green: #29d3a2; /* 信号绿（#29d3a2）· 正向经营状态，同时配文字。 */
+      --signal-red: #ff6b73; /* 风险红（#ff6b73）· 风险状态，同时配文字。 */
+      --signal-orange: #ff9d55; /* 观察橙（#ff9d55）· 需优化状态，同时配文字。 */
+      --line-soft: rgba(212, 229, 255, .09);
+      --line-strong: rgba(212, 229, 255, .16);
+      --blue-soft: rgba(47, 144, 255, .12);
+      --yellow-soft: rgba(255, 194, 32, .12);
+      --green-soft: rgba(41, 211, 162, .11);
+      --red-soft: rgba(255, 107, 115, .11);
+      --orange-soft: rgba(255, 157, 85, .11);
+      --sidebar: 244px;
+      --topbar: 72px;
+      --radius-lg: 18px;
+      --radius-md: 13px;
+      --radius-sm: 9px;
+      --shadow-panel: 0 20px 54px rgba(2, 8, 19, .28);
+      --ease: cubic-bezier(.16, 1, .3, 1);
+    }
+
+    * { box-sizing: border-box; }
+    html { background: var(--midnight-grid); scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      min-width: 320px;
+      background:
+        radial-gradient(circle at 84% 8%, rgba(47, 144, 255, .07), transparent 30%),
+        var(--midnight-grid);
+      color: var(--frost-ink);
+      font: 14px/1.5 "Segoe UI Variable", "Microsoft YaHei UI", "PingFang SC", system-ui, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+    }
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      z-index: 50;
+      pointer-events: none;
+      opacity: .025;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.82' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.7'/%3E%3C/svg%3E");
+    }
+    button, input { font: inherit; }
+    button { color: inherit; }
+    button, [role="button"] { -webkit-tap-highlight-color: transparent; }
+    :focus-visible { outline: 2px solid var(--spark-yellow); outline-offset: 3px; }
+    .skip-link {
+      position: fixed;
+      left: 12px;
+      top: -60px;
+      z-index: 100;
+      padding: 10px 14px;
+      border-radius: 8px;
+      color: var(--midnight-grid);
+      background: var(--spark-yellow);
+      font-weight: 700;
+      transition: top .2s var(--ease);
+    }
+    .skip-link:focus { top: 12px; }
+    .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+    .mono, .metric-value, td.num, .data-number, input[type="number"] {
+      font-family: "Cascadia Mono", "SFMono-Regular", Consolas, monospace;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .app-shell { min-height: 100dvh; }
+    .sidebar {
+      position: fixed;
+      inset: 0 auto 0 0;
+      width: var(--sidebar);
+      display: flex;
+      flex-direction: column;
+      padding: 18px 14px;
+      background: rgba(8, 17, 33, .95);
+      border-right: 1px solid var(--line-soft);
+      z-index: 30;
+      backdrop-filter: blur(16px);
+    }
+    .brand {
+      min-height: 50px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 0 8px 16px;
+      border-bottom: 1px solid var(--line-soft);
+    }
+    .brand-mark {
+      width: 38px;
+      height: 38px;
+      display: grid;
+      place-items: center;
+      flex: 0 0 auto;
+      border-radius: 11px;
+      background: var(--walmart-blue);
+      color: var(--frost-ink);
+      box-shadow: inset 0 0 0 1px rgba(237, 244, 255, .18), 0 12px 30px rgba(47, 144, 255, .2);
+      font: 800 19px/1 "Segoe UI", sans-serif;
+      transform: translateY(-1px);
+    }
+    .brand-name { font-size: 15px; font-weight: 760; letter-spacing: -.02em; }
+    .brand-meta { margin-top: 1px; color: var(--steel-copy); font-size: 10px; letter-spacing: .08em; }
+    .nav-label {
+      padding: 22px 10px 8px;
+      color: var(--slate-dim);
+      font-size: 11px;
+      font-weight: 650;
+      letter-spacing: .08em;
+    }
+    .nav-list { display: grid; gap: 5px; }
+    .nav-button {
+      position: relative;
+      width: 100%;
+      min-height: 46px;
+      display: flex;
+      align-items: center;
+      gap: 11px;
+      padding: 0 12px;
+      border: 1px solid transparent;
+      border-radius: 11px;
+      background: transparent;
+      color: var(--steel-copy);
+      cursor: pointer;
+      text-align: left;
+      transition: color .18s var(--ease), background .18s var(--ease), border-color .18s var(--ease), transform .18s var(--ease);
+    }
+    .nav-button:hover { color: var(--frost-ink); background: rgba(237, 244, 255, .035); transform: translateX(2px); }
+    .nav-button.active {
+      color: var(--frost-ink);
+      background: var(--blue-soft);
+      border-color: rgba(47, 144, 255, .18);
+    }
+    .nav-button.active::before {
+      content: "";
+      position: absolute;
+      left: -2px;
+      width: 3px;
+      height: 24px;
+      border-radius: 4px;
+      background: var(--walmart-blue);
+    }
+    .nav-button svg { width: 18px; height: 18px; flex: 0 0 auto; }
+    .nav-button span { font-weight: 650; }
+    .sidebar-bottom { margin-top: auto; display: grid; gap: 10px; }
+    .source-card {
+      padding: 12px;
+      border: 1px solid var(--line-soft);
+      border-radius: var(--radius-md);
+      background: rgba(237, 244, 255, .025);
+    }
+    .source-state { display: flex; align-items: center; gap: 8px; font-weight: 650; }
+    .source-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--signal-green); box-shadow: 0 0 0 4px var(--green-soft); }
+    .source-time { margin-top: 7px; color: var(--steel-copy); font-size: 11px; }
+    .safe-mode {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      min-height: 44px;
+      padding: 0 12px;
+      border: 1px solid rgba(255, 194, 32, .18);
+      border-radius: var(--radius-md);
+      color: var(--spark-yellow);
+      background: var(--yellow-soft);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .main { margin-left: var(--sidebar); min-height: 100dvh; }
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      height: var(--topbar);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      padding: 0 30px;
+      border-bottom: 1px solid var(--line-soft);
+      background: rgba(7, 16, 31, .86);
+      backdrop-filter: blur(18px);
+    }
+    .page-heading { display: flex; align-items: center; gap: 13px; min-width: 0; }
+    .menu-button {
+      width: 44px;
+      height: 44px;
+      display: none;
+      place-items: center;
+      border: 1px solid var(--line-soft);
+      border-radius: 10px;
+      background: var(--navy-panel);
+      cursor: pointer;
+    }
+    .page-heading h1 { margin: 0; font-size: 22px; line-height: 1; letter-spacing: -.035em; text-wrap: balance; }
+    .page-heading p { margin: 6px 0 0; color: var(--steel-copy); font-size: 11px; }
+    .top-actions { display: flex; align-items: center; gap: 10px; }
+    .period-switch {
+      display: inline-flex;
+      gap: 3px;
+      padding: 4px;
+      border: 1px solid var(--line-soft);
+      border-radius: 11px;
+      background: rgba(237, 244, 255, .025);
+    }
+    .period-button {
+      min-width: 48px;
+      min-height: 36px;
+      border: 0;
+      border-radius: 8px;
+      background: transparent;
+      color: var(--steel-copy);
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .period-button.active { color: var(--frost-ink); background: var(--walmart-blue); box-shadow: 0 6px 18px rgba(47, 144, 255, .2); }
+    .secondary-button, .primary-button {
+      min-height: 44px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 0 14px;
+      border-radius: 10px;
+      cursor: pointer;
+      font-weight: 700;
+      white-space: nowrap;
+      transition: transform .18s var(--ease), border-color .18s var(--ease), background .18s var(--ease);
+    }
+    .secondary-button { border: 1px solid var(--line-strong); background: var(--navy-panel); color: var(--frost-ink); }
+    .primary-button { border: 1px solid rgba(47, 144, 255, .35); background: var(--walmart-blue); color: var(--frost-ink); }
+    .secondary-button:hover, .primary-button:hover { transform: translateY(-1px); }
+    .secondary-button svg, .primary-button svg { width: 16px; height: 16px; }
+
+    .content { max-width: 1500px; margin: 0 auto; padding: 24px 30px 44px; position: relative; z-index: 5; }
+    .view { display: none; }
+    .view.active { display: block; animation: view-in .42s var(--ease) both; }
+    @keyframes view-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+    .status-banner {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 14px;
+      min-height: 62px;
+      padding: 12px 16px;
+      margin-bottom: 16px;
+      border: 1px solid rgba(47, 144, 255, .19);
+      border-radius: var(--radius-md);
+      background: linear-gradient(90deg, rgba(47, 144, 255, .1), rgba(47, 144, 255, .025));
+    }
+    .status-icon { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 10px; color: var(--walmart-blue); background: var(--blue-soft); }
+    .status-icon svg { width: 18px; height: 18px; }
+    .status-copy strong { display: block; font-size: 13px; }
+    .status-copy span { color: var(--steel-copy); font-size: 12px; }
+    .status-range { color: var(--steel-copy); font-size: 12px; white-space: nowrap; }
+
+    .metric-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-bottom: 14px; }
+    .metric-card, .panel {
+      border: 1px solid var(--line-soft);
+      background: linear-gradient(155deg, rgba(19, 34, 58, .86), rgba(13, 24, 43, .92));
+      box-shadow: var(--shadow-panel);
+    }
+    .metric-card {
+      position: relative;
+      min-height: 138px;
+      padding: 17px 18px 15px;
+      overflow: hidden;
+      border-radius: var(--radius-md);
+    }
+    .metric-card::after { content: ""; position: absolute; inset: auto 0 0; height: 2px; background: var(--walmart-blue); opacity: .75; }
+    .metric-card.cost::after { background: var(--spark-yellow); }
+    .metric-label { display: flex; align-items: center; justify-content: space-between; gap: 10px; color: var(--steel-copy); font-size: 12px; font-weight: 650; }
+    .metric-icon { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 9px; color: var(--walmart-blue); background: var(--blue-soft); }
+    .metric-card.cost .metric-icon { color: var(--spark-yellow); background: var(--yellow-soft); }
+    .metric-icon svg { width: 16px; height: 16px; }
+    .metric-value { margin-top: 12px; font-size: clamp(24px, 2vw, 31px); line-height: 1; letter-spacing: -.055em; font-weight: 740; }
+    .metric-foot { display: flex; align-items: center; gap: 8px; margin-top: 12px; color: var(--steel-copy); font-size: 11px; }
+    .change { display: inline-flex; align-items: center; gap: 4px; padding: 3px 7px; border-radius: 999px; font-weight: 750; }
+    .change.up { color: var(--signal-green); background: var(--green-soft); }
+    .change.down { color: var(--signal-red); background: var(--red-soft); }
+    .change.flat { color: var(--steel-copy); background: rgba(145, 160, 185, .09); }
+
+    .dashboard-grid { display: grid; grid-template-columns: minmax(0, 1.75fr) minmax(280px, .8fr); gap: 14px; margin-bottom: 14px; }
+    .panel { border-radius: var(--radius-lg); overflow: hidden; }
+    .panel-header { min-height: 58px; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 13px 17px; border-bottom: 1px solid var(--line-soft); }
+    .panel-title { margin: 0; font-size: 14px; letter-spacing: -.012em; }
+    .panel-subtitle { margin: 3px 0 0; color: var(--steel-copy); font-size: 11px; }
+    .legend { display: flex; align-items: center; gap: 14px; color: var(--steel-copy); font-size: 11px; }
+    .legend-item { display: flex; align-items: center; gap: 6px; }
+    .legend-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--walmart-blue); }
+    .legend-dot.yellow { background: var(--spark-yellow); }
+    .chart-wrap { min-height: 292px; padding: 18px 14px 10px; }
+    .chart-wrap svg { width: 100%; height: 264px; overflow: visible; }
+    .chart-grid-line { stroke: rgba(212, 229, 255, .08); stroke-width: 1; }
+    .chart-axis-label { fill: var(--slate-dim); font: 10px "Cascadia Mono", monospace; }
+    .chart-area { fill: rgba(47, 144, 255, .09); }
+    .chart-sales { fill: none; stroke: var(--walmart-blue); stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+    .chart-spend { fill: none; stroke: var(--spark-yellow); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    .chart-point { stroke: var(--navy-panel); stroke-width: 2; }
+    .mix-body { display: grid; place-items: center; padding: 20px 18px 22px; }
+    .donut {
+      --ad-share: 50;
+      width: 172px;
+      aspect-ratio: 1;
+      position: relative;
+      display: grid;
+      place-items: center;
+      border-radius: 50%;
+      background: conic-gradient(var(--walmart-blue) calc(var(--ad-share) * 1%), rgba(145, 160, 185, .14) 0);
+    }
+    .donut::before { content: ""; width: 124px; aspect-ratio: 1; border-radius: 50%; background: var(--navy-panel); box-shadow: 0 0 0 1px var(--line-soft); }
+    .donut-center { position: absolute; text-align: center; }
+    .donut-value { font: 750 29px/1 "Cascadia Mono", monospace; letter-spacing: -.05em; }
+    .donut-label { margin-top: 7px; color: var(--steel-copy); font-size: 11px; }
+    .mix-legend { width: 100%; display: grid; gap: 8px; margin-top: 22px; }
+    .mix-row { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 9px; min-height: 26px; color: var(--steel-copy); }
+    .mix-row strong { color: var(--frost-ink); font: 650 12px "Cascadia Mono", monospace; }
+
+    .table-panel { margin-bottom: 14px; }
+    .table-tools { display: flex; align-items: center; gap: 8px; }
+    .search-input {
+      width: 220px;
+      min-height: 38px;
+      padding: 0 11px;
+      border: 1px solid var(--line-soft);
+      border-radius: 9px;
+      background: rgba(7, 16, 31, .7);
+      color: var(--frost-ink);
+    }
+    .search-input::placeholder { color: var(--slate-dim); }
+    .table-scroll { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 11px 13px; border-bottom: 1px solid var(--line-soft); white-space: nowrap; }
+    th { color: var(--slate-dim); font-size: 10px; font-weight: 750; letter-spacing: .055em; text-align: left; }
+    td { color: var(--steel-copy); font-size: 12px; }
+    th.num, td.num { text-align: right; }
+    tbody tr { transition: background .16s var(--ease); }
+    tbody tr:hover { background: rgba(237, 244, 255, .025); }
+    tbody tr:last-child td { border-bottom: 0; }
+    .sku-name, .campaign-name { color: var(--frost-ink); font-weight: 700; }
+    .campaign-name { display: block; max-width: 300px; overflow: hidden; text-overflow: ellipsis; }
+    .sub-id { display: block; margin-top: 3px; color: var(--slate-dim); font: 10px "Cascadia Mono", monospace; }
+    .status-badge { display: inline-flex; align-items: center; gap: 6px; min-height: 26px; padding: 0 9px; border-radius: 999px; font-size: 10px; font-weight: 800; }
+    .status-badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+    .status-badge.scale { color: var(--signal-green); background: var(--green-soft); }
+    .status-badge.reduce { color: var(--signal-red); background: var(--red-soft); }
+    .status-badge.optimize { color: var(--signal-orange); background: var(--orange-soft); }
+    .status-badge.collect { color: var(--steel-copy); background: rgba(145, 160, 185, .09); }
+    .rank-bar { width: 74px; height: 5px; margin-left: auto; border-radius: 999px; background: rgba(145, 160, 185, .12); overflow: hidden; }
+    .rank-bar span { display: block; height: 100%; border-radius: inherit; background: var(--walmart-blue); }
+
+    .section-intro { display: flex; align-items: end; justify-content: space-between; gap: 22px; margin: 4px 0 18px; }
+    .section-intro h2 { margin: 0; max-width: 760px; font-size: clamp(26px, 3.2vw, 44px); line-height: .95; letter-spacing: -.052em; text-wrap: balance; }
+    .section-intro p { max-width: 430px; margin: 10px 0 0; color: var(--steel-copy); text-wrap: pretty; }
+    .section-summary { color: var(--steel-copy); text-align: right; white-space: nowrap; }
+    .section-summary strong { display: block; color: var(--frost-ink); font: 750 24px "Cascadia Mono", monospace; }
+
+    .queue-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
+    .queue-card { min-height: 172px; display: flex; flex-direction: column; padding: 16px; border: 1px solid var(--line-soft); border-radius: var(--radius-md); background: var(--navy-panel); }
+    .queue-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .priority { color: var(--slate-dim); font: 10px "Cascadia Mono", monospace; }
+    .queue-card h3 { margin: 18px 0 7px; font-size: 15px; letter-spacing: -.02em; }
+    .queue-card p { margin: 0; color: var(--steel-copy); font-size: 12px; text-wrap: pretty; }
+    .queue-impact { margin-top: auto; padding-top: 14px; color: var(--frost-ink); font: 650 12px "Cascadia Mono", monospace; }
+
+    .filter-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+    .filter-button { min-height: 36px; padding: 0 11px; border: 1px solid var(--line-soft); border-radius: 9px; color: var(--steel-copy); background: transparent; cursor: pointer; font-size: 11px; font-weight: 750; }
+    .filter-button.active { color: var(--frost-ink); border-color: rgba(47, 144, 255, .28); background: var(--blue-soft); }
+
+    .matrix-layout { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(300px, .7fr); gap: 14px; }
+    .matrix-chart { position: relative; min-height: 520px; padding: 28px 32px 42px 56px; }
+    .matrix-plot { position: absolute; inset: 28px 32px 42px 56px; border-left: 1px solid var(--line-strong); border-bottom: 1px solid var(--line-strong); }
+    .matrix-plot::before, .matrix-plot::after { content: ""; position: absolute; background: var(--line-soft); }
+    .matrix-plot::before { left: 50%; top: 0; width: 1px; height: 100%; }
+    .matrix-plot::after { left: 0; top: 50%; width: 100%; height: 1px; }
+    .quadrant-label { position: absolute; color: var(--slate-dim); font-size: 10px; }
+    .q1 { right: 12px; top: 10px; color: var(--signal-green); }
+    .q2 { left: 12px; top: 10px; }
+    .q3 { left: 12px; bottom: 10px; color: var(--signal-red); }
+    .q4 { right: 12px; bottom: 10px; color: var(--signal-orange); }
+    .axis-title { position: absolute; color: var(--steel-copy); font-size: 11px; }
+    .axis-x { left: 50%; bottom: 12px; transform: translateX(-50%); }
+    .axis-y { left: 13px; top: 50%; transform: translate(-50%, -50%) rotate(-90deg); }
+    .matrix-point { position: absolute; display: grid; place-items: center; border: 1px solid rgba(237, 244, 255, .35); border-radius: 50%; color: var(--midnight-grid); background: var(--walmart-blue); box-shadow: 0 7px 18px rgba(2, 8, 19, .36); cursor: help; transform: translate(-50%, 50%); font-size: 9px; font-weight: 900; transition: transform .18s var(--ease), box-shadow .18s var(--ease); }
+    .matrix-point:hover { transform: translate(-50%, 50%) scale(1.08); box-shadow: 0 10px 26px rgba(47, 144, 255, .28); }
+    .matrix-point.scale { background: var(--signal-green); }
+    .matrix-point.reduce { background: var(--signal-red); }
+    .matrix-point.optimize { background: var(--signal-orange); }
+    .matrix-point.collect { background: var(--steel-copy); }
+    .matrix-list { padding: 7px 16px 14px; }
+    .matrix-list-row { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: center; min-height: 48px; border-bottom: 1px solid var(--line-soft); }
+    .matrix-list-row:last-child { border-bottom: 0; }
+    .matrix-list-row strong { display: block; font-size: 12px; }
+    .matrix-list-row span { color: var(--steel-copy); font-size: 10px; }
+    .matrix-list-row .mono { color: var(--frost-ink); font-size: 12px; }
+
+    .agent-hero {
+      position: relative;
+      overflow: hidden;
+      display: grid;
+      grid-template-columns: minmax(0, 1.2fr) minmax(300px, .8fr);
+      gap: 24px;
+      padding: 28px;
+      margin-bottom: 14px;
+      border: 1px solid rgba(47, 144, 255, .22);
+      border-radius: var(--radius-lg);
+      background: linear-gradient(130deg, rgba(47, 144, 255, .12), rgba(13, 24, 43, .9) 48%, rgba(255, 194, 32, .045));
+      box-shadow: var(--shadow-panel);
+    }
+    .agent-hero::after { content: ""; position: absolute; right: -90px; top: -100px; width: 230px; height: 230px; border: 1px solid rgba(47, 144, 255, .14); border-radius: 50%; box-shadow: 0 0 0 32px rgba(47, 144, 255, .025), 0 0 0 66px rgba(47, 144, 255, .018); }
+    .agent-kicker { display: inline-flex; align-items: center; gap: 8px; min-height: 28px; padding: 0 10px; border: 1px solid rgba(41, 211, 162, .17); border-radius: 999px; color: var(--signal-green); background: var(--green-soft); font-size: 11px; font-weight: 800; }
+    .agent-kicker::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+    .agent-hero h2 { margin: 20px 0 12px; max-width: 660px; font-size: clamp(34px, 3.6vw, 52px); line-height: .98; letter-spacing: -.055em; text-wrap: balance; }
+    .agent-hero p { max-width: 680px; margin: 0; color: var(--steel-copy); text-wrap: pretty; }
+    .agent-mode-card { position: relative; z-index: 2; align-self: stretch; display: flex; flex-direction: column; justify-content: space-between; padding: 18px; border: 1px solid var(--line-strong); border-radius: var(--radius-md); background: rgba(7, 16, 31, .65); }
+    .mode-label { color: var(--steel-copy); font-size: 11px; }
+    .mode-value { margin-top: 5px; color: var(--spark-yellow); font: 750 24px "Cascadia Mono", monospace; }
+    .mode-note { margin-top: 12px; color: var(--steel-copy); font-size: 11px; }
+    .mode-lock { display: flex; align-items: center; gap: 8px; margin-top: 18px; color: var(--frost-ink); font-weight: 700; }
+
+    .pipeline { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; margin-bottom: 14px; overflow: hidden; border: 1px solid var(--line-soft); border-radius: var(--radius-lg); background: var(--line-soft); }
+    .pipeline-step { min-height: 156px; padding: 17px; background: var(--navy-panel); }
+    .step-number { color: var(--slate-dim); font: 10px "Cascadia Mono", monospace; }
+    .step-state { display: inline-flex; margin-left: 6px; color: var(--signal-green); font-size: 10px; font-weight: 800; }
+    .step-state.locked { color: var(--spark-yellow); }
+    .pipeline-step h3 { margin: 28px 0 7px; font-size: 14px; }
+    .pipeline-step p { margin: 0; color: var(--steel-copy); font-size: 11px; text-wrap: pretty; }
+    .agent-layout { display: grid; grid-template-columns: minmax(320px, .7fr) minmax(0, 1.3fr); gap: 14px; }
+    .policy-form { padding: 16px; }
+    .form-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 13px; }
+    .field label { display: block; margin-bottom: 7px; color: var(--steel-copy); font-size: 11px; font-weight: 700; }
+    .input-wrap { position: relative; }
+    .input-wrap input { width: 100%; height: 44px; padding: 0 38px 0 11px; border: 1px solid var(--line-soft); border-radius: 9px; color: var(--frost-ink); background: rgba(7, 16, 31, .68); }
+    .input-suffix { position: absolute; right: 11px; top: 50%; color: var(--slate-dim); transform: translateY(-50%); font-size: 11px; }
+    .form-note { margin: 14px 0 0; padding: 11px 12px; border-radius: 9px; color: var(--steel-copy); background: rgba(145, 160, 185, .06); font-size: 11px; }
+    .run-summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--line-soft); }
+    .run-stat { padding: 16px; background: var(--navy-panel); }
+    .run-stat strong { display: block; font: 750 23px "Cascadia Mono", monospace; }
+    .run-stat span { color: var(--steel-copy); font-size: 10px; }
+    .log-list { padding: 4px 16px 13px; }
+    .log-row { display: grid; grid-template-columns: 72px 1fr auto; gap: 12px; align-items: center; min-height: 48px; border-bottom: 1px solid var(--line-soft); }
+    .log-row:last-child { border-bottom: 0; }
+    .log-time { color: var(--slate-dim); font: 10px "Cascadia Mono", monospace; }
+    .log-copy { color: var(--steel-copy); font-size: 11px; }
+    .log-copy strong { color: var(--frost-ink); }
+
+    .empty-state { padding: 42px 20px; text-align: center; color: var(--steel-copy); }
+    .empty-state strong { display: block; margin-bottom: 5px; color: var(--frost-ink); }
+    .toast { position: fixed; right: 22px; bottom: 22px; z-index: 60; min-width: 250px; padding: 13px 15px; border: 1px solid rgba(41, 211, 162, .2); border-radius: 11px; color: var(--frost-ink); background: #10243a; box-shadow: var(--shadow-panel); opacity: 0; transform: translateY(10px); pointer-events: none; transition: opacity .22s var(--ease), transform .22s var(--ease); }
+    .toast.show { opacity: 1; transform: none; }
+    .mobile-scrim { display: none; }
+
+    @media (max-width: 1180px) {
+      .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .queue-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .queue-card:last-child { grid-column: 1 / -1; }
+      .agent-layout { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 900px) {
+      .sidebar { transform: translateX(-105%); transition: transform .26s var(--ease); box-shadow: 24px 0 64px rgba(2, 8, 19, .46); }
+      body.sidebar-open .sidebar { transform: none; }
+      .mobile-scrim { position: fixed; inset: 0; z-index: 25; display: block; background: rgba(2, 8, 19, .58); opacity: 0; pointer-events: none; transition: opacity .2s var(--ease); }
+      body.sidebar-open .mobile-scrim { opacity: 1; pointer-events: auto; }
+      .main { margin-left: 0; }
+      .menu-button { display: grid; }
+      .topbar { padding: 0 18px; }
+      .content { padding: 20px 18px 38px; }
+      .dashboard-grid, .matrix-layout, .agent-hero { grid-template-columns: 1fr; }
+      .pipeline { grid-template-columns: repeat(2, 1fr); }
+      .export-label { display: none; }
+    }
+    @media (max-width: 640px) {
+      :root { --topbar: auto; }
+      .topbar { position: sticky; min-height: 112px; align-items: flex-start; flex-wrap: wrap; padding-top: 13px; padding-bottom: 12px; }
+      .page-heading { width: calc(100% - 52px); }
+      .top-actions { width: 100%; justify-content: space-between; }
+      .metric-grid, .queue-grid, .form-grid { grid-template-columns: 1fr; }
+      .queue-card:last-child { grid-column: auto; }
+      .status-banner { grid-template-columns: auto 1fr; }
+      .status-range { grid-column: 2; }
+      .section-intro { display: block; }
+      .section-summary { margin-top: 12px; text-align: left; }
+      .panel-header { align-items: flex-start; flex-direction: column; }
+      .table-tools { width: 100%; }
+      .search-input { width: 100%; }
+      .pipeline { grid-template-columns: 1fr; }
+      .agent-hero { padding: 21px; }
+      .run-summary { grid-template-columns: 1fr; }
+      .log-row { grid-template-columns: 64px 1fr; }
+      .log-row .status-badge { grid-column: 2; width: max-content; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: .01ms !important; }
+    }
+  </style>
+</head>
+<body>
+  <a href="#main" class="skip-link">跳到主要内容</a>
+  <div class="mobile-scrim" id="mobileScrim" aria-hidden="true"></div>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar" aria-label="主导航">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">W</div>
+        <div>
+          <div class="brand-name">PNK 决策台</div>
+          <div class="brand-meta">WALMART ADS ANALYST</div>
+        </div>
+      </div>
+      <div class="nav-label">经营分析</div>
+      <nav class="nav-list">
+        <button class="nav-button active" type="button" data-view="dashboard">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="4" rx="1.5"/><rect x="14" y="11" width="7" height="10" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/></svg>
+          <span>经营驾驶舱</span>
+        </button>
+        <button class="nav-button" type="button" data-view="diagnosis">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 19V9m5 10V5m5 14v-7m5 7V3"/><path d="M3 21h18"/></svg>
+          <span>广告诊断</span>
+        </button>
+        <button class="nav-button" type="button" data-view="sku">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 7.5 12 3l8 4.5v9L12 21l-8-4.5z"/><path d="m4 7.5 8 4.5 8-4.5M12 12v9"/></svg>
+          <span>SKU 机会矩阵</span>
+        </button>
+      </nav>
+      <div class="nav-label">自动化准备</div>
+      <nav class="nav-list">
+        <button class="nav-button" type="button" data-view="agent">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="5" y="7" width="14" height="12" rx="3"/><path d="M9 12h.01M15 12h.01M9 16h6M12 3v4M8 3h8"/></svg>
+          <span>Agent 控制室</span>
+        </button>
+        <button class="nav-button" type="button" data-view="imports">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3v12m0 0 4-4m-4 4-4-4"/><path d="M5 19h14"/><path d="M5 5h4M15 5h4"/></svg>
+          <span>数据导入</span>
+        </button>
+      </nav>
+      <div class="sidebar-bottom">
+        <div class="source-card">
+          <div class="source-state"><span class="source-dot"></span>本地数据已载入</div>
+          <div class="source-time" id="sidebarSourceTime"></div>
+        </div>
+        <div class="safe-mode"><span>执行模式</span><span>仅建议</span></div>
+      </div>
+    </aside>
+
+    <main class="main" id="main">
+      <header class="topbar">
+        <div class="page-heading">
+          <button class="menu-button" id="menuButton" type="button" aria-controls="sidebar" aria-expanded="false" aria-label="打开导航">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+          </button>
+          <div>
+            <h1 id="pageTitle">经营驾驶舱</h1>
+            <p id="pageMeta"></p>
+          </div>
+        </div>
+        <div class="top-actions">
+          <div class="period-switch" aria-label="分析周期">
+            <button class="period-button active" type="button" data-period="7">7天</button>
+            <button class="period-button" type="button" data-period="14">14天</button>
+            <button class="period-button" type="button" data-period="30">30天</button>
+          </div>
+          <button class="primary-button" id="scanImportButton" type="button">扫描导入</button>
+          <button class="secondary-button" id="exportButton" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3v12m0 0 4-4m-4 4-4-4"/><path d="M5 19h14"/></svg>
+            <span class="export-label">导出建议</span>
+          </button>
+        </div>
+      </header>
+
+      <div class="content">
+        <section class="view active" id="view-dashboard" aria-labelledby="pageTitle">
+          <div class="status-banner">
+            <div class="status-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3v9l6 3"/><circle cx="12" cy="12" r="9"/></svg></div>
+            <div class="status-copy"><strong id="statusHeadline"></strong><span id="statusDetail"></span></div>
+            <div class="status-range mono" id="statusRange"></div>
+          </div>
+          <div class="metric-grid" id="metricGrid"></div>
+          <div class="dashboard-grid">
+            <section class="panel" aria-labelledby="trendTitle">
+              <div class="panel-header">
+                <div><h2 class="panel-title" id="trendTitle">销售与广告投入趋势</h2><p class="panel-subtitle">每日销售额与广告费，双轴独立缩放</p></div>
+                <div class="legend"><span class="legend-item"><span class="legend-dot"></span>销售额</span><span class="legend-item"><span class="legend-dot yellow"></span>广告费</span></div>
+              </div>
+              <div class="chart-wrap" id="trendChart"></div>
+            </section>
+            <section class="panel" aria-labelledby="mixTitle">
+              <div class="panel-header"><div><h2 class="panel-title" id="mixTitle">订单结构</h2><p class="panel-subtitle">广告归因与自然订单</p></div></div>
+              <div class="mix-body" id="orderMix"></div>
+            </section>
+          </div>
+          <section class="panel table-panel" aria-labelledby="topSkuTitle">
+            <div class="panel-header"><div><h2 class="panel-title" id="topSkuTitle">SKU 经营摘要</h2><p class="panel-subtitle">按销售额排序，显示前 8 个父 SKU</p></div><button class="secondary-button" type="button" data-jump="sku">查看矩阵</button></div>
+            <div class="table-scroll"><table><thead><tr><th>父 SKU</th><th class="num">销售额</th><th class="num">订单</th><th class="num">广告费</th><th class="num">ROAS</th><th class="num">广告订单占比</th><th>建议</th></tr></thead><tbody id="topSkuBody"></tbody></table></div>
+          </section>
+        </section>
+
+        <section class="view" id="view-diagnosis" aria-labelledby="pageTitle">
+          <div class="section-intro"><div><h2>把广告数据变成今天要做的动作</h2><p>建议根据真实广告花费、点击、订单与归因销售生成。原型不会修改活动、出价或预算。</p></div><div class="section-summary"><strong id="actionCount">0</strong>条可执行建议</div></div>
+          <div class="queue-grid" id="actionQueue"></div>
+          <section class="panel table-panel" aria-labelledby="campaignTitle">
+            <div class="panel-header">
+              <div><h2 class="panel-title" id="campaignTitle">广告活动诊断</h2><p class="panel-subtitle" id="campaignSubtitle"></p></div>
+              <div class="table-tools"><label class="sr-only" for="campaignSearch">搜索活动或 SKU</label><input class="search-input" id="campaignSearch" type="search" placeholder="搜索活动或 SKU"></div>
+            </div>
+            <div class="panel-header"><div class="filter-row" id="campaignFilters"><button class="filter-button active" type="button" data-filter="all">全部</button><button class="filter-button" type="button" data-filter="scale">建议放量</button><button class="filter-button" type="button" data-filter="reduce">建议降耗</button><button class="filter-button" type="button" data-filter="optimize">继续优化</button><button class="filter-button" type="button" data-filter="collect">数据不足</button></div></div>
+            <div class="table-scroll"><table><thead><tr><th>活动</th><th>类型</th><th class="num">花费</th><th class="num">归因销售</th><th class="num">订单</th><th class="num">ROAS</th><th class="num">CPC</th><th>建议</th></tr></thead><tbody id="campaignBody"></tbody></table></div>
+          </section>
+        </section>
+
+        <section class="view" id="view-sku" aria-labelledby="pageTitle">
+          <div class="section-intro"><div><h2>看清增长款、低效款与自然流量强势款</h2><p>横轴是重新计算的 ROAS，纵轴是销售额，圆点大小反映订单量。点击较少的 SKU 会标记为数据不足。</p></div><div class="section-summary"><strong id="skuCount">0</strong>个活跃父 SKU</div></div>
+          <div class="matrix-layout">
+            <section class="panel" aria-labelledby="matrixTitle"><div class="panel-header"><div><h2 class="panel-title" id="matrixTitle">SKU 效率矩阵</h2><p class="panel-subtitle">目标 ROAS 分界线随 Agent 规则同步</p></div></div><div class="matrix-chart" id="skuMatrix"></div></section>
+            <section class="panel" aria-labelledby="rankingTitle"><div class="panel-header"><div><h2 class="panel-title" id="rankingTitle">机会排序</h2><p class="panel-subtitle">优先显示可放量与需降耗 SKU</p></div></div><div class="matrix-list" id="skuRanking"></div></section>
+          </div>
+        </section>
+
+        <section class="view" id="view-agent" aria-labelledby="pageTitle">
+          <section class="agent-hero">
+            <div><span class="agent-kicker">分析引擎已运行</span><h2>先把建议做对，再接入广告执行</h2><p>当前版本完成数据读取、口径校验、诊断与提案。预算与出价变更保持锁定，直到规则回测、审批流和回滚机制都通过验证。</p></div>
+            <div class="agent-mode-card"><div><div class="mode-label">CURRENT MODE</div><div class="mode-value">ADVISORY</div><div class="mode-note">只生成建议和 CSV，不调用 Walmart Ads API。</div></div><div class="mode-lock"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>执行权限已锁定</div></div>
+          </section>
+          <section class="pipeline" aria-label="Agent 演进阶段">
+            <div class="pipeline-step"><span class="step-number">STEP 1</span><span class="step-state">已完成</span><h3>读取与校验</h3><p>读取销量与广告明细，对账日期、花费、订单和归因销售。</p></div>
+            <div class="pipeline-step"><span class="step-number">STEP 2</span><span class="step-state">已完成</span><h3>诊断与分层</h3><p>按活动和父 SKU 识别放量、降耗、优化与数据不足。</p></div>
+            <div class="pipeline-step"><span class="step-number">STEP 3</span><span class="step-state">原型</span><h3>生成提案</h3><p>输出建议动作、判断依据和可审计的规则阈值。</p></div>
+            <div class="pipeline-step"><span class="step-number">STEP 4</span><span class="step-state locked">待接入</span><h3>审批后执行</h3><p>未来通过 API 执行，并保留审批、限额、回滚和操作日志。</p></div>
+          </section>
+          <div class="agent-layout">
+            <section class="panel" aria-labelledby="policyTitle"><div class="panel-header"><div><h2 class="panel-title" id="policyTitle">策略规则</h2><p class="panel-subtitle">原型阈值，可调整并实时重算</p></div></div><form class="policy-form" id="policyForm"><div class="form-grid"><div class="field"><label for="targetRoas">放量 ROAS</label><div class="input-wrap"><input id="targetRoas" type="number" min="1" max="20" step="0.1"><span class="input-suffix">x</span></div></div><div class="field"><label for="floorRoas">降耗 ROAS</label><div class="input-wrap"><input id="floorRoas" type="number" min="0" max="20" step="0.1"><span class="input-suffix">x</span></div></div><div class="field"><label for="minClicks">最低点击量</label><div class="input-wrap"><input id="minClicks" type="number" min="1" max="1000" step="1"><span class="input-suffix">次</span></div></div><div class="field"><label for="minSpend">最低花费</label><div class="input-wrap"><input id="minSpend" type="number" min="0" max="10000" step="1"><span class="input-suffix">USD</span></div></div></div><p class="form-note">放量还要求至少 3 个广告订单。降耗只在达到最低点击和最低花费后触发，避免小样本误判。</p></form></section>
+            <section class="panel" aria-labelledby="runTitle"><div class="panel-header"><div><h2 class="panel-title" id="runTitle">本次分析运行</h2><p class="panel-subtitle" id="runSubtitle"></p></div><button class="primary-button" type="button" id="recalculateButton">重新计算</button></div><div class="run-summary" id="runSummary"></div><div class="log-list" id="runLog"></div></section>
+          </div>
+        </section>
+
+        <section class="view" id="view-imports" aria-labelledby="pageTitle">
+          <div class="section-intro">
+            <div><h2>从本地目录安全导入 MySQL</h2><p>系统扫描订单、自动广告、手动关键词广告、库存和商品资料。相同文件通过 SHA-256 指纹自动跳过，失败文件不会产生半批业务数据。</p></div>
+            <button class="primary-button" id="scanImportPageButton" type="button">开始扫描导入</button>
+          </div>
+          <section class="panel table-panel" aria-labelledby="batchTitle">
+            <div class="panel-header"><div><h2 class="panel-title" id="batchTitle">最近导入批次</h2><p class="panel-subtitle">原文件保存在 archive，结构化字段写入独立 MySQL 数据库</p></div><button class="secondary-button" id="refreshBatchesButton" type="button">刷新</button></div>
+            <div class="table-scroll"><table><thead><tr><th>批次</th><th>开始时间</th><th>状态</th><th class="num">发现</th><th class="num">导入</th><th class="num">跳过</th><th class="num">失败</th><th>说明</th></tr></thead><tbody id="batchBody"></tbody></table></div>
+          </section>
+        </section>
+      </div>
+    </main>
+  </div>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script type="module">
+    const dashboardResponse = await fetch("/api/dashboard/data");
+    if (!dashboardResponse.ok) throw new Error(`加载数据失败：HTTP ${dashboardResponse.status}`);
+    let DATA = await dashboardResponse.json();
+    const state = {
+      view: "dashboard",
+      periodDays: DATA.defaults.periodDays,
+      campaignFilter: "all",
+      campaignSearch: "",
+      thresholds: {
+        targetRoas: DATA.defaults.targetRoas,
+        floorRoas: DATA.defaults.floorRoas,
+        minClicks: DATA.defaults.minClicks,
+        minSpend: DATA.defaults.minSpend,
+      },
+    };
+
+    const titles = { dashboard: "经营驾驶舱", diagnosis: "广告诊断", sku: "SKU 机会矩阵", agent: "Agent 控制室", imports: "数据导入" };
+    const decisionCopy = {
+      scale: { label: "建议放量", short: "放量", reason: "ROAS 达标且已有稳定广告订单，可进入小步增量测试。" },
+      reduce: { label: "建议降耗", short: "降耗", reason: "达到样本门槛后仍低于降耗 ROAS，需要降低出价或暂停低效商品。" },
+      optimize: { label: "继续优化", short: "优化", reason: "已有足够数据但未达到放量目标，适合调整商品、词或出价。" },
+      collect: { label: "数据不足", short: "观察", reason: "点击或花费不足，暂不做预算变更，继续积累样本。" },
+    };
+
+    const $ = (selector) => document.querySelector(selector);
+    const $$ = (selector) => [...document.querySelectorAll(selector)];
+    const number = (value) => Number.isFinite(Number(value)) ? Number(value) : 0;
+    const sum = (rows, key) => rows.reduce((total, row) => total + number(row[key]), 0);
+    const money = (value, digits = 0) => `$${number(value).toLocaleString("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits })}`;
+    const integer = (value) => Math.round(number(value)).toLocaleString("en-US");
+    const percent = (value, digits = 1) => `${(number(value) * 100).toFixed(digits)}%`;
+    const ratio = (value) => `${number(value).toFixed(2)}x`;
+    const isoDate = (value) => new Date(`${value}T00:00:00`);
+    const dateText = (value) => new Intl.DateTimeFormat("zh-CN", { month: "short", day: "numeric" }).format(isoDate(value));
+    const fullDateText = (value) => new Intl.DateTimeFormat("zh-CN", { year: "numeric", month: "long", day: "numeric" }).format(isoDate(value));
+    const latest = isoDate(DATA.meta.latestDate);
+    const addDays = (source, days) => { const result = new Date(source); result.setDate(result.getDate() + days); return result; };
+    const toIso = (value) => `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
+
+    function inWindow(row, days, offset = 0) {
+      const end = addDays(latest, -offset);
+      const start = addDays(end, -(days - 1));
+      const current = isoDate(row.date);
+      return current >= start && current <= end;
+    }
+
+    function aggregate(rows, days, offset = 0) {
+      const chosen = rows.filter((row) => inWindow(row, days, offset));
+      const result = {};
+      ["orders", "revenue", "impressions", "clicks", "spend", "adOrders", "naturalOrders", "adSales"].forEach((key) => result[key] = sum(chosen, key));
+      result.roas = result.spend ? result.adSales / result.spend : 0;
+      result.acos = result.adSales ? result.spend / result.adSales : 0;
+      result.ctr = result.impressions ? result.clicks / result.impressions : 0;
+      result.cpc = result.clicks ? result.spend / result.clicks : 0;
+      result.cvr = result.clicks ? result.adOrders / result.clicks : 0;
+      result.adShare = result.orders ? result.adOrders / result.orders : 0;
+      return result;
+    }
+
+    function groupAggregate(rows, groupKey, days) {
+      const groups = new Map();
+      rows.filter((row) => inWindow(row, days)).forEach((row) => {
+        const key = row[groupKey];
+        if (!groups.has(key)) groups.set(key, { [groupKey]: key, campaignId: row.campaignId, type: row.type, sku: row.sku });
+        const item = groups.get(key);
+        ["orders", "revenue", "impressions", "clicks", "spend", "adOrders", "naturalOrders", "adSales"].forEach((field) => item[field] = number(item[field]) + number(row[field]));
+        if (row.avgBid) { item.bidWeighted = number(item.bidWeighted) + number(row.avgBid) * Math.max(number(row.clicks), 1); item.bidWeight = number(item.bidWeight) + Math.max(number(row.clicks), 1); }
+      });
+      return [...groups.values()].map((item) => ({
+        ...item,
+        roas: item.spend ? item.adSales / item.spend : 0,
+        acos: item.adSales ? item.spend / item.adSales : 0,
+        cpc: item.clicks ? item.spend / item.clicks : 0,
+        ctr: item.impressions ? item.clicks / item.impressions : 0,
+        adShare: item.orders ? item.adOrders / item.orders : 0,
+        avgBid: item.bidWeight ? item.bidWeighted / item.bidWeight : 0,
+      }));
+    }
+
+    function decide(item) {
+      const enough = number(item.clicks) >= state.thresholds.minClicks && number(item.spend) >= state.thresholds.minSpend;
+      if (!enough) return "collect";
+      if (number(item.roas) >= state.thresholds.targetRoas && number(item.adOrders) >= 3) return "scale";
+      if (number(item.roas) < state.thresholds.floorRoas || number(item.adOrders) === 0) return "reduce";
+      return "optimize";
+    }
+
+    function delta(current, previous, inverse = false) {
+      if (!previous) return { text: "无可比基期", cls: "flat", arrow: "" };
+      const value = (current - previous) / Math.abs(previous);
+      const good = inverse ? value <= 0 : value >= 0;
+      return { text: `${Math.abs(value * 100).toFixed(1)}%`, cls: Math.abs(value) < .005 ? "flat" : good ? "up" : "down", arrow: Math.abs(value) < .005 ? "" : value > 0 ? "↑" : "↓" };
+    }
+
+    function metricCard(label, value, change, note, icon, cost = false) {
+      return `<article class="metric-card${cost ? " cost" : ""}"><div class="metric-label"><span>${label}</span><span class="metric-icon">${icon}</span></div><div class="metric-value">${value}</div><div class="metric-foot"><span class="change ${change.cls}">${change.arrow} ${change.text}</span><span>${note}</span></div></article>`;
+    }
+
+    const icons = {
+      revenue: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 2v20M17 6.5c0-1.4-2-2.5-4.5-2.5S8 5.1 8 6.5 10 9 12.5 9 17 10.1 17 11.5 15 14 12.5 14 8 15.1 8 16.5 10 19 12.5 19s4.5-1.1 4.5-2.5"/></svg>`,
+      orders: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M6 3h12l2 5-2 13H6L4 8zM4 8h16M9 12v5M15 12v5"/></svg>`,
+      spend: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M3 10h18M16 15h2"/></svg>`,
+      roas: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 16l5-5 4 3 7-8"/><path d="M15 6h5v5"/></svg>`,
+    };
+
+    function renderMetrics() {
+      const current = aggregate(DATA.daily, state.periodDays);
+      const previous = aggregate(DATA.daily, state.periodDays, state.periodDays);
+      $("#metricGrid").innerHTML = [
+        metricCard("总销售额", money(current.revenue, 2), delta(current.revenue, previous.revenue), "较前一周期", icons.revenue),
+        metricCard("销售件数", integer(current.orders), delta(current.orders, previous.orders), "较前一周期", icons.orders),
+        metricCard("广告费", money(current.spend, 2), delta(current.spend, previous.spend, true), `CPC ${money(current.cpc, 2)}`, icons.spend, true),
+        metricCard("广告 ROAS", ratio(current.roas), delta(current.roas, previous.roas), `ACOS ${percent(current.acos)}`, icons.roas),
+      ].join("");
+      const roasState = current.roas >= state.thresholds.targetRoas ? "整体 ROAS 达到当前放量阈值" : current.roas < state.thresholds.floorRoas ? "整体 ROAS 低于当前降耗阈值" : "整体 ROAS 位于优化区间";
+      $("#statusHeadline").textContent = roasState;
+      $("#statusDetail").textContent = `广告归因销售 ${money(current.adSales, 2)}，广告订单 ${integer(current.adOrders)}，自然订单 ${integer(current.naturalOrders)}。`;
+      const start = addDays(latest, -(state.periodDays - 1));
+      $("#statusRange").textContent = `${toIso(start)} 至 ${DATA.meta.latestDate}`;
+      renderTrend();
+      renderOrderMix(current);
+    }
+
+    function renderTrend() {
+      const rows = DATA.daily.filter((row) => inWindow(row, state.periodDays));
+      if (!rows.length) { $("#trendChart").innerHTML = `<div class="empty-state"><strong>没有趋势数据</strong>请检查分析周期。</div>`; return; }
+      const width = 760, height = 260, left = 42, right = 34, top = 18, bottom = 34;
+      const plotW = width - left - right, plotH = height - top - bottom;
+      const maxSales = Math.max(...rows.map((row) => number(row.revenue)), 1) * 1.12;
+      const maxSpend = Math.max(...rows.map((row) => number(row.spend)), 1) * 1.12;
+      const points = (key, max) => rows.map((row, index) => ({ x: left + (rows.length === 1 ? plotW / 2 : index * plotW / (rows.length - 1)), y: top + plotH - number(row[key]) / max * plotH, row }));
+      const sales = points("revenue", maxSales), spend = points("spend", maxSpend);
+      const path = (items) => items.map((point, index) => `${index ? "L" : "M"}${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(" ");
+      const area = `${path(sales)} L${sales.at(-1).x.toFixed(1)},${top + plotH} L${sales[0].x.toFixed(1)},${top + plotH} Z`;
+      const labelEvery = Math.max(1, Math.ceil(rows.length / 7));
+      const grid = [0, .25, .5, .75, 1].map((t) => { const y = top + plotH * t; return `<line class="chart-grid-line" x1="${left}" x2="${left + plotW}" y1="${y}" y2="${y}"/><text class="chart-axis-label" x="${left - 8}" y="${y + 3}" text-anchor="end">${money(maxSales * (1 - t))}</text>`; }).join("");
+      const labels = rows.map((row, index) => index % labelEvery === 0 || index === rows.length - 1 ? `<text class="chart-axis-label" x="${sales[index].x}" y="${height - 9}" text-anchor="middle">${dateText(row.date)}</text>` : "").join("");
+      const dots = sales.map((point, index) => `<circle class="chart-point" cx="${point.x}" cy="${point.y}" r="4" fill="var(--walmart-blue)"><title>${point.row.date} 销售额 ${money(point.row.revenue, 2)}，广告费 ${money(point.row.spend, 2)}</title></circle><circle class="chart-point" cx="${spend[index].x}" cy="${spend[index].y}" r="3.4" fill="var(--spark-yellow)"><title>${point.row.date} 广告费 ${money(point.row.spend, 2)}</title></circle>`).join("");
+      $("#trendChart").innerHTML = `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="销售额与广告费趋势图">${grid}<path class="chart-area" d="${area}"/><path class="chart-sales" d="${path(sales)}"/><path class="chart-spend" d="${path(spend)}"/>${dots}${labels}<text class="chart-axis-label" x="${width - 4}" y="${top + 3}" text-anchor="end">广告费峰值 ${money(maxSpend / 1.12)}</text></svg>`;
+    }
+
+    function renderOrderMix(current) {
+      const share = current.orders ? current.adOrders / current.orders : 0;
+      $("#orderMix").innerHTML = `<div class="donut" style="--ad-share:${(share * 100).toFixed(2)}"><div class="donut-center"><div class="donut-value">${percent(share, 0)}</div><div class="donut-label">广告订单占比</div></div></div><div class="mix-legend"><div class="mix-row"><span class="legend-dot"></span><span>广告订单</span><strong>${integer(current.adOrders)}</strong></div><div class="mix-row"><span class="legend-dot" style="background:var(--steel-copy)"></span><span>自然订单</span><strong>${integer(current.naturalOrders)}</strong></div><div class="mix-row"><span class="legend-dot yellow"></span><span>总广告费</span><strong>${money(current.spend, 2)}</strong></div></div>`;
+    }
+
+    function renderSkuSummary() {
+      const rows = groupAggregate(DATA.skuDaily, "sku", state.periodDays).sort((a, b) => b.revenue - a.revenue);
+      const maxRevenue = Math.max(...rows.map((row) => row.revenue), 1);
+      $("#topSkuBody").innerHTML = rows.slice(0, 8).map((row) => { const decision = decide(row); return `<tr><td><span class="sku-name">${escapeHtml(row.sku)}</span><div class="rank-bar"><span style="width:${row.revenue / maxRevenue * 100}%"></span></div></td><td class="num">${money(row.revenue, 2)}</td><td class="num">${integer(row.orders)}</td><td class="num">${money(row.spend, 2)}</td><td class="num">${ratio(row.roas)}</td><td class="num">${percent(row.adShare)}</td><td><span class="status-badge ${decision}">${decisionCopy[decision].label}</span></td></tr>`; }).join("") || emptyRow(7, "没有 SKU 数据", "请检查当前分析周期。");
+      $("#skuCount").textContent = integer(rows.filter((row) => row.orders || row.spend).length);
+    }
+
+    function campaignRows() {
+      return groupAggregate(DATA.campaignDaily, "campaign", state.periodDays).map((row) => ({ ...row, decision: decide(row) })).sort((a, b) => {
+        const rank = { reduce: 0, scale: 1, optimize: 2, collect: 3 };
+        return rank[a.decision] - rank[b.decision] || b.spend - a.spend;
+      });
+    }
+
+    function renderDiagnosis() {
+      const all = campaignRows();
+      const actions = all.filter((row) => row.decision !== "collect");
+      $("#actionCount").textContent = integer(actions.length);
+      $("#campaignSubtitle").textContent = `${state.periodDays} 天内共 ${all.length} 个广告活动，按诊断优先级排序。`;
+      const queue = [...actions].sort((a, b) => {
+        const score = (row) => row.decision === "reduce" ? row.spend * Math.max(1, state.thresholds.floorRoas - row.roas) : row.adSales;
+        return score(b) - score(a);
+      }).slice(0, 3);
+      $("#actionQueue").innerHTML = queue.map((row, index) => `<article class="queue-card"><div class="queue-top"><span class="status-badge ${row.decision}">${decisionCopy[row.decision].label}</span><span class="priority">P${index + 1}</span></div><h3>${escapeHtml(row.campaign)}</h3><p>${decisionCopy[row.decision].reason}</p><div class="queue-impact">花费 ${money(row.spend, 2)} · ROAS ${ratio(row.roas)} · ${integer(row.adOrders)} 单</div></article>`).join("") || `<div class="panel empty-state" style="grid-column:1/-1"><strong>当前没有达到动作门槛的活动</strong>可调低样本门槛或延长分析周期。</div>`;
+
+      const query = state.campaignSearch.trim().toLowerCase();
+      const filtered = all.filter((row) => (state.campaignFilter === "all" || row.decision === state.campaignFilter) && (!query || `${row.campaign} ${row.sku}`.toLowerCase().includes(query)));
+      $("#campaignBody").innerHTML = filtered.map((row) => `<tr><td><span class="campaign-name" title="${escapeHtml(row.campaign)}">${escapeHtml(row.campaign)}</span><span class="sub-id">${escapeHtml(row.sku || row.campaignId || "")}</span></td><td>${escapeHtml(row.type || "标准广告")}</td><td class="num">${money(row.spend, 2)}</td><td class="num">${money(row.adSales, 2)}</td><td class="num">${integer(row.adOrders)}</td><td class="num">${ratio(row.roas)}</td><td class="num">${money(row.cpc, 2)}</td><td><span class="status-badge ${row.decision}">${decisionCopy[row.decision].label}</span></td></tr>`).join("") || emptyRow(8, "没有匹配活动", "清除搜索或切换筛选条件。");
+    }
+
+    function renderSkuMatrix() {
+      const rows = groupAggregate(DATA.skuDaily, "sku", state.periodDays).filter((row) => row.orders || row.spend).map((row) => ({ ...row, decision: decide(row) }));
+      $("#skuCount").textContent = integer(rows.length);
+      if (!rows.length) { $("#skuMatrix").innerHTML = `<div class="empty-state"><strong>没有 SKU 数据</strong>请检查当前分析周期。</div>`; return; }
+      const maxRevenue = Math.max(...rows.map((row) => row.revenue), 1), maxOrders = Math.max(...rows.map((row) => row.orders), 1);
+      const maxRoas = Math.max(state.thresholds.targetRoas * 2, ...rows.map((row) => Math.min(row.roas, state.thresholds.targetRoas * 3)), 1);
+      const medianRevenue = [...rows].sort((a, b) => a.revenue - b.revenue)[Math.floor(rows.length / 2)].revenue;
+      const points = rows.map((row) => {
+        const x = Math.max(2, Math.min(98, row.roas / maxRoas * 100));
+        const y = Math.max(3, Math.min(97, row.revenue / maxRevenue * 100));
+        const size = 22 + Math.sqrt(row.orders / maxOrders) * 28;
+        return `<div class="matrix-point ${row.decision}" style="left:${x}%;bottom:${y}%;width:${size}px;height:${size}px" title="${escapeHtml(row.sku)} · 销售 ${money(row.revenue, 2)} · ROAS ${ratio(row.roas)} · ${decisionCopy[row.decision].label}">${escapeHtml(row.sku.replace("PNK", ""))}</div>`;
+      }).join("");
+      $("#skuMatrix").innerHTML = `<div class="axis-title axis-y">销售额</div><div class="axis-title axis-x">ROAS 0 至 ${maxRoas.toFixed(1)}x</div><div class="matrix-plot"><span class="quadrant-label q1">高销售 · 高效率</span><span class="quadrant-label q2">高销售 · 待优化</span><span class="quadrant-label q3">低销售 · 低效率</span><span class="quadrant-label q4">低销售 · 有潜力</span>${points}</div>`;
+      const priority = [...rows].sort((a, b) => {
+        const rank = { reduce: 0, scale: 1, optimize: 2, collect: 3 };
+        return rank[a.decision] - rank[b.decision] || b.spend - a.spend;
+      }).slice(0, 10);
+      $("#skuRanking").innerHTML = priority.map((row) => `<div class="matrix-list-row"><div><strong>${escapeHtml(row.sku)}</strong><span>${decisionCopy[row.decision].label} · ${integer(row.orders)} 单 · 花费 ${money(row.spend, 2)}</span></div><div class="mono">${ratio(row.roas)}</div></div>`).join("");
+    }
+
+    function renderAgent() {
+      const rows = campaignRows();
+      const counts = { scale: 0, reduce: 0, optimize: 0, collect: 0 };
+      rows.forEach((row) => counts[row.decision]++);
+      $("#runSubtitle").textContent = `${fullDateText(DATA.meta.latestDate)} 数据，${state.periodDays} 天分析周期。`;
+      $("#runSummary").innerHTML = `<div class="run-stat"><strong>${counts.scale}</strong><span>建议放量</span></div><div class="run-stat"><strong>${counts.reduce}</strong><span>建议降耗</span></div><div class="run-stat"><strong>${counts.optimize}</strong><span>继续优化</span></div>`;
+      const samples = rows.filter((row) => row.decision !== "collect").slice(0, 5);
+      $("#runLog").innerHTML = samples.map((row, index) => `<div class="log-row"><span class="log-time">RULE-${String(index + 1).padStart(2, "0")}</span><span class="log-copy"><strong>${escapeHtml(row.sku || row.campaign)}</strong>：${decisionCopy[row.decision].reason}</span><span class="status-badge ${row.decision}">${decisionCopy[row.decision].short}</span></div>`).join("") || `<div class="empty-state"><strong>没有触发动作规则</strong>分析已完成，当前仅保留观察项。</div>`;
+    }
+
+    function renderAll() {
+      renderMetrics();
+      renderSkuSummary();
+      renderDiagnosis();
+      renderSkuMatrix();
+      renderAgent();
+      const start = addDays(latest, -(state.periodDays - 1));
+      $("#pageMeta").textContent = `数据截至 ${DATA.meta.latestDate} · ${toIso(start)} 至 ${DATA.meta.latestDate}`;
+    }
+
+    function switchView(view) {
+      state.view = view;
+      $$(".nav-button").forEach((button) => button.classList.toggle("active", button.dataset.view === view));
+      $$(".view").forEach((section) => section.classList.toggle("active", section.id === `view-${view}`));
+      $("#pageTitle").textContent = titles[view];
+      document.body.classList.remove("sidebar-open");
+      $("#menuButton").setAttribute("aria-expanded", "false");
+      window.scrollTo({ top: 0, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+    }
+
+    function emptyRow(columns, title, detail) { return `<tr><td colspan="${columns}"><div class="empty-state"><strong>${title}</strong>${detail}</div></td></tr>`; }
+    function escapeHtml(value) { return String(value ?? "").replace(/[&<>"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;" })[char]); }
+    function showToast(message) { const toast = $("#toast"); toast.textContent = message; toast.classList.add("show"); clearTimeout(showToast.timer); showToast.timer = setTimeout(() => toast.classList.remove("show"), 3400); }
+
+    async function runImport() {
+      const buttons = [$("#scanImportButton"), $("#scanImportPageButton")].filter(Boolean);
+      buttons.forEach((button) => { button.disabled = true; button.textContent = "正在扫描…"; });
+      try {
+        const response = await fetch("/api/imports/scan", { method: "POST" });
+        const payload = await response.json();
+        if (!response.ok || !payload.success) throw new Error(payload.message || `HTTP ${response.status}`);
+        showToast(payload.data.message);
+        await loadBatches();
+        setTimeout(() => location.reload(), 900);
+      } catch (error) {
+        showToast(`导入失败：${error.message}`);
+      } finally {
+        buttons.forEach((button) => { button.disabled = false; button.textContent = button.id === "scanImportButton" ? "扫描导入" : "开始扫描导入"; });
+      }
+    }
+
+    async function loadBatches() {
+      const body = $("#batchBody");
+      if (!body) return;
+      body.innerHTML = emptyRow(8, "正在读取导入记录", "请稍候。");
+      try {
+        const response = await fetch("/api/imports/batches?limit=30");
+        const payload = await response.json();
+        if (!response.ok || !payload.success) throw new Error(payload.message || `HTTP ${response.status}`);
+        body.innerHTML = payload.data.map((batch) => `<tr><td class="mono">#${batch.id}</td><td>${new Date(batch.startedAt).toLocaleString("zh-CN")}</td><td><span class="status-badge ${batch.status === "SUCCESS" ? "scale" : batch.status === "FAILED" ? "reduce" : "optimize"}">${escapeHtml(batch.status)}</span></td><td class="num">${integer(batch.discovered)}</td><td class="num">${integer(batch.imported)}</td><td class="num">${integer(batch.skipped)}</td><td class="num">${integer(batch.failed)}</td><td>${escapeHtml(batch.message || "")}</td></tr>`).join("") || emptyRow(8, "还没有导入记录", "点击“开始扫描导入”创建第一批数据。");
+      } catch (error) {
+        body.innerHTML = emptyRow(8, "读取失败", escapeHtml(error.message));
+      }
+    }
+
+    function exportRecommendations() {
+      const rows = campaignRows().filter((row) => row.decision !== "collect");
+      const header = ["分析周期", "广告活动", "父SKU", "广告类型", "广告费USD", "归因销售USD", "广告订单", "ROAS", "CPC", "建议", "判断依据"];
+      const csvRows = rows.map((row) => [
+        `${state.periodDays}天`, row.campaign, row.sku, row.type, row.spend.toFixed(2), row.adSales.toFixed(2), Math.round(row.adOrders), row.roas.toFixed(2), row.cpc.toFixed(2), decisionCopy[row.decision].label, decisionCopy[row.decision].reason,
+      ]);
+      const csv = [header, ...csvRows].map((row) => row.map((cell) => `"${String(cell ?? "").replaceAll('"', '""')}"`).join(",")).join("\r\n");
+      const blob = new Blob(["\ufeff", csv], { type: "text/csv;charset=utf-8" });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = `PNK-Walmart-广告建议-${DATA.meta.latestDate}-${state.periodDays}天.csv`;
+      link.click();
+      URL.revokeObjectURL(link.href);
+      showToast(`已导出 ${rows.length} 条建议，未执行任何广告变更。`);
+    }
+
+    $$(".nav-button").forEach((button) => button.addEventListener("click", () => switchView(button.dataset.view)));
+    $$('[data-jump]').forEach((button) => button.addEventListener("click", () => switchView(button.dataset.jump)));
+    $$(".period-button").forEach((button) => button.addEventListener("click", () => {
+      state.periodDays = number(button.dataset.period);
+      $$(".period-button").forEach((item) => item.classList.toggle("active", item === button));
+      renderAll();
+    }));
+    $("#campaignSearch").addEventListener("input", (event) => { state.campaignSearch = event.target.value; renderDiagnosis(); });
+    $$("#campaignFilters .filter-button").forEach((button) => button.addEventListener("click", () => {
+      state.campaignFilter = button.dataset.filter;
+      $$("#campaignFilters .filter-button").forEach((item) => item.classList.toggle("active", item === button));
+      renderDiagnosis();
+    }));
+    $("#menuButton").addEventListener("click", () => { const open = document.body.classList.toggle("sidebar-open"); $("#menuButton").setAttribute("aria-expanded", String(open)); });
+    $("#mobileScrim").addEventListener("click", () => { document.body.classList.remove("sidebar-open"); $("#menuButton").setAttribute("aria-expanded", "false"); });
+    $("#exportButton").addEventListener("click", exportRecommendations);
+    $("#scanImportButton").addEventListener("click", runImport);
+    $("#scanImportPageButton").addEventListener("click", runImport);
+    $("#refreshBatchesButton").addEventListener("click", loadBatches);
+    $("#recalculateButton").addEventListener("click", () => {
+      state.thresholds.targetRoas = number($("#targetRoas").value);
+      state.thresholds.floorRoas = number($("#floorRoas").value);
+      state.thresholds.minClicks = number($("#minClicks").value);
+      state.thresholds.minSpend = number($("#minSpend").value);
+      renderAll();
+      showToast("策略规则已重算。仍处于仅建议模式。")
+    });
+
+    $("#targetRoas").value = state.thresholds.targetRoas;
+    $("#floorRoas").value = state.thresholds.floorRoas;
+    $("#minClicks").value = state.thresholds.minClicks;
+    $("#minSpend").value = state.thresholds.minSpend;
+    $("#sidebarSourceTime").textContent = `最新业务日 ${DATA.meta.latestDate}`;
+    loadBatches();
+    renderAll();
+  </script>
+</body>
+</html>

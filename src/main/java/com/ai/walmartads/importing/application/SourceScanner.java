@@ -51,7 +51,9 @@ public class SourceScanner {
     }
 
     private void scanDailyDirectories(Path root, List<SourceFileCandidate> files) throws IOException {
-        try (Stream<Path> directories = Files.list(root)) {
+        Path configuredDailyRoot = root.resolve("date");
+        Path dailyRoot = Files.isDirectory(configuredDailyRoot) ? configuredDailyRoot : root;
+        try (Stream<Path> directories = Files.list(dailyRoot)) {
             for (Path directory : directories.filter(Files::isDirectory).toList()) {
                 LocalDate reportDate = directoryDate(directory.getFileName().toString());
                 if (reportDate == null) {

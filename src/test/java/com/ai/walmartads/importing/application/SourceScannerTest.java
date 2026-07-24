@@ -18,8 +18,8 @@ class SourceScannerTest {
     Path temp;
 
     @Test
-    void distinguishesReportKindFromCampaignType() throws Exception {
-        Path day = Files.createDirectories(temp.resolve("2026-7-22"));
+    void scansDailyReportsFromDateDirectoryAndDistinguishesReportKind() throws Exception {
+        Path day = Files.createDirectories(temp.resolve("date").resolve("2026-7-22"));
         Files.createFile(day.resolve("ItemPerformance_example.csv"));
         Files.createFile(day.resolve("ItemKeywordPerformance_example.csv"));
         Files.createFile(day.resolve("KeywordPerformance_example.csv"));
@@ -38,6 +38,21 @@ class SourceScannerTest {
         assertThat(report(candidates, "KeywordPerformance_example.csv").reportKind())
                 .isEqualTo(AdReportKind.KEYWORD_PERFORMANCE);
         assertThat(report(candidates, "PO_Data_example.xlsx").reportKind()).isNull();
+        assertThat(report(candidates, "PO_Data_example.xlsx").relativePath())
+                .isEqualTo(Path.of("date", "2026-7-22", "PO_Data_example.xlsx"));
+    }
+
+    @Test
+    void fallsBackToLegacyRootDateDirectoryWhenDateFolderIsAbsent() throws Exception {
+        Path day = Files.createDirectories(temp.resolve("2026-7-21"));
+        Files.createFile(day.resolve("PO_Data_legacy.xlsx"));
+
+        SourceScanner scanner = new SourceScanner(new WalmartAdsProperties(temp, temp.resolve("archive")));
+
+        assertThat(scanner.scan())
+                .singleElement()
+                .extracting(SourceFileCandidate::reportDate)
+                .isEqualTo(java.time.LocalDate.of(2026, 7, 21));
     }
 
     private static SourceFileCandidate report(List<SourceFileCandidate> candidates, String fileName) {

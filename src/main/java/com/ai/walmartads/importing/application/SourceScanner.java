@@ -44,6 +44,7 @@ public class SourceScanner {
         scanDailyDirectories(root, files);
         scanInventory(root, files);
         scanProducts(root, files);
+        scanHistoricalWorkbook(files);
         files.sort(Comparator
                 .comparingInt((SourceFileCandidate item) -> priority(item.fileType()))
                 .thenComparing(item -> item.path().toString()));
@@ -128,6 +129,25 @@ public class SourceScanner {
         }
     }
 
+    private void scanHistoricalWorkbook(List<SourceFileCandidate> files) {
+        Path configured = properties.historicalWorkbook();
+        if (configured == null) {
+            return;
+        }
+        Path path = configured.toAbsolutePath().normalize();
+        if (!Files.isRegularFile(path) || path.getFileName().toString().startsWith("~$")) {
+            return;
+        }
+        files.add(new SourceFileCandidate(
+                path,
+                Path.of("history").resolve(path.getFileName()),
+                ImportFileType.HISTORY,
+                AdReportKind.ITEM_PERFORMANCE,
+                null,
+                null
+        ));
+    }
+
     private static DailyFileDescriptor dailyFile(String fileName) {
         String lower = fileName.toLowerCase(Locale.ROOT);
         if (lower.startsWith("itemkeywordperformance") && lower.endsWith(".csv")) {
@@ -177,8 +197,9 @@ public class SourceScanner {
         return switch (type) {
             case INVENTORY -> 0;
             case PRODUCT -> 1;
-            case ORDER -> 2;
-            case AD_REPORT, AD_AUTO, AD_MANUAL -> 3;
+            case HISTORY -> 2;
+            case ORDER -> 3;
+            case AD_REPORT, AD_AUTO, AD_MANUAL -> 4;
         };
     }
 

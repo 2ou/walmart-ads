@@ -44,4 +44,16 @@ public interface ImportFileRepository extends JpaRepository<ImportFile, Long> {
             @Param("reportDate") LocalDate reportDate,
             @Param("keepId") Long keepId
     );
+
+    @Modifying
+    @Query("""
+            update ImportFile file
+               set file.active = false
+             where file.fileType = :fileType
+               and file.id <> :keepId
+            """)
+    int deactivateFileTypeVersions(
+            @Param("fileType") ImportFileType fileType,
+            @Param("keepId") Long keepId
+    );
 }

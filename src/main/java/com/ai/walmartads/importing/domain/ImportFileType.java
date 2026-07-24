@@ -6,5 +6,6 @@ public enum ImportFileType {
     AD_AUTO,
     AD_MANUAL,
     INVENTORY,
-    PRODUCT
+    PRODUCT,
+    HISTORY
 }

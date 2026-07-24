@@ -25,7 +25,9 @@ class SourceScannerTest {
         Files.createFile(day.resolve("KeywordPerformance_example.csv"));
         Files.createFile(day.resolve("PO_Data_example.xlsx"));
 
-        SourceScanner scanner = new SourceScanner(new WalmartAdsProperties(temp, temp.resolve("archive")));
+        SourceScanner scanner = new SourceScanner(new WalmartAdsProperties(
+                temp, temp.resolve("archive"), null, null
+        ));
         List<SourceFileCandidate> candidates = scanner.scan();
 
         assertThat(candidates).hasSize(4);
@@ -47,12 +49,35 @@ class SourceScannerTest {
         Path day = Files.createDirectories(temp.resolve("2026-7-21"));
         Files.createFile(day.resolve("PO_Data_legacy.xlsx"));
 
-        SourceScanner scanner = new SourceScanner(new WalmartAdsProperties(temp, temp.resolve("archive")));
+        SourceScanner scanner = new SourceScanner(new WalmartAdsProperties(
+                temp, temp.resolve("archive"), null, null
+        ));
 
         assertThat(scanner.scan())
                 .singleElement()
                 .extracting(SourceFileCandidate::reportDate)
                 .isEqualTo(java.time.LocalDate.of(2026, 7, 21));
+    }
+
+    @Test
+    void scansConfiguredHistoricalWorkbookAsItemPerformanceHistory() throws Exception {
+        Path dataRoot = Files.createDirectories(temp.resolve("data"));
+        Path workbook = Files.createFile(temp.resolve("PNK 每日销售数据统计.xlsx"));
+        SourceScanner scanner = new SourceScanner(new WalmartAdsProperties(
+                dataRoot,
+                temp.resolve("archive"),
+                workbook,
+                java.time.LocalDate.of(2026, 7, 21)
+        ));
+
+        assertThat(scanner.scan())
+                .singleElement()
+                .satisfies(candidate -> {
+                    assertThat(candidate.fileType()).isEqualTo(ImportFileType.HISTORY);
+                    assertThat(candidate.reportKind()).isEqualTo(AdReportKind.ITEM_PERFORMANCE);
+                    assertThat(candidate.relativePath())
+                            .isEqualTo(Path.of("history", "PNK 每日销售数据统计.xlsx"));
+                });
     }
 
     private static SourceFileCandidate report(List<SourceFileCandidate> candidates, String fileName) {

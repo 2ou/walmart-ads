@@ -34,7 +34,9 @@ class ActualSourceParserSmokeTest {
 
         SourceScanner scanner = new SourceScanner(new WalmartAdsProperties(
                 DATA_ROOT,
-                DATA_ROOT.resolve("archive")
+                DATA_ROOT.resolve("archive"),
+                null,
+                null
         ));
         List<SourceFileCandidate> candidates = scanner.scan();
         Map<ImportFileType, SourceFileCandidate> sampleByType = new EnumMap<>(ImportFileType.class);
@@ -69,6 +71,7 @@ class ActualSourceParserSmokeTest {
                 case AD_REPORT, AD_AUTO, AD_MANUAL -> adParser.parse(candidate.path(), importFile);
                 case INVENTORY -> inventoryParser.parse(candidate.path(), importFile);
                 case PRODUCT -> productParser.parse(candidate.path(), importFile);
+                case HISTORY -> throw new IllegalStateException("Two-argument test configuration does not scan history");
             };
             assertThat(parsed.sourceRowCount())
                     .as("源文件应有数据行：%s", candidate.path())

@@ -7,6 +7,8 @@ import com.ai.walmartads.importing.domain.InventorySnapshot;
 import com.ai.walmartads.importing.domain.OrderRecord;
 import com.ai.walmartads.importing.domain.ProductRecord;
 import com.ai.walmartads.importing.parser.AdCsvParser;
+import com.ai.walmartads.importing.parser.HistoricalWorkbookParser;
+import com.ai.walmartads.importing.parser.HistoricalWorkbookRows;
 import com.ai.walmartads.importing.parser.InventoryWorkbookParser;
 import com.ai.walmartads.importing.parser.OrderWorkbookParser;
 import com.ai.walmartads.importing.parser.ParsedRows;
@@ -36,6 +38,7 @@ public class FileImportProcessor {
     private final AdCsvParser adParser;
     private final InventoryWorkbookParser inventoryParser;
     private final ProductWorkbookParser productParser;
+    private final HistoricalWorkbookParser historicalParser;
 
     public FileImportProcessor(
             ImportFileRepository fileRepository,
@@ -46,7 +49,8 @@ public class FileImportProcessor {
             OrderWorkbookParser orderParser,
             AdCsvParser adParser,
             InventoryWorkbookParser inventoryParser,
-            ProductWorkbookParser productParser
+            ProductWorkbookParser productParser,
+            HistoricalWorkbookParser historicalParser
     ) {
         this.fileRepository = fileRepository;
         this.orderRepository = orderRepository;
@@ -57,6 +61,7 @@ public class FileImportProcessor {
         this.adParser = adParser;
         this.inventoryParser = inventoryParser;
         this.productParser = productParser;
+        this.historicalParser = historicalParser;
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -68,6 +73,7 @@ public class FileImportProcessor {
             case AD_REPORT, AD_AUTO, AD_MANUAL -> saveAds(adParser.parse(archivePath, file));
             case INVENTORY -> saveInventory(inventoryParser.parse(archivePath, file));
             case PRODUCT -> saveProducts(productParser.parse(archivePath, file));
+            case HISTORY -> saveHistory(historicalParser.parse(archivePath, file));
         };
         file.imported(archivePath.toString(), result.sourceRows(), result.importedRows());
         if (file.getReportDate() != null && file.getReportKind() != null) {
@@ -75,6 +81,8 @@ public class FileImportProcessor {
         } else if (file.getReportDate() != null && file.getFileType() != ImportFileType.PRODUCT
                 && file.getFileType() != ImportFileType.INVENTORY) {
             fileRepository.deactivateReportVersion(file.getFileType(), file.getReportDate(), file.getId());
+        } else if (file.getFileType() == ImportFileType.HISTORY) {
+            fileRepository.deactivateFileTypeVersions(ImportFileType.HISTORY, file.getId());
         }
         return result;
     }
@@ -104,6 +112,15 @@ public class FileImportProcessor {
         }
         productRepository.saveAll(parsed.rows());
         return new ProcessedFile(parsed.sourceRowCount(), parsed.rows().size());
+    }
+
+    private ProcessedFile saveHistory(HistoricalWorkbookRows parsed) {
+        orderRepository.saveAll(parsed.orders());
+        adRepository.saveAll(parsed.ads());
+        return new ProcessedFile(
+                parsed.sourceRowCount(),
+                parsed.orders().size() + parsed.ads().size()
+        );
     }
 
     public record ProcessedFile(int sourceRows, int importedRows) {

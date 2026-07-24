@@ -90,8 +90,7 @@ public class ReturnAnalyticsService {
         Summary summary = loadSummary(window);
         List<SkuRow> skuRows = loadSkuRows(window);
         List<ParentRow> parentRows = parentRows(skuRows);
-        List<DimensionRow> colors = dimensionRows(skuRows, true);
-        List<DimensionRow> sizes = dimensionRows(skuRows, false);
+        List<ParentBreakdown> parentBreakdowns = parentBreakdowns(skuRows);
         List<DetailRow> details = loadDetails(window);
         List<BreakdownRow> reasons = breakdown(details, DetailRow::returnReason);
         List<BreakdownRow> statuses = breakdown(details, DetailRow::currentStatus);
@@ -116,8 +115,7 @@ public class ReturnAnalyticsService {
                 loadTrend(bounds),
                 parentRows,
                 skuRows,
-                colors,
-                sizes,
+                parentBreakdowns,
                 reasons,
                 statuses,
                 channels,
@@ -281,7 +279,29 @@ public class ReturnAnalyticsService {
         List<SkuRow> result = new ArrayList<>();
         jdbc.queryForList(
                 RETURN_CTE + """
-                        , monthly_sales as (
+                        , return_by_sku as (
+                            select coalesce(returns.resolved_sku, concat('ITEM:', returns.item_id)) as group_key,
+                                   max(returns.resolved_sku) as sku,
+                                   max(returns.item_id) as item_id,
+                                   max(returns.resolved_parent_sku) as resolved_parent_sku,
+                                   max(returns.item_name) as return_item_name,
+                                   sum(returns.quantity) as requested_units,
+                                   sum(case when returns.current_status like 'Refunded:%'
+                                            then returns.quantity else 0 end) as completed_units,
+                                   sum(case when returns.current_status like 'Cancelled:%'
+                                            then returns.quantity else 0 end) as cancelled_units,
+                                   sum(case when returns.current_status not like 'Refunded:%'
+                                             and returns.current_status not like 'Cancelled:%'
+                                            then returns.quantity else 0 end) as pending_units,
+                                   sum(case when returns.current_status like 'Refunded:%'
+                                            then returns.total_refund_amount else 0 end) as refund_amount,
+                                   group_concat(distinct returns.return_reason
+                                                order by returns.return_reason separator ' · ') as reason_summary
+                              from return_rows returns
+                             where returns.request_date between :start and :end
+                             group by coalesce(returns.resolved_sku, concat('ITEM:', returns.item_id))
+                        ),
+                        monthly_sales as (
                             select orders.sku,
                                    sum(orders.quantity) as sold_units,
                                    sum(orders.quantity * orders.item_cost) as sales_revenue
@@ -289,37 +309,47 @@ public class ReturnAnalyticsService {
                               join wm_ads_import_file file
                                 on file.id = orders.import_file_id
                                and file.active = true
-                             where orders.order_date between :start and :end
-                             group by orders.sku
+                              where orders.order_date between :start and :end
+                              group by orders.sku
+                        ),
+                        affected_parents as (
+                            select distinct coalesce(returned.resolved_parent_sku, product.parent_sku) as parent_sku
+                              from return_by_sku returned
+                              left join current_products product on product.sku = returned.sku
+                             where coalesce(returned.resolved_parent_sku, product.parent_sku) is not null
+                        ),
+                        sku_universe as (
+                            select returned.group_key,
+                                   returned.sku
+                              from return_by_sku returned
+                            union
+                            select sales.sku as group_key,
+                                   sales.sku
+                              from monthly_sales sales
+                              join current_products product on product.sku = sales.sku
+                              join affected_parents affected on affected.parent_sku = product.parent_sku
                         )
-                        select coalesce(returns.resolved_sku, concat('ITEM:', returns.item_id)) as group_key,
-                               max(returns.resolved_sku) as sku,
-                               max(returns.item_id) as item_id,
-                               max(coalesce(returns.resolved_parent_sku, product.parent_sku)) as parent_sku,
-                               max(coalesce(product.product_name, returns.item_name)) as item_name,
-                               max(product.image_url) as image_url,
-                               max(product.color) as color,
-                               max(product.size) as size,
-                               sum(returns.quantity) as requested_units,
-                               sum(case when returns.current_status like 'Refunded:%'
-                                        then returns.quantity else 0 end) as completed_units,
-                               sum(case when returns.current_status like 'Cancelled:%'
-                                        then returns.quantity else 0 end) as cancelled_units,
-                               sum(case when returns.current_status not like 'Refunded:%'
-                                         and returns.current_status not like 'Cancelled:%'
-                                        then returns.quantity else 0 end) as pending_units,
-                               sum(case when returns.current_status like 'Refunded:%'
-                                        then returns.total_refund_amount else 0 end) as refund_amount,
-                               max(coalesce(sales.sold_units, 0)) as sold_units,
-                               max(coalesce(sales.sales_revenue, 0)) as sales_revenue,
-                               group_concat(distinct returns.return_reason
-                                            order by returns.return_reason separator ' · ') as reason_summary
-                          from return_rows returns
-                          left join current_products product on product.sku = returns.resolved_sku
-                          left join monthly_sales sales on sales.sku = returns.resolved_sku
-                         where returns.request_date between :start and :end
-                         group by coalesce(returns.resolved_sku, concat('ITEM:', returns.item_id))
-                         order by requested_units desc, refund_amount desc, group_key
+                        select universe.group_key,
+                               coalesce(returned.sku, universe.sku) as sku,
+                               returned.item_id,
+                               coalesce(returned.resolved_parent_sku, product.parent_sku) as parent_sku,
+                               coalesce(product.product_name, returned.return_item_name) as item_name,
+                               product.image_url,
+                               product.color,
+                               product.size,
+                               coalesce(returned.requested_units, 0) as requested_units,
+                               coalesce(returned.completed_units, 0) as completed_units,
+                               coalesce(returned.cancelled_units, 0) as cancelled_units,
+                               coalesce(returned.pending_units, 0) as pending_units,
+                               coalesce(returned.refund_amount, 0) as refund_amount,
+                               coalesce(sales.sold_units, 0) as sold_units,
+                               coalesce(sales.sales_revenue, 0) as sales_revenue,
+                               returned.reason_summary
+                          from sku_universe universe
+                          left join return_by_sku returned on returned.group_key = universe.group_key
+                          left join current_products product on product.sku = universe.sku
+                          left join monthly_sales sales on sales.sku = universe.sku
+                         order by requested_units desc, refund_amount desc, sold_units desc, group_key
                         """,
                 window
         ).forEach(row -> {
@@ -459,6 +489,7 @@ public class ReturnAnalyticsService {
     }
 
     private static List<DimensionRow> dimensionRows(List<SkuRow> rows, boolean color) {
+        double parentRequested = rows.stream().mapToDouble(SkuRow::requestedUnits).sum();
         Map<String, DimensionAccumulator> groups = new LinkedHashMap<>();
         rows.forEach(row -> {
             String label = color ? row.color() : row.size();
@@ -466,9 +497,33 @@ public class ReturnAnalyticsService {
             groups.computeIfAbsent(label, DimensionAccumulator::new).add(row);
         });
         return groups.values().stream()
-                .map(DimensionAccumulator::row)
+                .map(item -> item.row(parentRequested))
                 .sorted(Comparator.comparingDouble(DimensionRow::requestedUnits).reversed()
                         .thenComparing(DimensionRow::label))
+                .toList();
+    }
+
+    private static List<ParentBreakdown> parentBreakdowns(List<SkuRow> rows) {
+        Map<String, List<SkuRow>> groups = new LinkedHashMap<>();
+        rows.forEach(row -> {
+            String key = firstText(row.parentSku(), row.sku(), row.itemId(), "未映射");
+            groups.computeIfAbsent(key, ignored -> new ArrayList<>()).add(row);
+        });
+        return groups.entrySet().stream()
+                .map(entry -> {
+                    double requested = entry.getValue().stream().mapToDouble(SkuRow::requestedUnits).sum();
+                    double sold = entry.getValue().stream().mapToDouble(SkuRow::soldUnits).sum();
+                    return new ParentBreakdown(
+                            entry.getKey(),
+                            round(requested),
+                            round(sold),
+                            dimensionRows(entry.getValue(), true),
+                            dimensionRows(entry.getValue(), false)
+                    );
+                })
+                .filter(item -> item.requestedUnits() > 0)
+                .sorted(Comparator.comparingDouble(ParentBreakdown::requestedUnits).reversed()
+                        .thenComparing(ParentBreakdown::parentSku))
                 .toList();
     }
 
@@ -507,7 +562,7 @@ public class ReturnAnalyticsService {
                         "退款件数 ÷ 同月订单销售件数", "CURRENT_STATUS 以 Refunded 开头"),
                 new Summary(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
                 List.of(), List.of(), List.of(), List.of(), List.of(),
-                List.of(), List.of(), List.of(), List.of(), List.of(), List.of()
+                List.of(), List.of(), List.of(), List.of(), List.of()
         );
     }
 
@@ -594,8 +649,7 @@ public class ReturnAnalyticsService {
             List<MonthlyRow> trend,
             List<ParentRow> parentRows,
             List<SkuRow> skuRows,
-            List<DimensionRow> colors,
-            List<DimensionRow> sizes,
+            List<ParentBreakdown> parentBreakdowns,
             List<BreakdownRow> reasons,
             List<BreakdownRow> statuses,
             List<BreakdownRow> channels,
@@ -705,10 +759,25 @@ public class ReturnAnalyticsService {
             int skuCount,
             double requestedUnits,
             double completedUnits,
+            double cancelledUnits,
+            double pendingUnits,
             double soldUnits,
             double requestRate,
+            double completedRate,
             double refundAmount,
-            double refundAmountRate
+            double salesRevenue,
+            double refundAmountRate,
+            double shareOfParentReturns,
+            String risk
+    ) {
+    }
+
+    public record ParentBreakdown(
+            String parentSku,
+            double requestedUnits,
+            double soldUnits,
+            List<DimensionRow> colors,
+            List<DimensionRow> sizes
     ) {
     }
 
@@ -894,6 +963,8 @@ public class ReturnAnalyticsService {
         private final Set<String> skus = new LinkedHashSet<>();
         private double requested;
         private double completed;
+        private double cancelled;
+        private double pending;
         private double sold;
         private double refundAmount;
         private double salesRevenue;
@@ -906,21 +977,32 @@ public class ReturnAnalyticsService {
             skus.add(firstText(row.sku(), row.itemId(), row.groupKey()));
             requested += row.requestedUnits();
             completed += row.completedUnits();
+            cancelled += row.cancelledUnits();
+            pending += row.pendingUnits();
             sold += row.soldUnits();
             refundAmount += row.refundAmount();
             salesRevenue += row.salesRevenue();
         }
 
-        private DimensionRow row() {
+        private DimensionRow row(double parentRequested) {
+            double requestRate = ratio(requested, sold);
             return new DimensionRow(
                     label,
                     skus.size(),
                     round(requested),
                     round(completed),
+                    round(cancelled),
+                    round(pending),
                     round(sold),
-                    ratio(requested, sold),
+                    requestRate,
+                    ratio(completed, sold),
                     round(refundAmount),
-                    ratio(refundAmount, salesRevenue)
+                    round(salesRevenue),
+                    ratio(refundAmount, salesRevenue),
+                    ratio(requested, parentRequested),
+                    sold <= 0 ? "NO_SALES_DENOMINATOR"
+                            : requestRate >= 0.15 ? "HIGH"
+                            : requestRate >= 0.08 ? "WATCH" : "NORMAL"
             );
         }
     }

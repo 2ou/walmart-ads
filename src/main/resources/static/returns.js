@@ -7,6 +7,9 @@
     risk: "all",
     search: "",
     detailSearch: "",
+    selectedParentSku: null,
+    selectedColor: null,
+    selectedSize: null,
     overviewPage: 0,
     detailPage: 0,
     pageSize: 50,
@@ -80,19 +83,36 @@
           <div class="return-breakdown-list" id="returnReasonList"></div>
         </section>
       </div>
+      <section class="panel return-scope-panel" aria-labelledby="returnScopeTitle">
+        <div class="panel-header">
+          <div>
+            <h2 class="panel-title" id="returnScopeTitle">款内颜色与尺码分析</h2>
+            <p class="panel-subtitle" id="returnScopeSubtitle">先选择款号，颜色和尺码只在该款范围内统计。</p>
+          </div>
+          <label class="return-parent-control" for="returnParentSelect">
+            <span>分析款号</span>
+            <select id="returnParentSelect" aria-label="选择要分析的款号"></select>
+          </label>
+        </div>
+        <div class="return-scope-path">
+          <span>当前范围</span>
+          <strong id="returnScopePath">等待退款数据</strong>
+          <button class="secondary-button return-scope-clear" id="returnScopeClear" type="button" hidden>清除颜色和尺码筛选</button>
+        </div>
+      </section>
       <div class="return-dimension-layout">
         <section class="panel" aria-labelledby="returnColorTitle">
-          <div class="panel-header"><div><h2 class="panel-title" id="returnColorTitle">颜色退款表现</h2><p class="panel-subtitle">颜色来自产品上传表</p></div></div>
+          <div class="panel-header"><div><h2 class="panel-title" id="returnColorTitle">该款颜色退款表现</h2><p class="panel-subtitle" id="returnColorSubtitle">分母为该款各颜色的同月销量</p></div></div>
           <div class="return-dimension-list" id="returnColorList"></div>
         </section>
         <section class="panel" aria-labelledby="returnSizeTitle">
-          <div class="panel-header"><div><h2 class="panel-title" id="returnSizeTitle">尺码退款表现</h2><p class="panel-subtitle">用于定位版型和尺码集中问题</p></div></div>
+          <div class="panel-header"><div><h2 class="panel-title" id="returnSizeTitle">该款尺码退款表现</h2><p class="panel-subtitle" id="returnSizeSubtitle">分母为该款各尺码的同月销量</p></div></div>
           <div class="return-dimension-list" id="returnSizeList"></div>
         </section>
       </div>
       <section class="panel table-panel" aria-labelledby="returnOverviewTitle">
         <div class="panel-header">
-          <div><h2 class="panel-title" id="returnOverviewTitle">退款率下钻</h2><p class="panel-subtitle" id="returnOverviewSubtitle">按款号查看，可切换到 SKU、颜色或尺码</p></div>
+          <div><h2 class="panel-title" id="returnOverviewTitle">退款率下钻</h2><p class="panel-subtitle" id="returnOverviewSubtitle">先按款号定位，再查看该款的 SKU</p></div>
           <div class="table-tools">
             <label class="sr-only" for="returnSearch">模糊搜索款号、SKU、Item ID、颜色或尺码</label>
             <input class="search-input" id="returnSearch" type="search" placeholder="模糊搜索款号、SKU、颜色或尺码，如 6066">
@@ -103,8 +123,6 @@
             <div class="sales-toolbar-group" id="returnGroupControls" role="group" aria-label="退款聚合维度">
               <button class="sales-segment-button active" type="button" data-return-group="parent" aria-pressed="true">按款号</button>
               <button class="sales-segment-button" type="button" data-return-group="sku" aria-pressed="false">按 SKU</button>
-              <button class="sales-segment-button" type="button" data-return-group="color" aria-pressed="false">按颜色</button>
-              <button class="sales-segment-button" type="button" data-return-group="size" aria-pressed="false">按尺码</button>
             </div>
             <div class="sales-toolbar-group" id="returnRiskFilters" role="group" aria-label="退款风险筛选">
               <button class="filter-button active" type="button" data-return-risk="all">全部</button>
@@ -124,7 +142,7 @@
       </section>
       <section class="panel table-panel" aria-labelledby="returnDetailTitle">
         <div class="panel-header">
-          <div><h2 class="panel-title" id="returnDetailTitle">退款订单明细</h2><p class="panel-subtitle">客户姓名和邮箱不在经营页面展示，其余有效字段可逐条查看</p></div>
+          <div><h2 class="panel-title" id="returnDetailTitle">退款订单明细</h2><p class="panel-subtitle" id="returnDetailSubtitle">选择款号后查看对应退款订单</p></div>
           <div class="table-tools">
             <label class="sr-only" for="returnDetailSearch">模糊搜索订单号、RMA、SKU 或退款原因</label>
             <input class="search-input" id="returnDetailSearch" type="search" placeholder="模糊搜索订单号、RMA、SKU 或退款原因">
@@ -185,9 +203,22 @@
   function bindControls() {
     $("#returnMonthSelect").addEventListener("change", (event) => {
       state.selectedMonth = event.target.value;
+      state.selectedParentSku = null;
+      state.selectedColor = null;
+      state.selectedSize = null;
       state.overviewPage = 0;
       state.detailPage = 0;
       loadReturns(state.selectedMonth);
+    });
+    $("#returnParentSelect").addEventListener("change", (event) => {
+      selectParent(event.target.value, true);
+    });
+    $("#returnScopeClear").addEventListener("click", () => {
+      state.selectedColor = null;
+      state.selectedSize = null;
+      state.overviewPage = 0;
+      state.detailPage = 0;
+      renderScopedAnalysis();
     });
     $("#returnSearch").addEventListener("input", (event) => {
       state.search = event.target.value;
@@ -202,11 +233,7 @@
     $$("[data-return-group]").forEach((button) => button.addEventListener("click", () => {
       state.group = button.dataset.returnGroup;
       state.overviewPage = 0;
-      $$("[data-return-group]").forEach((item) => {
-        const active = item === button;
-        item.classList.toggle("active", active);
-        item.setAttribute("aria-pressed", String(active));
-      });
+      syncGroupButtons();
       renderOverview();
     }));
     $$("[data-return-risk]").forEach((button) => button.addEventListener("click", () => {
@@ -245,6 +272,7 @@
       if (!response.ok || !payload.success) throw new Error(payload.message || `HTTP ${response.status}`);
       state.data = payload.data;
       state.selectedMonth = payload.data.meta.selectedMonth;
+      ensureSelectedParent();
       render();
     } catch (error) {
       $("#returnStatusHeadline").textContent = "退款数据读取失败";
@@ -258,6 +286,7 @@
 
   function render() {
     const { meta, summary } = state.data;
+    ensureSelectedParent();
     renderMonthSelect();
     if (!meta.selectedMonth) {
       $("#returnStatusHeadline").textContent = "还没有退款数据";
@@ -268,6 +297,8 @@
       $("#returnReasonList").innerHTML = "";
       $("#returnColorList").innerHTML = "";
       $("#returnSizeList").innerHTML = "";
+      renderParentSelect();
+      renderScopeContext();
       renderOverview();
       renderDetails();
       return;
@@ -291,8 +322,10 @@
     ].join("");
     renderTrend();
     renderBreakdown(state.data.reasons, "#returnReasonList");
-    renderDimensions(state.data.colors, "#returnColorList");
-    renderDimensions(state.data.sizes, "#returnSizeList");
+    renderParentSelect();
+    renderScopeContext();
+    renderSelectedDimensions();
+    syncGroupButtons();
     renderOverview();
     renderDetails();
   }
@@ -316,6 +349,128 @@
     select.innerHTML = [...new Set(months)].reverse()
       .map((month) => `<option value="${month}" ${month === state.selectedMonth ? "selected" : ""}>${month}${completeMonths.has(month) ? "" : "（跨月零散）"}</option>`)
       .join("");
+  }
+
+  function parentRows() {
+    return (state.data?.parentRows || []).filter((row) => number(row.requestedUnits) > 0);
+  }
+
+  function ensureSelectedParent() {
+    const parents = parentRows();
+    if (!parents.length) {
+      state.selectedParentSku = null;
+      state.selectedColor = null;
+      state.selectedSize = null;
+      return;
+    }
+    if (parents.some((row) => row.parentSku === state.selectedParentSku)) return;
+    const priority = parents.find((row) => row.risk === "HIGH") || parents[0];
+    state.selectedParentSku = priority.parentSku;
+    state.selectedColor = null;
+    state.selectedSize = null;
+  }
+
+  function selectedParentRow() {
+    return parentRows().find((row) => row.parentSku === state.selectedParentSku) || null;
+  }
+
+  function selectedParentBreakdown() {
+    return (state.data?.parentBreakdowns || [])
+      .find((item) => item.parentSku === state.selectedParentSku) || null;
+  }
+
+  function renderParentSelect() {
+    const select = $("#returnParentSelect");
+    if (!select) return;
+    const parents = parentRows();
+    if (!parents.length) {
+      select.innerHTML = `<option value="">暂无可分析款号</option>`;
+      select.disabled = true;
+      return;
+    }
+    select.disabled = false;
+    select.innerHTML = parents.map((row) => `
+      <option value="${escapeHtml(row.parentSku)}" ${row.parentSku === state.selectedParentSku ? "selected" : ""}>
+        ${escapeHtml(row.parentSku)} · ${integer(row.requestedUnits)} 件申请 · ${percent(row.requestRate)}
+      </option>`).join("");
+  }
+
+  function renderScopeContext() {
+    const row = selectedParentRow();
+    const month = state.data?.meta?.selectedMonth;
+    const path = [month, row?.parentSku, state.selectedColor, state.selectedSize].filter(Boolean).join(" › ");
+    $("#returnScopePath").textContent = path || "等待选择款号";
+    $("#returnScopeSubtitle").textContent = row
+      ? `${row.parentSku} 共 ${integer(row.requestedUnits)} 件申请，颜色和尺码均使用该款对应维度的同月销量作为分母。`
+      : "先选择款号，颜色和尺码只在该款范围内统计。";
+    $("#returnColorSubtitle").textContent = row
+      ? `${row.parentSku} · 每个颜色的退款件数 ÷ 该颜色销量`
+      : "分母为该款各颜色的同月销量";
+    $("#returnSizeSubtitle").textContent = row
+      ? `${row.parentSku} · 每个尺码的退款件数 ÷ 该尺码销量`
+      : "分母为该款各尺码的同月销量";
+    $("#returnScopeClear").hidden = !state.selectedColor && !state.selectedSize;
+  }
+
+  function renderSelectedDimensions() {
+    const breakdown = selectedParentBreakdown();
+    renderDimensions(breakdown?.colors || [], "#returnColorList", "color", state.selectedColor);
+    renderDimensions(breakdown?.sizes || [], "#returnSizeList", "size", state.selectedSize);
+  }
+
+  function renderScopedAnalysis() {
+    renderParentSelect();
+    renderScopeContext();
+    renderSelectedDimensions();
+    syncGroupButtons();
+    renderOverview();
+    renderDetails();
+  }
+
+  function selectParent(parentSku, drillToSku) {
+    if (!parentRows().some((row) => row.parentSku === parentSku)) return;
+    state.selectedParentSku = parentSku;
+    state.selectedColor = null;
+    state.selectedSize = null;
+    state.overviewPage = 0;
+    state.detailPage = 0;
+    if (drillToSku) state.group = "sku";
+    renderScopedAnalysis();
+  }
+
+  function selectDimension(key, label) {
+    if (key === "color") {
+      state.selectedColor = state.selectedColor === label ? null : label;
+    } else {
+      state.selectedSize = state.selectedSize === label ? null : label;
+    }
+    state.group = "sku";
+    state.overviewPage = 0;
+    state.detailPage = 0;
+    renderScopedAnalysis();
+  }
+
+  function syncGroupButtons() {
+    $$("[data-return-group]").forEach((item) => {
+      const active = item.dataset.returnGroup === state.group;
+      item.classList.toggle("active", active);
+      item.setAttribute("aria-pressed", String(active));
+    });
+  }
+
+  function matchesScope(row) {
+    if (!state.selectedParentSku || row.parentSku !== state.selectedParentSku) return false;
+    if (state.selectedColor && text(row.color, "未识别") !== state.selectedColor) return false;
+    if (state.selectedSize && text(row.size, "未识别") !== state.selectedSize) return false;
+    return true;
+  }
+
+  function scopedSkuRows() {
+    return (state.data?.skuRows || []).filter(matchesScope);
+  }
+
+  function scopedDetailRows() {
+    return (state.data?.details || []).filter(matchesScope);
   }
 
   function renderTrend() {
@@ -423,61 +578,34 @@
       </div>`).join("");
   }
 
-  function renderDimensions(rows, target) {
+  function renderDimensions(rows, target, key, selectedLabel) {
+    const container = $(target);
     const items = (rows || []).slice(0, 10);
     if (!items.length) {
-      $(target).innerHTML = `<div class="empty-state"><strong>没有可归集数据</strong>未匹配的退款记录会归入“未识别”。</div>`;
+      container.innerHTML = `<div class="empty-state"><strong>该款没有可归集的${key === "color" ? "颜色" : "尺码"}数据</strong>请检查产品上传表中的款号、SKU 与${key === "color" ? "颜色" : "尺码"}字段。</div>`;
       return;
     }
-    $(target).innerHTML = items.map((row) => `
-      <div class="return-dimension-row">
+    container.innerHTML = items.map((row) => `
+      <button class="return-dimension-row ${row.label === selectedLabel ? "selected" : ""}" type="button"
+        data-return-dimension-key="${key}" data-return-dimension-label="${escapeHtml(row.label)}"
+        aria-pressed="${row.label === selectedLabel}">
         <strong title="${escapeHtml(row.label)}">${escapeHtml(row.label)}</strong>
-        <span>${integer(row.requestedUnits)} 件申请</span>
-        <span>${percent(row.requestRate)}</span>
-        <span>${money(row.refundAmount)}</span>
-      </div>`).join("");
-  }
-
-  function dimensionRows(key) {
-    const groups = new Map();
-    (state.data?.skuRows || []).forEach((row) => {
-      const label = text(row[key], "未识别");
-      const current = groups.get(label) || {
-        label,
-        itemName: `${key === "color" ? "颜色" : "尺码"}维度`,
-        requestedUnits: 0,
-        completedUnits: 0,
-        cancelledUnits: 0,
-        pendingUnits: 0,
-        soldUnits: 0,
-        refundAmount: 0,
-        salesRevenue: 0,
-        skuCount: 0,
-      };
-      current.requestedUnits += number(row.requestedUnits);
-      current.completedUnits += number(row.completedUnits);
-      current.cancelledUnits += number(row.cancelledUnits);
-      current.pendingUnits += number(row.pendingUnits);
-      current.soldUnits += number(row.soldUnits);
-      current.refundAmount += number(row.refundAmount);
-      current.salesRevenue += number(row.salesRevenue);
-      current.skuCount += 1;
-      groups.set(label, current);
+        <span><b>${integer(row.requestedUnits)} / ${integer(row.soldUnits)}</b><small>申请 / 销量</small></span>
+        <span><b>${percent(row.requestRate)}</b><small>申请退款率</small></span>
+        <span><b>${percent(row.shareOfParentReturns)}</b><small>占本款退款</small></span>
+      </button>`).join("");
+    container.querySelectorAll("[data-return-dimension-key]").forEach((button) => {
+      button.addEventListener("click", () => selectDimension(
+        button.dataset.returnDimensionKey,
+        button.dataset.returnDimensionLabel
+      ));
     });
-    return [...groups.values()].map((row) => {
-      row.requestRate = row.soldUnits ? row.requestedUnits / row.soldUnits : 0;
-      row.completedRate = row.soldUnits ? row.completedUnits / row.soldUnits : 0;
-      row.refundAmountRate = row.salesRevenue ? row.refundAmount / row.salesRevenue : 0;
-      row.risk = row.soldUnits <= 0 ? "NO_SALES_DENOMINATOR" : row.requestRate >= .15 ? "HIGH" : row.requestRate >= .08 ? "WATCH" : "NORMAL";
-      return row;
-    }).sort((a, b) => b.requestedUnits - a.requestedUnits || a.label.localeCompare(b.label));
   }
 
   function overviewRows() {
     if (!state.data) return [];
     if (state.group === "parent") return state.data.parentRows || [];
-    if (state.group === "sku") return state.data.skuRows || [];
-    return dimensionRows(state.group);
+    return scopedSkuRows();
   }
 
   function renderOverview() {
@@ -493,8 +621,9 @@
     const pages = Math.max(1, Math.ceil(rows.length / state.pageSize));
     state.overviewPage = Math.min(state.overviewPage, pages - 1);
     const pageRows = rows.slice(state.overviewPage * state.pageSize, (state.overviewPage + 1) * state.pageSize);
-    const labels = { parent: "款号", sku: "SKU", color: "颜色", size: "尺码" };
-    $("#returnOverviewSubtitle").textContent = `当前按${labels[state.group]}聚合，退款率分母为同月订单销售件数。`;
+    $("#returnOverviewSubtitle").textContent = state.group === "parent"
+      ? "按款号定位问题款；点击款号后查看该款的 SKU、颜色、尺码与订单明细。"
+      : `${state.selectedParentSku || "未选择款号"} 的 SKU，退款率分母包含该款同月有销量但没有退款的变体。`;
     if (!pageRows.length) {
       body.innerHTML = `<tr><td colspan="11"><div class="empty-state"><strong>没有符合条件的退款记录</strong>调整月份、维度、风险或搜索条件后重试。</div></td></tr>`;
     } else {
@@ -509,8 +638,12 @@
           ? `<img class="return-product-thumb" src="${escapeHtml(row.imageUrl)}" alt="" loading="lazy">`
           : `<span class="return-product-thumb" aria-hidden="true"></span>`;
         const risk = riskCopy[row.risk] || riskCopy.NORMAL;
-        return `<tr>
-          <td><div class="return-product-cell">${image}<div><strong title="${escapeHtml(key)}">${escapeHtml(key)}</strong><span title="${escapeHtml(row.itemName || detail)}">${escapeHtml(row.itemName || detail)}</span><span>${escapeHtml(detail)}</span></div></div></td>
+        const selected = state.group === "parent" && row.parentSku === state.selectedParentSku;
+        const keyMarkup = state.group === "parent"
+          ? `<button class="return-parent-button" type="button" data-return-parent="${escapeHtml(row.parentSku)}" aria-current="${selected ? "true" : "false"}" title="查看 ${escapeHtml(key)} 的款内色码分析">${escapeHtml(key)}</button>`
+          : `<strong title="${escapeHtml(key)}">${escapeHtml(key)}</strong>`;
+        return `<tr class="${selected ? "return-selected-row" : ""}">
+          <td><div class="return-product-cell">${image}<div>${keyMarkup}<span title="${escapeHtml(row.itemName || detail)}">${escapeHtml(row.itemName || detail)}</span><span>${escapeHtml(detail)}</span></div></div></td>
           <td><span class="return-risk ${risk.className}">${risk.label}</span></td>
           <td class="num">${integer(row.requestedUnits)}</td>
           <td class="num">${integer(row.completedUnits)}</td>
@@ -523,6 +656,9 @@
           <td class="num">${percent(row.refundAmountRate)}</td>
         </tr>`;
       }).join("");
+      body.querySelectorAll("[data-return-parent]").forEach((button) => {
+        button.addEventListener("click", () => selectParent(button.dataset.returnParent, true));
+      });
     }
     $("#returnOverviewInfo").textContent = `${integer(rows.length)} 条结果，当前显示 ${integer(pageRows.length)} 条`;
     $("#returnOverviewPage").textContent = `${state.overviewPage + 1} / ${pages}`;
@@ -540,7 +676,11 @@
   function renderDetails() {
     const body = $("#returnDetailBody");
     if (!body) return;
-    let rows = state.data?.details || [];
+    const path = [state.selectedParentSku, state.selectedColor, state.selectedSize].filter(Boolean).join(" › ");
+    $("#returnDetailSubtitle").textContent = path
+      ? `${path}；客户姓名和邮箱不在经营页面展示。`
+      : "选择款号后查看对应退款订单。";
+    let rows = scopedDetailRows();
     if (state.detailSearch) {
       rows = rows.filter((row) => fuzzySearchMatches(state.detailSearch, [
         row.customerOrderNo, row.poNo, row.rmaNo, row.sku, row.parentSku, row.itemId,
@@ -552,7 +692,7 @@
     state.detailPage = Math.min(state.detailPage, pages - 1);
     const pageRows = rows.slice(state.detailPage * state.pageSize, (state.detailPage + 1) * state.pageSize);
     if (!pageRows.length) {
-      body.innerHTML = `<tr><td colspan="11"><div class="empty-state"><strong>当前月份没有退款订单明细</strong>导入对应月份退款表或清除搜索条件后重试。</div></td></tr>`;
+      body.innerHTML = `<tr><td colspan="11"><div class="empty-state"><strong>当前款内范围没有退款订单明细</strong>清除颜色、尺码或搜索条件后重试。</div></td></tr>`;
     } else {
       body.innerHTML = pageRows.map((row) => {
         const status = detailStatus(row.currentStatus);

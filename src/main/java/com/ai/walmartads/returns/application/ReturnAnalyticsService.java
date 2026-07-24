@@ -97,6 +97,8 @@ public class ReturnAnalyticsService {
         List<BreakdownRow> channels = breakdown(details, DetailRow::channel);
         List<BreakdownRow> refundModes = breakdown(details, DetailRow::refundMode);
         List<BreakdownRow> coveredBy = breakdown(details, DetailRow::refundCoveredBy);
+        List<MonthlyRow> trend = loadTrend(bounds);
+        AccountSummary accountSummary = accountSummary(bounds.reportMonths(), trend);
 
         return new ReturnPayload(
                 new Meta(
@@ -112,7 +114,8 @@ public class ReturnAnalyticsService {
                         "CURRENT_STATUS 以 Refunded 开头"
                 ),
                 summary,
-                loadTrend(bounds),
+                accountSummary,
+                trend,
                 parentRows,
                 skuRows,
                 parentBreakdowns,
@@ -122,6 +125,38 @@ public class ReturnAnalyticsService {
                 refundModes,
                 coveredBy,
                 details
+        );
+    }
+
+    static AccountSummary accountSummary(
+            List<String> reportMonths,
+            List<MonthlyRow> trend
+    ) {
+        List<String> includedMonths = reportMonths.stream()
+                .distinct()
+                .sorted()
+                .toList();
+        Set<String> included = new LinkedHashSet<>(includedMonths);
+        List<MonthlyRow> rows = trend.stream()
+                .filter(row -> included.contains(row.month()))
+                .toList();
+        double requested = rows.stream().mapToDouble(MonthlyRow::requestedUnits).sum();
+        double completed = rows.stream().mapToDouble(MonthlyRow::completedUnits).sum();
+        double sold = rows.stream().mapToDouble(MonthlyRow::soldUnits).sum();
+        double refundAmount = rows.stream().mapToDouble(MonthlyRow::refundAmount).sum();
+        double salesRevenue = rows.stream().mapToDouble(MonthlyRow::salesRevenue).sum();
+        return new AccountSummary(
+                includedMonths.isEmpty() ? null : includedMonths.getFirst(),
+                includedMonths.isEmpty() ? null : includedMonths.getLast(),
+                includedMonths.size(),
+                round(requested),
+                round(completed),
+                round(sold),
+                ratio(requested, sold),
+                ratio(completed, sold),
+                round(refundAmount),
+                round(salesRevenue),
+                ratio(refundAmount, salesRevenue)
         );
     }
 
@@ -563,6 +598,7 @@ public class ReturnAnalyticsService {
                 new Meta(null, null, null, null, null, null, List.of(), "USD",
                         "退款件数 ÷ 同月订单销售件数", "CURRENT_STATUS 以 Refunded 开头"),
                 new Summary(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
+                new AccountSummary(null, null, 0, 0, 0, 0, 0, 0, 0, 0, 0),
                 List.of(), List.of(), List.of(), List.of(), List.of(),
                 List.of(), List.of(), List.of(), List.of(), List.of()
         );
@@ -648,6 +684,7 @@ public class ReturnAnalyticsService {
     public record ReturnPayload(
             Meta meta,
             Summary summary,
+            AccountSummary accountSummary,
             List<MonthlyRow> trend,
             List<ParentRow> parentRows,
             List<SkuRow> skuRows,
@@ -693,6 +730,21 @@ public class ReturnAnalyticsService {
             long affectedSkus,
             long affectedParents,
             double mappingRate
+    ) {
+    }
+
+    public record AccountSummary(
+            String firstMonth,
+            String lastMonth,
+            int monthCount,
+            double requestedUnits,
+            double completedUnits,
+            double soldUnits,
+            double requestRate,
+            double completedRate,
+            double refundAmount,
+            double salesRevenue,
+            double refundAmountRate
     ) {
     }
 

@@ -66,6 +66,22 @@
         <div class="status-copy"><strong id="returnStatusHeadline">正在读取退款数据</strong><span id="returnStatusDetail">请稍候。</span></div>
         <div class="status-range mono" id="returnDateRange"></div>
       </div>
+      <section class="return-account-rollup" aria-labelledby="returnAccountRollupTitle">
+        <div class="return-account-rollup-lead">
+          <span>全部已导入月份 · 整个账号</span>
+          <div>
+            <strong id="returnAccountCompletedRate">--</strong>
+            <h2 id="returnAccountRollupTitle">累计实际退款率</h2>
+          </div>
+          <p id="returnAccountRollupNote">等待退款数据。</p>
+        </div>
+        <dl class="return-account-rollup-stats">
+          <div><dt>已退款 / 销量</dt><dd id="returnAccountUnits">--</dd></div>
+          <div><dt>累计申请退款率</dt><dd id="returnAccountRequestRate">--</dd></div>
+          <div><dt>累计退款金额</dt><dd id="returnAccountRefundAmount">--</dd></div>
+          <div><dt>覆盖月份</dt><dd id="returnAccountMonths">--</dd></div>
+        </dl>
+      </section>
       <div class="return-metric-grid" id="returnMetricGrid"></div>
       <div class="return-layout">
         <section class="panel" aria-labelledby="returnTrendTitle">
@@ -285,13 +301,14 @@
   }
 
   function render() {
-    const { meta, summary } = state.data;
+    const { meta, summary, accountSummary } = state.data;
     ensureSelectedParent();
     renderMonthSelect();
     if (!meta.selectedMonth) {
       $("#returnStatusHeadline").textContent = "还没有退款数据";
       $("#returnStatusDetail").textContent = "在数据导入页面执行一次扫描，系统会读取 source/Return_Orders 下的月度报表。";
       $("#returnDateRange").textContent = "";
+      renderAccountSummary();
       $("#returnMetricGrid").innerHTML = "";
       $("#returnTrendChart").innerHTML = `<div class="empty-state"><strong>等待退款报表</strong>扫描导入后，这里会显示月度退款率与款色码下钻。</div>`;
       $("#returnReasonList").innerHTML = "";
@@ -312,6 +329,7 @@
       : `当前月份只有相邻报表中的跨月零散记录，不能代表完整月度退款率。已映射 ${percent(summary.mappingRate)} 的退款件数。`;
     $("#returnDateRange").textContent = `${meta.startDate} 至 ${meta.endDate}`;
     syncPageMeta();
+    renderAccountSummary(accountSummary);
     $("#returnMetricGrid").innerHTML = [
       metric("申请退款率", percent(summary.requestRate), `${integer(summary.requestedUnits)} 件申请 ÷ ${integer(summary.soldUnits)} 件销量`, "alert"),
       metric("已完成退款率", percent(summary.completedRate), `${integer(summary.completedUnits)} 件已完成`, ""),
@@ -328,6 +346,32 @@
     syncGroupButtons();
     renderOverview();
     renderDetails();
+  }
+
+  function renderAccountSummary(account = state.data?.accountSummary) {
+    const rate = $("#returnAccountCompletedRate");
+    const note = $("#returnAccountRollupNote");
+    const units = $("#returnAccountUnits");
+    const requestRate = $("#returnAccountRequestRate");
+    const refundAmount = $("#returnAccountRefundAmount");
+    const months = $("#returnAccountMonths");
+    if (!account || !number(account.monthCount)) {
+      rate.textContent = "--";
+      note.textContent = "导入月度退款报表后，这里会汇总整个账号。";
+      units.textContent = "--";
+      requestRate.textContent = "--";
+      refundAmount.textContent = "--";
+      months.textContent = "--";
+      return;
+    }
+    rate.textContent = account.soldUnits > 0 ? percent(account.completedRate) : "缺少分母";
+    note.textContent = `${integer(account.monthCount)} 个已导入月份按累计件数计算，不取各月退款率的平均值。`;
+    units.textContent = `${integer(account.completedUnits)} / ${integer(account.soldUnits)}`;
+    requestRate.textContent = percent(account.requestRate);
+    refundAmount.textContent = money(account.refundAmount);
+    months.textContent = account.firstMonth === account.lastMonth
+      ? text(account.firstMonth)
+      : `${text(account.firstMonth)} 至 ${text(account.lastMonth)}`;
   }
 
   function metric(label, value, note, className) {

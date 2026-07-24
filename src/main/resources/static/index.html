@@ -1595,8 +1595,8 @@
             <h3>${escapeHtml(product.title || "未填写 Listing 标题")}</h3>
             <p class="product-price"><span class="product-price-label">上传表参考价</span>${productPriceRange(product)}</p>
             <p class="product-price-note">仅用于核对上传资料，不作为实际售价，也不参与销售额、利润、广告效果或补货计算。</p>
-            <p class="product-description">${escapeHtml(listingText(product.shortDescription) || "未填写商品描述。")}</p>
             <ul class="feature-list">${features || `<li>未填写 Key Features。</li>`}</ul>
+            <p class="product-description">${escapeHtml(listingText(product.shortDescription) || "未填写商品描述。")}</p>
             <div class="product-structure-stats">
               <div class="product-structure-stat"><span>颜色组</span><strong>${integer(groups.length)}</strong></div>
               <div class="product-structure-stat"><span>尺码规格</span><strong>${integer(sizes.length)}</strong></div>

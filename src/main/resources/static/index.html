@@ -522,10 +522,71 @@
     .risk-row.critical .risk-track span { background: var(--signal-red); }
     .risk-row.warning .risk-track span { background: var(--signal-orange); }
     .risk-row.healthy .risk-track span { background: var(--signal-green); }
-    .inventory-trend { min-height: 252px; padding: 16px 14px 8px; }
-    .inventory-trend svg { width: 100%; height: 220px; }
-    .inventory-line-available { fill: none; stroke: var(--walmart-blue); stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
-    .inventory-line-transit { fill: none; stroke: var(--spark-yellow); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    .inventory-chart-controls { display: grid; justify-items: end; gap: 9px; }
+    .inventory-range, .inventory-series-toggle { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+    .inventory-control-button, .inventory-series-button {
+      min-height: 34px;
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 0 10px;
+      border: 1px solid var(--line-soft);
+      border-radius: 8px;
+      color: var(--steel-copy);
+      background: transparent;
+      cursor: pointer;
+      font-size: 10px;
+      font-weight: 750;
+      transition: color .16s var(--ease), border-color .16s var(--ease), background .16s var(--ease);
+    }
+    .inventory-control-button:hover, .inventory-series-button:hover { color: var(--frost-ink); border-color: var(--line-strong); }
+    .inventory-control-button.active, .inventory-series-button.active { color: var(--frost-ink); border-color: rgba(47, 144, 255, .28); background: var(--blue-soft); }
+    .inventory-series-button:not(.active) { opacity: .58; }
+    .inventory-series-swatch { width: 16px; height: 0; border-top: 2px solid var(--walmart-blue); }
+    .inventory-series-swatch.total { border-color: var(--frost-ink); border-top-style: dashed; }
+    .inventory-series-swatch.transit { border-color: var(--spark-yellow); }
+    .inventory-series-swatch.reserved { border-color: var(--signal-orange); border-top-style: dashed; }
+    .inventory-trend { position: relative; min-height: 306px; padding: 13px 14px 8px; }
+    .inventory-trend svg { width: 100%; height: 280px; overflow: visible; }
+    .inventory-line-total, .inventory-line-available, .inventory-line-transit, .inventory-line-reserved {
+      fill: none;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      vector-effect: non-scaling-stroke;
+    }
+    .inventory-line-total { stroke: var(--frost-ink); stroke-width: 2.2; stroke-dasharray: 7 5; }
+    .inventory-line-available { stroke: var(--walmart-blue); stroke-width: 2.5; }
+    .inventory-line-transit { stroke: var(--spark-yellow); stroke-width: 2; }
+    .inventory-line-reserved { stroke: var(--signal-orange); stroke-width: 2; stroke-dasharray: 3 4; }
+    .inventory-trend-hit-target { cursor: crosshair; touch-action: pan-y; }
+    .inventory-crosshair { stroke: rgba(237, 244, 255, .32); stroke-width: 1; stroke-dasharray: 3 4; pointer-events: none; }
+    .inventory-trend-marker { stroke: var(--navy-panel); stroke-width: 2; pointer-events: none; }
+    .inventory-trend-tooltip {
+      position: absolute;
+      z-index: 3;
+      top: 12px;
+      left: 50%;
+      min-width: 196px;
+      padding: 11px 12px;
+      border: 1px solid var(--line-strong);
+      border-radius: 9px;
+      color: var(--steel-copy);
+      background: rgba(13, 24, 43, .97);
+      box-shadow: 0 16px 40px rgba(2, 8, 19, .42);
+      opacity: 0;
+      transform: translate(-50%, -5px);
+      pointer-events: none;
+      transition: opacity .12s var(--ease), transform .12s var(--ease);
+    }
+    .inventory-trend-tooltip.show { opacity: 1; transform: translate(-50%, 0); }
+    .inventory-trend-tooltip strong { display: block; margin-bottom: 7px; color: var(--frost-ink); font: 750 11px "Cascadia Mono", monospace; }
+    .inventory-tooltip-row { display: grid; grid-template-columns: 1fr auto; gap: 18px; align-items: center; min-height: 22px; font-size: 10px; }
+    .inventory-tooltip-row span:first-child { display: inline-flex; align-items: center; gap: 7px; }
+    .inventory-tooltip-row b { color: var(--frost-ink); font: 700 10px "Cascadia Mono", monospace; }
+    .inventory-tooltip-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--walmart-blue); }
+    .inventory-tooltip-dot.total { background: var(--frost-ink); }
+    .inventory-tooltip-dot.transit { background: var(--spark-yellow); }
+    .inventory-tooltip-dot.reserved { background: var(--signal-orange); }
     .inventory-table-tools { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; width: 100%; }
     .inventory-filter-group { display: flex; flex-wrap: wrap; gap: 7px; }
     .inventory-table { min-width: 1320px; }
@@ -815,6 +876,11 @@
       .production-form .field-wide { grid-column: auto; }
       .inventory-table-tools, .table-footer { align-items: stretch; flex-direction: column; }
       .inventory-filter-group { overflow-x: auto; flex-wrap: nowrap; padding-bottom: 4px; }
+      .inventory-chart-controls { width: 100%; justify-items: stretch; }
+      .inventory-range, .inventory-series-toggle { justify-content: flex-start; }
+      .inventory-control-button, .inventory-series-button { min-height: 44px; }
+      .inventory-trend { min-height: 290px; padding-inline: 6px; }
+      .inventory-trend svg { height: 264px; }
       .history-row { grid-template-columns: 1fr auto; }
       .history-row span:last-child { grid-column: 1 / -1; }
       .queue-card:last-child { grid-column: auto; }
@@ -998,8 +1064,20 @@
           </div>
           <section class="panel table-panel" aria-labelledby="inventoryTrendTitle">
             <div class="panel-header">
-              <div><h2 class="panel-title" id="inventoryTrendTitle">库存快照变化</h2><p class="panel-subtitle">保留每次导入快照，展示可售库存和 Inbound 路途库存</p></div>
-              <div class="legend"><span class="legend-item"><span class="legend-dot"></span>可售库存</span><span class="legend-item"><span class="legend-dot yellow"></span>路途库存</span></div>
+              <div><h2 class="panel-title" id="inventoryTrendTitle">库存变化曲线</h2><p class="panel-subtitle">总库存 = 可售 + 预留 + 路途；按库存快照日期汇总</p></div>
+              <div class="inventory-chart-controls">
+                <div class="inventory-range" id="inventoryTrendRanges" role="group" aria-label="库存曲线时间范围">
+                  <button class="inventory-control-button" type="button" data-inventory-range="90" aria-pressed="false">近3月</button>
+                  <button class="inventory-control-button" type="button" data-inventory-range="180" aria-pressed="false">近6月</button>
+                  <button class="inventory-control-button active" type="button" data-inventory-range="all" aria-pressed="true">全部时间</button>
+                </div>
+                <div class="inventory-series-toggle" id="inventoryTrendLegend" role="group" aria-label="库存曲线显示项目">
+                  <button class="inventory-series-button active" type="button" data-inventory-series="total" aria-pressed="true"><span class="inventory-series-swatch total" aria-hidden="true"></span>总库存</button>
+                  <button class="inventory-series-button active" type="button" data-inventory-series="available" aria-pressed="true"><span class="inventory-series-swatch" aria-hidden="true"></span>可售</button>
+                  <button class="inventory-series-button active" type="button" data-inventory-series="transit" aria-pressed="true"><span class="inventory-series-swatch transit" aria-hidden="true"></span>路途</button>
+                  <button class="inventory-series-button active" type="button" data-inventory-series="reserved" aria-pressed="true"><span class="inventory-series-swatch reserved" aria-hidden="true"></span>预留</button>
+                </div>
+              </div>
             </div>
             <div class="inventory-trend" id="inventoryTrend"></div>
           </section>
@@ -1240,6 +1318,8 @@
       inventory: null,
       inventoryLoading: false,
       inventoryTargetDays: 45,
+      inventoryTrendRange: "all",
+      inventoryTrendSeries: new Set(["total", "available", "transit", "reserved"]),
       inventoryRisk: "all",
       inventorySearch: "",
       inventoryPage: 0,
@@ -1525,26 +1605,119 @@
         $("#inventoryTrend").innerHTML = `<div class="empty-state"><strong>还没有库存快照</strong>扫描导入库存文件后，这里会展示历史变化。</div>`;
         return;
       }
-      const width = 820, height = 220, left = 54, right = 18, top = 18, bottom = 34;
+      const allRows = trend.slice().sort((a, b) => new Date(a.snapshotAt) - new Date(b.snapshotAt));
+      const latestTime = Math.max(...allRows.map((row) => new Date(row.snapshotAt).getTime()));
+      const rangeDays = state.inventoryTrendRange === "all" ? null : number(state.inventoryTrendRange);
+      const cutoff = rangeDays ? latestTime - rangeDays * 86400000 : Number.NEGATIVE_INFINITY;
+      const rows = allRows.filter((row) => new Date(row.snapshotAt).getTime() >= cutoff);
+      const series = [
+        { key: "total", label: "总库存", className: "inventory-line-total", color: "var(--frost-ink)", value: (row) => number(row.availableUnits) + number(row.reservedUnits) + number(row.transitUnits) },
+        { key: "available", label: "可售库存", className: "inventory-line-available", color: "var(--walmart-blue)", value: (row) => number(row.availableUnits) },
+        { key: "transit", label: "路途库存", className: "inventory-line-transit", color: "var(--spark-yellow)", value: (row) => number(row.transitUnits) },
+        { key: "reserved", label: "预留库存", className: "inventory-line-reserved", color: "var(--signal-orange)", value: (row) => number(row.reservedUnits) },
+      ];
+      const activeSeries = series.filter((item) => state.inventoryTrendSeries.has(item.key));
+      $$("#inventoryTrendRanges [data-inventory-range]").forEach((button) => {
+        const active = button.dataset.inventoryRange === state.inventoryTrendRange;
+        button.classList.toggle("active", active);
+        button.setAttribute("aria-pressed", String(active));
+      });
+      $$("#inventoryTrendLegend [data-inventory-series]").forEach((button) => {
+        const active = state.inventoryTrendSeries.has(button.dataset.inventorySeries);
+        button.classList.toggle("active", active);
+        button.setAttribute("aria-pressed", String(active));
+      });
+
+      const width = 960, height = 280, left = 62, right = 22, top = 22, bottom = 38;
       const plotW = width - left - right, plotH = height - top - bottom;
-      const maxValue = Math.max(...trend.flatMap((row) => [number(row.availableUnits), number(row.transitUnits)]), 1) * 1.08;
-      const point = (row, index, key) => ({
-        x: trend.length === 1 ? left + plotW / 2 : left + index / (trend.length - 1) * plotW,
-        y: top + plotH - number(row[key]) / maxValue * plotH,
+      const timestamps = rows.map((row) => new Date(row.snapshotAt).getTime());
+      const minTime = Math.min(...timestamps), maxTime = Math.max(...timestamps);
+      const maxValue = Math.max(...rows.flatMap((row) => activeSeries.map((item) => item.value(row))), 1) * 1.08;
+      const xFor = (row, index) => maxTime === minTime ? left + plotW / 2 : left + (timestamps[index] - minTime) / (maxTime - minTime) * plotW;
+      const point = (row, index, item) => ({
+        x: xFor(row, index),
+        y: top + plotH - item.value(row) / maxValue * plotH,
+        value: item.value(row),
         row,
       });
-      const available = trend.map((row, index) => point(row, index, "availableUnits"));
-      const transit = trend.map((row, index) => point(row, index, "transitUnits"));
+      const pointsBySeries = new Map(activeSeries.map((item) => [item.key, rows.map((row, index) => point(row, index, item))]));
       const path = (points) => points.map((item, index) => `${index ? "L" : "M"}${item.x.toFixed(1)},${item.y.toFixed(1)}`).join(" ");
       const grid = [0, .25, .5, .75, 1].map((step) => {
         const y = top + plotH * step;
         return `<line class="chart-grid-line" x1="${left}" x2="${left + plotW}" y1="${y}" y2="${y}"/><text class="chart-axis-label" x="${left - 8}" y="${y + 3}" text-anchor="end">${integer(maxValue * (1 - step))}</text>`;
       }).join("");
-      const labelEvery = Math.max(1, Math.ceil(trend.length / 6));
-      const labels = available.map((item, index) => index % labelEvery === 0 || index === available.length - 1
-        ? `<text class="chart-axis-label" x="${item.x}" y="${height - 9}" text-anchor="middle">${new Date(item.row.snapshotAt).toLocaleDateString("zh-CN", { month: "numeric", day: "numeric" })}</text>` : "").join("");
-      const dots = available.map((item, index) => `<circle cx="${item.x}" cy="${item.y}" r="4" fill="var(--walmart-blue)"><title>${new Date(item.row.snapshotAt).toLocaleString("zh-CN")} 可售 ${integer(item.row.availableUnits)}，路途 ${integer(item.row.transitUnits)}</title></circle><circle cx="${transit[index].x}" cy="${transit[index].y}" r="3.5" fill="var(--spark-yellow)"></circle>`).join("");
-      $("#inventoryTrend").innerHTML = `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="可售库存和路途库存快照趋势">${grid}<path class="inventory-line-available" d="${path(available)}"/><path class="inventory-line-transit" d="${path(transit)}"/>${dots}${labels}</svg>`;
+      const labelEvery = Math.max(1, Math.ceil(rows.length / 6));
+      const labels = rows.map((row, index) => index % labelEvery === 0 || index === rows.length - 1
+        ? `<text class="chart-axis-label" x="${xFor(row, index)}" y="${height - 10}" text-anchor="middle">${new Date(row.snapshotAt).toLocaleDateString("zh-CN", { year: "2-digit", month: "numeric", day: "numeric" })}</text>` : "").join("");
+      const paths = activeSeries.map((item) => `<path class="${item.className}" d="${path(pointsBySeries.get(item.key))}"/>`).join("");
+      const singleDots = rows.length === 1 ? activeSeries.map((item) => {
+        const itemPoint = pointsBySeries.get(item.key)[0];
+        return `<circle class="inventory-trend-marker" cx="${itemPoint.x}" cy="${itemPoint.y}" r="4" fill="${item.color}"/>`;
+      }).join("") : "";
+      const chart = $("#inventoryTrend");
+      chart.innerHTML = `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="总库存、可售库存、路途库存和预留库存变化曲线">${grid}${paths}${singleDots}${labels}<line class="inventory-crosshair" id="inventoryCrosshair" x1="${left}" x2="${left}" y1="${top}" y2="${top + plotH}" hidden/><g id="inventoryTrendMarkers"></g><rect class="inventory-trend-hit-target" id="inventoryTrendHitTarget" x="${left}" y="${top}" width="${plotW}" height="${plotH}" fill="transparent" tabindex="0" role="slider" aria-label="库存快照，使用左右方向键查看" aria-valuemin="1" aria-valuemax="${rows.length}" aria-valuenow="${rows.length}"/></svg><div class="inventory-trend-tooltip" id="inventoryTrendTooltip" role="status" aria-live="polite"></div>`;
+
+      const svg = chart.querySelector("svg");
+      const hitTarget = $("#inventoryTrendHitTarget");
+      const crosshair = $("#inventoryCrosshair");
+      const markers = $("#inventoryTrendMarkers");
+      const tooltip = $("#inventoryTrendTooltip");
+      let activeIndex = rows.length - 1;
+      const showPoint = (index) => {
+        activeIndex = Math.max(0, Math.min(rows.length - 1, index));
+        const row = rows[activeIndex];
+        const x = xFor(row, activeIndex);
+        crosshair.setAttribute("x1", x);
+        crosshair.setAttribute("x2", x);
+        crosshair.hidden = false;
+        markers.innerHTML = activeSeries.map((item) => {
+          const itemPoint = pointsBySeries.get(item.key)[activeIndex];
+          return `<circle class="inventory-trend-marker" cx="${itemPoint.x}" cy="${itemPoint.y}" r="4.5" fill="${item.color}"/>`;
+        }).join("");
+        const date = new Date(row.snapshotAt).toLocaleString("zh-CN", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+        const values = activeSeries.map((item) => ({ ...item, displayValue: item.value(row) }));
+        tooltip.innerHTML = `<strong>${date}</strong>${values.map((item) => `<div class="inventory-tooltip-row"><span><i class="inventory-tooltip-dot ${item.key}"></i>${item.label}</span><b>${integer(item.displayValue)}</b></div>`).join("")}`;
+        const tooltipHalf = Math.min(112, Math.max(94, chart.clientWidth / 4));
+        const tooltipX = x / width * chart.clientWidth;
+        tooltip.style.left = `${Math.max(tooltipHalf, Math.min(chart.clientWidth - tooltipHalf, tooltipX))}px`;
+        tooltip.classList.add("show");
+        hitTarget.setAttribute("aria-valuenow", String(activeIndex + 1));
+        hitTarget.setAttribute("aria-valuetext", `${date}，${values.map((item) => `${item.label} ${integer(item.displayValue)}`).join("，")}`);
+      };
+      const hidePoint = () => {
+        crosshair.hidden = true;
+        markers.innerHTML = "";
+        tooltip.classList.remove("show");
+      };
+      const indexFromPointer = (event) => {
+        const rect = svg.getBoundingClientRect();
+        const pointerX = (event.clientX - rect.left) / rect.width * width;
+        let nearest = 0;
+        let distance = Number.POSITIVE_INFINITY;
+        rows.forEach((row, index) => {
+          const currentDistance = Math.abs(xFor(row, index) - pointerX);
+          if (currentDistance < distance) {
+            distance = currentDistance;
+            nearest = index;
+          }
+        });
+        return nearest;
+      };
+      hitTarget.addEventListener("pointermove", (event) => showPoint(indexFromPointer(event)));
+      hitTarget.addEventListener("pointerdown", (event) => showPoint(indexFromPointer(event)));
+      hitTarget.addEventListener("pointerleave", () => {
+        if (document.activeElement !== hitTarget) hidePoint();
+      });
+      hitTarget.addEventListener("focus", () => showPoint(activeIndex));
+      hitTarget.addEventListener("blur", hidePoint);
+      hitTarget.addEventListener("keydown", (event) => {
+        if (["ArrowLeft", "ArrowRight", "Home", "End", "Escape"].includes(event.key)) event.preventDefault();
+        if (event.key === "ArrowLeft") showPoint(activeIndex - 1);
+        if (event.key === "ArrowRight") showPoint(activeIndex + 1);
+        if (event.key === "Home") showPoint(0);
+        if (event.key === "End") showPoint(rows.length - 1);
+        if (event.key === "Escape") hidePoint();
+      });
     }
 
     function inventoryFilteredRows(rows) {
@@ -2273,6 +2446,20 @@
       state.inventoryPage = 0;
       $$("#inventoryFilters .filter-button").forEach((item) => item.classList.toggle("active", item === button));
       if (state.inventory) renderInventoryTable(state.inventory.rows);
+    }));
+    $$("#inventoryTrendRanges [data-inventory-range]").forEach((button) => button.addEventListener("click", () => {
+      state.inventoryTrendRange = button.dataset.inventoryRange;
+      if (state.inventory) renderInventoryTrend(state.inventory.trend);
+    }));
+    $$("#inventoryTrendLegend [data-inventory-series]").forEach((button) => button.addEventListener("click", () => {
+      const key = button.dataset.inventorySeries;
+      if (state.inventoryTrendSeries.has(key) && state.inventoryTrendSeries.size === 1) {
+        showToast("库存曲线至少保留一个显示项目");
+        return;
+      }
+      if (state.inventoryTrendSeries.has(key)) state.inventoryTrendSeries.delete(key);
+      else state.inventoryTrendSeries.add(key);
+      if (state.inventory) renderInventoryTrend(state.inventory.trend);
     }));
     $("#inventoryPrevPage").addEventListener("click", () => {
       state.inventoryPage = Math.max(0, state.inventoryPage - 1);

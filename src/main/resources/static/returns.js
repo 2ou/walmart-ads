@@ -14,6 +14,17 @@
 
   const $ = (selector) => document.querySelector(selector);
   const $$ = (selector) => [...document.querySelectorAll(selector)];
+  const fuzzySearchMatches = window.fuzzySearchMatches || ((query, ...values) => {
+    const normalize = (value) => String(value ?? "").normalize("NFKC").toLocaleLowerCase("zh-CN").trim();
+    const compact = (value) => normalize(value).replace(/[^\p{L}\p{N}]+/gu, "");
+    const normalizedQuery = normalize(query);
+    if (!normalizedQuery) return true;
+    const haystack = normalize(values.flat(Infinity).filter((value) => value !== null && value !== undefined).join(" "));
+    const compactHaystack = compact(haystack);
+    const compactQuery = compact(normalizedQuery);
+    if (compactQuery && compactHaystack.includes(compactQuery)) return true;
+    return normalizedQuery.split(/\s+/).every((term) => haystack.includes(term) || compactHaystack.includes(compact(term)));
+  });
   const number = (value) => Number.isFinite(Number(value)) ? Number(value) : 0;
   const integer = (value) => Math.round(number(value)).toLocaleString("zh-CN");
   const money = (value) => `$${number(value).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -83,8 +94,8 @@
         <div class="panel-header">
           <div><h2 class="panel-title" id="returnOverviewTitle">退款率下钻</h2><p class="panel-subtitle" id="returnOverviewSubtitle">按款号查看，可切换到 SKU、颜色或尺码</p></div>
           <div class="table-tools">
-            <label class="sr-only" for="returnSearch">搜索款号、SKU、Item ID、颜色或尺码</label>
-            <input class="search-input" id="returnSearch" type="search" placeholder="搜索款号、SKU、Item ID、颜色或尺码">
+            <label class="sr-only" for="returnSearch">模糊搜索款号、SKU、Item ID、颜色或尺码</label>
+            <input class="search-input" id="returnSearch" type="search" placeholder="模糊搜索款号、SKU、颜色或尺码，如 6066">
           </div>
         </div>
         <div class="panel-header">
@@ -115,8 +126,8 @@
         <div class="panel-header">
           <div><h2 class="panel-title" id="returnDetailTitle">退款订单明细</h2><p class="panel-subtitle">客户姓名和邮箱不在经营页面展示，其余有效字段可逐条查看</p></div>
           <div class="table-tools">
-            <label class="sr-only" for="returnDetailSearch">搜索订单号、RMA、SKU 或退款原因</label>
-            <input class="search-input" id="returnDetailSearch" type="search" placeholder="搜索订单号、RMA、SKU 或退款原因">
+            <label class="sr-only" for="returnDetailSearch">模糊搜索订单号、RMA、SKU 或退款原因</label>
+            <input class="search-input" id="returnDetailSearch" type="search" placeholder="模糊搜索订单号、RMA、SKU 或退款原因">
           </div>
         </div>
         <div class="table-scroll">
@@ -179,12 +190,12 @@
       loadReturns(state.selectedMonth);
     });
     $("#returnSearch").addEventListener("input", (event) => {
-      state.search = event.target.value.trim().toLowerCase();
+      state.search = event.target.value;
       state.overviewPage = 0;
       renderOverview();
     });
     $("#returnDetailSearch").addEventListener("input", (event) => {
-      state.detailSearch = event.target.value.trim().toLowerCase();
+      state.detailSearch = event.target.value;
       state.detailPage = 0;
       renderDetails();
     });
@@ -475,9 +486,9 @@
     let rows = overviewRows();
     if (state.risk !== "all") rows = rows.filter((row) => row.risk === state.risk);
     if (state.search) {
-      rows = rows.filter((row) => [
+      rows = rows.filter((row) => fuzzySearchMatches(state.search, [
         row.parentSku, row.sku, row.itemId, row.groupKey, row.label, row.itemName, row.color, row.size,
-      ].some((value) => String(value || "").toLowerCase().includes(state.search)));
+      ]));
     }
     const pages = Math.max(1, Math.ceil(rows.length / state.pageSize));
     state.overviewPage = Math.min(state.overviewPage, pages - 1);
@@ -531,10 +542,11 @@
     if (!body) return;
     let rows = state.data?.details || [];
     if (state.detailSearch) {
-      rows = rows.filter((row) => [
+      rows = rows.filter((row) => fuzzySearchMatches(state.detailSearch, [
         row.customerOrderNo, row.poNo, row.rmaNo, row.sku, row.parentSku, row.itemId,
         row.itemName, row.returnReason, row.currentStatus, row.refundStatus, row.color, row.size,
-      ].some((value) => String(value || "").toLowerCase().includes(state.detailSearch)));
+        row.refundMode, row.refundCoveredBy, row.channel, row.trackingNumber, row.sellerOrderNo,
+      ]));
     }
     const pages = Math.max(1, Math.ceil(rows.length / state.pageSize));
     state.detailPage = Math.min(state.detailPage, pages - 1);

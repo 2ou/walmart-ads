@@ -329,6 +329,23 @@ public class ProductCatalogService {
                     rowImages.addAll(row.secondaryImageUrls());
                     return rowImages.stream();
                 }).toList());
+        List<String> searchTerms = new ArrayList<>();
+        rows.forEach(row -> {
+            searchTerms.add(row.sku());
+            searchTerms.add(row.parentSku());
+            searchTerms.add(row.productId());
+            searchTerms.add(row.productIdType());
+            searchTerms.add(row.productName());
+            searchTerms.add(row.brand());
+            searchTerms.add(row.productType());
+            searchTerms.add(row.color());
+            searchTerms.add(row.colorCategory());
+            searchTerms.add(row.size());
+            searchTerms.add(row.sizeGroup());
+            searchTerms.add(row.patternName());
+            searchTerms.add(row.materialName());
+            searchTerms.add(row.variantGroupId());
+        });
         return new ProductSummary(
                 parentSku,
                 representative.productName(),
@@ -343,7 +360,8 @@ public class ProductCatalogService {
                 prices.maximum(),
                 completeness,
                 representative.sourceFileName(),
-                updatedAt
+                updatedAt,
+                distinctStrings(searchTerms)
         );
     }
 
@@ -553,7 +571,8 @@ public class ProductCatalogService {
             BigDecimal maximumPrice,
             int listingCompleteness,
             String sourceFileName,
-            LocalDateTime updatedAt
+            LocalDateTime updatedAt,
+            List<String> searchTerms
     ) {
     }
 

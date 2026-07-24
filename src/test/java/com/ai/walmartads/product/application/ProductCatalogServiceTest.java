@@ -123,6 +123,12 @@ class ProductCatalogServiceTest {
         assertThat(catalog.meta().parentProductCount()).isEqualTo(1);
         assertThat(catalog.meta().variantCount()).isEqualTo(3);
         assertThat(catalog.products().getFirst().listingCompleteness()).isEqualTo(100);
+        assertThat(catalog.products().getFirst().searchTerms()).contains(
+                "PNK100-Blue-M-WFS",
+                "124",
+                "Blue",
+                "XL"
+        );
         assertThat(detail.keyFeatures()).containsExactly("Soft fabric", "Daily wear");
         assertThat(detail.images()).contains(
                 "https://img/main.jpg",

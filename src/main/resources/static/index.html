@@ -1181,7 +1181,7 @@
           <section class="panel table-panel" aria-labelledby="salesTableTitle">
             <div class="panel-header">
               <div><h2 class="panel-title" id="salesTableTitle">销量明细</h2><p class="panel-subtitle" id="salesTableSubtitle">按销量从高到低排序</p></div>
-              <div class="table-tools"><label class="sr-only" for="salesSearch">搜索款号、SKU 或商品名称</label><input class="search-input" id="salesSearch" type="search" placeholder="搜索款号、SKU 或商品名称"></div>
+              <div class="table-tools"><label class="sr-only" for="salesSearch">模糊搜索款号、SKU、Item ID 或商品名称</label><input class="search-input" id="salesSearch" type="search" placeholder="模糊搜索款号、SKU 或商品，如 6066"></div>
             </div>
             <div class="panel-header">
               <div class="sales-toolbar">
@@ -1228,7 +1228,7 @@
           <section class="panel table-panel" aria-labelledby="campaignTitle">
             <div class="panel-header">
               <div><h2 class="panel-title" id="campaignTitle">广告活动诊断</h2><p class="panel-subtitle" id="campaignSubtitle"></p></div>
-              <div class="table-tools"><label class="sr-only" for="campaignSearch">搜索活动或 SKU</label><input class="search-input" id="campaignSearch" type="search" placeholder="搜索活动或 SKU"></div>
+              <div class="table-tools"><label class="sr-only" for="campaignSearch">模糊搜索广告活动、活动 ID、SKU 或广告类型</label><input class="search-input" id="campaignSearch" type="search" placeholder="模糊搜索活动、SKU 或编号"></div>
             </div>
             <div class="panel-header"><div class="filter-row" id="campaignFilters"><button class="filter-button active" type="button" data-filter="all">全部</button><button class="filter-button" type="button" data-filter="scale">建议放量</button><button class="filter-button" type="button" data-filter="reduce">建议降耗</button><button class="filter-button" type="button" data-filter="optimize">继续优化</button><button class="filter-button" type="button" data-filter="collect">数据不足</button></div></div>
             <div class="table-scroll"><table><thead><tr><th>活动</th><th>类型</th><th class="num">花费</th><th class="num">归因销售</th><th class="num">订单</th><th class="num">ROAS</th><th class="num">CPC</th><th>建议</th></tr></thead><tbody id="campaignBody"></tbody></table></div>
@@ -1290,7 +1290,7 @@
           <section class="panel table-panel" aria-labelledby="inventoryTableTitle">
             <div class="panel-header">
               <div><h2 class="panel-title" id="inventoryTableTitle">SKU 库存与补货明细</h2><p class="panel-subtitle" id="inventoryTableSubtitle">按风险优先级排序</p></div>
-              <div class="table-tools"><label class="sr-only" for="inventorySearch">搜索 SKU、商品或 Item ID</label><input class="search-input" id="inventorySearch" type="search" placeholder="搜索 SKU、商品或 Item ID"></div>
+              <div class="table-tools"><label class="sr-only" for="inventorySearch">模糊搜索 SKU、款号、商品或 Item ID</label><input class="search-input" id="inventorySearch" type="search" placeholder="模糊搜索 SKU、款号或 Item ID，如 6066"></div>
             </div>
             <div class="panel-header">
               <div class="inventory-table-tools">
@@ -1328,7 +1328,7 @@
           <section class="panel table-panel" aria-labelledby="productCatalogTitle">
             <div class="panel-header">
               <div><h2 class="panel-title" id="productCatalogTitle">服装产品组目录</h2><p class="panel-subtitle">父 SKU 标记主体；详情按颜色切换图片，并在颜色组内核对尺码 SKU</p></div>
-              <div class="table-tools"><label class="sr-only" for="productSearch">搜索父 SKU、标题、品牌或类型</label><input class="search-input" id="productSearch" type="search" placeholder="搜索父 SKU、标题或类型"></div>
+              <div class="table-tools"><label class="sr-only" for="productSearch">模糊搜索款号、变体 SKU、产品 ID、颜色、尺码或标题</label><input class="search-input" id="productSearch" type="search" placeholder="模糊搜索款号、变体或颜色，如 6066"></div>
             </div>
             <div class="panel-header">
               <div class="inventory-table-tools">
@@ -1437,7 +1437,7 @@
             <section class="panel" aria-labelledby="operationHistoryTitle">
               <div class="panel-header"><div><h2 class="panel-title" id="operationHistoryTitle">操作时间线与效果追踪</h2><p class="panel-subtitle">按当前顶部 7 / 14 / 30 天窗口比较日均指标</p></div><button class="secondary-button" id="refreshOperationsButton" type="button">刷新</button></div>
               <div class="operation-summary-grid" id="operationSummaryGrid"></div>
-              <div class="operation-toolbar"><label class="sr-only" for="operationSearch">搜索记录</label><input class="search-input" id="operationSearch" type="search" placeholder="搜索款号、SKU、操作摘要或备注"></div>
+              <div class="operation-toolbar"><label class="sr-only" for="operationSearch">模糊搜索运营记录</label><input class="search-input" id="operationSearch" type="search" placeholder="模糊搜索款号、SKU、操作摘要或备注"></div>
               <div class="operation-list" id="operationList"><div class="empty-state"><strong>正在读取运营记录</strong>请稍候。</div></div>
             </section>
           </div>
@@ -1604,6 +1604,18 @@
 
     const $ = (selector) => document.querySelector(selector);
     const $$ = (selector) => [...document.querySelectorAll(selector)];
+    const normalizeSearchText = (value) => String(value ?? "").normalize("NFKC").toLocaleLowerCase("zh-CN").trim();
+    const compactSearchText = (value) => normalizeSearchText(value).replace(/[^\p{L}\p{N}]+/gu, "");
+    const fuzzySearchMatches = (query, ...values) => {
+      const normalizedQuery = normalizeSearchText(query);
+      if (!normalizedQuery) return true;
+      const haystack = normalizeSearchText(values.flat(Infinity).filter((value) => value !== null && value !== undefined).join(" "));
+      const compactHaystack = compactSearchText(haystack);
+      const compactQuery = compactSearchText(normalizedQuery);
+      if (compactQuery && compactHaystack.includes(compactQuery)) return true;
+      return normalizedQuery.split(/\s+/).every((term) => haystack.includes(term) || compactHaystack.includes(compactSearchText(term)));
+    };
+    window.fuzzySearchMatches = fuzzySearchMatches;
     const number = (value) => Number.isFinite(Number(value)) ? Number(value) : 0;
     const sum = (rows, key) => rows.reduce((total, row) => total + number(row[key]), 0);
     const money = (value, digits = 0) => `$${number(value).toLocaleString("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits })}`;
@@ -1807,8 +1819,9 @@
       }).slice(0, 3);
       $("#actionQueue").innerHTML = queue.map((row, index) => `<article class="queue-card"><div class="queue-top"><span class="status-badge ${row.decision}">${decisionCopy[row.decision].label}</span><span class="priority">P${index + 1}</span></div><h3>${escapeHtml(row.campaign)}</h3><p>${decisionCopy[row.decision].reason}</p><div class="queue-impact">花费 ${money(row.spend, 2)} · ROAS ${ratio(row.roas)} · ${integer(row.adOrders)} 单</div></article>`).join("") || `<div class="panel empty-state" style="grid-column:1/-1"><strong>当前没有达到动作门槛的活动</strong>可调低样本门槛或延长分析周期。</div>`;
 
-      const query = state.campaignSearch.trim().toLowerCase();
-      const filtered = all.filter((row) => (state.campaignFilter === "all" || row.decision === state.campaignFilter) && (!query || `${row.campaign} ${row.sku}`.toLowerCase().includes(query)));
+      const query = state.campaignSearch;
+      const filtered = all.filter((row) => (state.campaignFilter === "all" || row.decision === state.campaignFilter)
+        && fuzzySearchMatches(query, row.campaign, row.campaignId, row.sku, row.type));
       $("#campaignBody").innerHTML = filtered.map((row) => `<tr><td><span class="campaign-name" title="${escapeHtml(row.campaign)}">${escapeHtml(row.campaign)}</span><span class="sub-id">${escapeHtml(row.sku || row.campaignId || "")}</span></td><td>${escapeHtml(row.type || "标准广告")}</td><td class="num">${money(row.spend, 2)}</td><td class="num">${money(row.adSales, 2)}</td><td class="num">${integer(row.adOrders)}</td><td class="num">${ratio(row.roas)}</td><td class="num">${money(row.cpc, 2)}</td><td><span class="status-badge ${row.decision}">${decisionCopy[row.decision].label}</span></td></tr>`).join("") || emptyRow(8, "没有匹配活动", "清除搜索或切换筛选条件。");
     }
 
@@ -2009,12 +2022,11 @@
     function salesFilteredRows() {
       if (!state.sales) return [];
       const source = state.salesGroup === "parent" ? state.sales.parentRows : state.sales.skuRows;
-      const query = state.salesSearch.trim().toLowerCase();
+      const query = state.salesSearch;
       const filtered = source.filter((row) => {
         const key = state.salesGroup === "parent" ? row.parentSku : row.sku;
-        const haystack = `${key || ""} ${row.parentSku || ""} ${row.itemName || ""} ${row.itemId || ""} ${row.color || ""} ${row.size || ""}`.toLowerCase();
         return (state.salesStatus === "all" || row.status === state.salesStatus)
-          && (!query || haystack.includes(query));
+          && fuzzySearchMatches(query, key, row.parentSku, row.sku, row.itemName, row.itemId, row.color, row.size);
       });
       const direction = state.salesSortDirection === "asc" ? 1 : -1;
       return filtered.slice().sort((a, b) => {
@@ -2282,12 +2294,21 @@
     }
 
     function inventoryFilteredRows(rows) {
-      const query = state.inventorySearch.trim().toLowerCase();
+      const query = state.inventorySearch;
       const risks = state.inventoryRisk === "all" ? null : state.inventoryRisk.split(",");
       return rows.filter((row) => {
         const matchesRisk = !risks || risks.includes(row.risk);
-        const haystack = `${row.sku} ${row.parentSku || ""} ${row.itemId || ""} ${row.itemName || ""}`.toLowerCase();
-        return matchesRisk && (!query || haystack.includes(query));
+        return matchesRisk && fuzzySearchMatches(
+          query,
+          row.sku,
+          row.parentSku,
+          row.itemId,
+          row.itemName,
+          row.status,
+          row.publishingStatus,
+          row.itemLifecycle,
+          row.productionNote
+        );
       });
     }
 
@@ -2345,10 +2366,17 @@
     }
 
     function filteredProducts() {
-      const query = state.productSearch.trim().toLowerCase();
+      const query = state.productSearch;
       return (state.products?.products || []).filter((product) => {
-        const searchText = [product.parentSku, product.title, product.brand, product.productType, product.sourceFileName].join(" ").toLowerCase();
-        if (query && !searchText.includes(query)) return false;
+        if (!fuzzySearchMatches(
+          query,
+          product.parentSku,
+          product.title,
+          product.brand,
+          product.productType,
+          product.sourceFileName,
+          product.searchTerms
+        )) return false;
         if (state.productFilter === "complete") return product.listingCompleteness === 100 && product.imageUrl;
         if (state.productFilter === "listing-missing") return product.listingCompleteness < 100;
         if (state.productFilter === "image-missing") return !product.imageUrl;

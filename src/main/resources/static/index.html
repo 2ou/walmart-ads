@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="color-scheme" content="dark">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%232f90ff'/%3E%3Cpath d='M14 18h9l4 25 5-17h7l5 17 4-25h9L50 49H39l-4-13-4 13H20z' fill='%23edf4ff'/%3E%3C/svg%3E">
   <title>PNK Walmart 广告决策台</title>
   <style>
     :root {
@@ -712,6 +713,57 @@
     .raw-field { min-height: 54px; padding: 10px 13px; background: var(--navy-panel); }
     .raw-field span { display: block; color: var(--slate-dim); font: 9px "Cascadia Mono", monospace; overflow-wrap: anywhere; }
     .raw-field strong { display: block; margin-top: 5px; color: var(--steel-copy); font-size: 10px; font-weight: 550; overflow-wrap: anywhere; white-space: pre-wrap; }
+    .table-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+    .operation-layout { display: grid; grid-template-columns: minmax(330px, .65fr) minmax(0, 1.35fr); gap: 14px; align-items: start; }
+    .operation-form { padding: 17px; }
+    .operation-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 13px; }
+    .operation-form .field-wide { grid-column: 1 / -1; }
+    .operation-form input, .operation-form select, .operation-form textarea {
+      width: 100%;
+      border: 1px solid var(--line-soft);
+      border-radius: 9px;
+      color: var(--frost-ink);
+      background: rgba(7, 16, 31, .68);
+    }
+    .operation-form input, .operation-form select { height: 44px; padding: 0 11px; }
+    .operation-form textarea { min-height: 76px; padding: 10px 11px; resize: vertical; }
+    .operation-form select { color-scheme: dark; }
+    .operation-form-note { margin: 13px 0 0; padding: 11px 12px; border: 1px solid var(--line-soft); border-radius: 9px; color: var(--steel-copy); background: rgba(145, 160, 185, .05); font-size: 10px; line-height: 1.6; }
+    .operation-form-actions { display: flex; justify-content: flex-end; padding-top: 15px; }
+    .operation-summary-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; background: var(--line-soft); }
+    .operation-summary { min-height: 84px; padding: 14px; background: var(--navy-panel); }
+    .operation-summary span { color: var(--steel-copy); font-size: 10px; }
+    .operation-summary strong { display: block; margin-top: 10px; font: 750 21px/1 "Cascadia Mono", monospace; }
+    .operation-toolbar { display: flex; align-items: center; gap: 10px; padding: 13px 15px; border-bottom: 1px solid var(--line-soft); }
+    .operation-toolbar .search-input { width: 100%; }
+    .operation-list { display: grid; gap: 11px; padding: 14px; }
+    .operation-card { overflow: hidden; border: 1px solid var(--line-soft); border-radius: 12px; background: rgba(7, 16, 31, .38); }
+    .operation-card-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; padding: 14px 15px; border-bottom: 1px solid var(--line-soft); }
+    .operation-card-title { min-width: 0; }
+    .operation-card-title h3 { margin: 7px 0 0; font-size: 13px; overflow-wrap: anywhere; }
+    .operation-card-meta { display: flex; flex-wrap: wrap; gap: 6px; }
+    .operation-target { color: var(--walmart-blue); font: 700 10px "Cascadia Mono", monospace; }
+    .operation-time { flex: 0 0 auto; color: var(--slate-dim); font: 10px "Cascadia Mono", monospace; text-align: right; }
+    .operation-copy { display: grid; gap: 9px; padding: 12px 15px; color: var(--steel-copy); font-size: 10px; }
+    .operation-copy p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+    .operation-before-after { display: grid; grid-template-columns: 1fr auto 1fr; gap: 9px; align-items: center; }
+    .operation-value { min-height: 52px; padding: 9px 10px; border: 1px solid var(--line-soft); border-radius: 8px; background: rgba(237, 244, 255, .025); }
+    .operation-value span { display: block; color: var(--slate-dim); font-size: 9px; }
+    .operation-value strong { display: block; margin-top: 4px; color: var(--frost-ink); font-size: 10px; font-weight: 650; white-space: pre-wrap; overflow-wrap: anywhere; }
+    .operation-arrow { color: var(--spark-yellow); font-weight: 800; }
+    .operation-impact { border-top: 1px solid var(--line-soft); }
+    .operation-impact-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 11px 15px; color: var(--steel-copy); font-size: 10px; }
+    .operation-impact-head strong { color: var(--frost-ink); }
+    .operation-impact-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; background: var(--line-soft); }
+    .operation-impact-metric { min-height: 92px; padding: 12px; background: rgba(13, 24, 43, .96); }
+    .operation-impact-metric span { display: block; color: var(--steel-copy); font-size: 9px; }
+    .operation-impact-metric strong { display: block; margin-top: 9px; font: 720 14px "Cascadia Mono", monospace; }
+    .operation-impact-metric small { display: block; margin-top: 6px; color: var(--slate-dim); font-size: 9px; }
+    .operation-delta { color: var(--steel-copy); }
+    .operation-delta.up { color: var(--signal-green); }
+    .operation-delta.down { color: var(--signal-red); }
+    .operation-impact-note { padding: 10px 15px; color: var(--slate-dim); background: rgba(145, 160, 185, .035); font-size: 9px; line-height: 1.6; }
+    .operation-overlap { color: var(--spark-yellow); }
 
     .empty-state { padding: 42px 20px; text-align: center; color: var(--steel-copy); }
     .empty-state strong { display: block; margin-bottom: 5px; color: var(--frost-ink); }
@@ -725,7 +777,7 @@
       .product-metric-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
       .queue-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .queue-card:last-child { grid-column: 1 / -1; }
-      .agent-layout { grid-template-columns: 1fr; }
+      .agent-layout, .operation-layout { grid-template-columns: 1fr; }
     }
     @media (max-width: 900px) {
       .sidebar { transform: translateX(-105%); transition: transform .26s var(--ease); box-shadow: 24px 0 64px rgba(2, 8, 19, .46); }
@@ -750,6 +802,10 @@
       .metric-grid, .queue-grid, .form-grid { grid-template-columns: 1fr; }
       .inventory-metric-grid, .inventory-forecast-body, .production-form-grid { grid-template-columns: 1fr; }
       .product-metric-grid, .product-overview, .attribute-grid, .raw-field-grid { grid-template-columns: 1fr; }
+      .operation-form-grid, .operation-summary-grid, .operation-impact-grid { grid-template-columns: 1fr 1fr; }
+      .operation-form .field-wide { grid-column: auto; }
+      .operation-before-after { grid-template-columns: 1fr; }
+      .operation-arrow { transform: rotate(90deg); text-align: center; }
       .product-drawer { width: 100vw; border-radius: 0; }
       .product-hero-image { max-height: 440px; }
       .product-structure-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -816,6 +872,10 @@
         <button class="nav-button" type="button" data-view="products">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 4h14v16H5z"/><path d="M8 8h8M8 12h8M8 16h5"/><path d="M9 4V2m6 2V2"/></svg>
           <span>产品库</span>
+        </button>
+        <button class="nav-button" type="button" data-view="operations">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M6 3h12v18H6z"/><path d="M9 7h6M9 11h6M9 15h3"/><path d="m14 16 1.5 1.5L19 14"/></svg>
+          <span>运营记录</span>
         </button>
       </nav>
       <div class="nav-label">自动化准备</div>
@@ -1006,6 +1066,99 @@
           </section>
         </section>
 
+        <section class="view" id="view-operations" aria-labelledby="pageTitle">
+          <div class="section-intro">
+            <div><h2>记录每一次调整，再用数据验证方向</h2><p>整款 Listing 优化记到父 SKU；单个颜色、尺码、广告或价格调整记到完整 SKU。操作当天不参与比较，前后使用等长窗口。</p></div>
+            <div class="section-summary"><strong id="operationRecordCount">0</strong>条运营记录</div>
+          </div>
+          <div class="status-banner">
+            <div class="status-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 19V5m0 14h16"/><path d="m7 15 4-4 3 2 5-6"/></svg></div>
+            <div class="status-copy"><strong id="operationStatusHeadline">正在读取运营记录</strong><span id="operationStatusDetail">系统会结合订单与 ItemPerformance 广告数据追踪变化。</span></div>
+            <div class="status-range mono" id="operationLatestDate"></div>
+          </div>
+          <div class="operation-layout">
+            <section class="panel" aria-labelledby="operationFormTitle">
+              <div class="panel-header"><div><h2 class="panel-title" id="operationFormTitle">新增运营记录</h2><p class="panel-subtitle">备注、人工调整和未来系统执行使用同一条审计链</p></div></div>
+              <form class="operation-form" id="operationForm">
+                <div class="operation-form-grid">
+                  <div class="field">
+                    <label for="operationTargetType">作用范围</label>
+                    <select id="operationTargetType" required>
+                      <option value="PARENT_SKU">整款 / 父 SKU</option>
+                      <option value="SKU">单个变体 SKU</option>
+                    </select>
+                  </div>
+                  <div class="field">
+                    <label for="operationTargetKey">SKU 或款号</label>
+                    <input id="operationTargetKey" type="text" list="operationTargetOptions" maxlength="180" placeholder="输入或选择目标" autocomplete="off" required>
+                    <datalist id="operationTargetOptions"></datalist>
+                  </div>
+                  <div class="field">
+                    <label for="operationActionType">操作类型</label>
+                    <select id="operationActionType" required>
+                      <option value="NOTE">仅备注</option>
+                      <option value="LISTING_TITLE">Listing 标题</option>
+                      <option value="LISTING_IMAGES">Listing 图片</option>
+                      <option value="LISTING_CONTENT">五点 / 描述 / 属性</option>
+                      <option value="PRICE">售价调整</option>
+                      <option value="AD_BID">广告出价</option>
+                      <option value="AD_BUDGET">广告预算</option>
+                      <option value="AD_KEYWORDS">广告关键词</option>
+                      <option value="AD_STATUS">广告启停</option>
+                      <option value="PROMOTION">促销活动</option>
+                      <option value="INVENTORY">库存动作</option>
+                      <option value="OTHER">其他</option>
+                    </select>
+                  </div>
+                  <div class="field field-wide">
+                    <label for="operationOccurredAt">实际操作时间</label>
+                    <input id="operationOccurredAt" type="datetime-local" required>
+                  </div>
+                  <div class="field">
+                    <label for="operationSourceType">执行来源</label>
+                    <select id="operationSourceType">
+                      <option value="MANUAL">人工操作</option>
+                      <option value="SYSTEM">系统执行</option>
+                      <option value="AI">AI 执行</option>
+                    </select>
+                  </div>
+                  <div class="field">
+                    <label for="operationStatus">执行状态</label>
+                    <select id="operationStatus">
+                      <option value="EXECUTED">已执行，开始追踪</option>
+                      <option value="PLANNED">计划中，暂不追踪</option>
+                    </select>
+                  </div>
+                  <div class="field field-wide">
+                    <label for="operationTitle">操作摘要</label>
+                    <input id="operationTitle" type="text" maxlength="240" placeholder="例如：主图更换为真人场景图" required>
+                  </div>
+                  <div class="field">
+                    <label for="operationBeforeValue">调整前</label>
+                    <textarea id="operationBeforeValue" maxlength="4000" placeholder="例如：售价 $19.99 / 原主图"></textarea>
+                  </div>
+                  <div class="field">
+                    <label for="operationAfterValue">调整后</label>
+                    <textarea id="operationAfterValue" maxlength="4000" placeholder="例如：售价 $17.99 / 新场景图"></textarea>
+                  </div>
+                  <div class="field field-wide">
+                    <label for="operationNote">判断依据与备注</label>
+                    <textarea id="operationNote" maxlength="8000" placeholder="为什么调整、预期改善什么，以及需要重点观察的指标"></textarea>
+                  </div>
+                </div>
+                <p class="operation-form-note">“系统执行”和“AI 执行”只用于已经真实落地的操作；系统建议仍保留在建议区，不会自动记成已执行。</p>
+                <div class="operation-form-actions"><button class="primary-button" id="saveOperationButton" type="submit">保存运营记录</button></div>
+              </form>
+            </section>
+            <section class="panel" aria-labelledby="operationHistoryTitle">
+              <div class="panel-header"><div><h2 class="panel-title" id="operationHistoryTitle">操作时间线与效果追踪</h2><p class="panel-subtitle">按当前顶部 7 / 14 / 30 天窗口比较日均指标</p></div><button class="secondary-button" id="refreshOperationsButton" type="button">刷新</button></div>
+              <div class="operation-summary-grid" id="operationSummaryGrid"></div>
+              <div class="operation-toolbar"><label class="sr-only" for="operationSearch">搜索记录</label><input class="search-input" id="operationSearch" type="search" placeholder="搜索款号、SKU、操作摘要或备注"></div>
+              <div class="operation-list" id="operationList"><div class="empty-state"><strong>正在读取运营记录</strong>请稍候。</div></div>
+            </section>
+          </div>
+        </section>
+
         <section class="view" id="view-agent" aria-labelledby="pageTitle">
           <section class="agent-hero">
             <div><span class="agent-kicker">分析引擎已运行</span><h2>先把建议做对，再接入广告执行</h2><p>当前版本完成数据读取、口径校验、诊断与提案。预算与出价变更保持锁定，直到规则回测、审批流和回滚机制都通过验证。</p></div>
@@ -1097,10 +1250,14 @@
       productSearch: "",
       productPage: 0,
       productPageSize: 20,
+      operations: null,
+      operationTargets: [],
+      operationsLoading: false,
+      operationSearch: "",
       aiStatus: null,
     };
 
-    const titles = { dashboard: "经营驾驶舱", diagnosis: "广告诊断", sku: "SKU 机会矩阵", inventory: "库存管理", products: "产品库", agent: "Agent 控制室", imports: "数据导入" };
+    const titles = { dashboard: "经营驾驶舱", diagnosis: "广告诊断", sku: "SKU 机会矩阵", inventory: "库存管理", products: "产品库", operations: "运营记录", agent: "Agent 控制室", imports: "数据导入" };
     const decisionCopy = {
       scale: { label: "建议放量", short: "放量", reason: "ROAS 达标且已有稳定广告订单，可进入小步增量测试。" },
       reduce: { label: "建议降耗", short: "降耗", reason: "达到样本门槛后仍低于降耗 ROAS，需要降低出价或暂停低效商品。" },
@@ -1118,6 +1275,28 @@
       HEALTHY: { label: "库存健康", badge: "scale", group: "healthy" },
     };
     const confidenceCopy = { HIGH: "高", MEDIUM: "中", LOW: "低" };
+    const operationActionCopy = {
+      NOTE: "仅备注",
+      LISTING_TITLE: "Listing 标题",
+      LISTING_IMAGES: "Listing 图片",
+      LISTING_CONTENT: "五点 / 描述 / 属性",
+      PRICE: "售价调整",
+      AD_BID: "广告出价",
+      AD_BUDGET: "广告预算",
+      AD_KEYWORDS: "广告关键词",
+      AD_STATUS: "广告启停",
+      PROMOTION: "促销活动",
+      INVENTORY: "库存动作",
+      OTHER: "其他",
+    };
+    const operationSourceCopy = { MANUAL: "人工", SYSTEM: "系统", AI: "AI" };
+    const operationStatusCopy = { EXECUTED: "已执行", PLANNED: "计划中", CANCELLED: "已取消" };
+    const operationImpactCopy = {
+      READY: { label: "完整窗口", badge: "scale" },
+      COLLECTING: { label: "观察中", badge: "optimize" },
+      WAITING: { label: "等待数据", badge: "collect" },
+      NOT_EXECUTED: { label: "暂不追踪", badge: "collect" },
+    };
 
     const $ = (selector) => document.querySelector(selector);
     const $$ = (selector) => [...document.querySelectorAll(selector)];
@@ -1465,7 +1644,7 @@
           <td class="num">${productPriceRange(product)}</td>
           <td><span class="listing-score ${complete ? "complete" : ""}">${integer(product.listingCompleteness)}%</span></td>
           <td>${product.updatedAt ? new Date(product.updatedAt).toLocaleDateString("zh-CN") : "未知"}</td>
-          <td><button class="table-link" type="button" data-product-parent="${escapeHtml(product.parentSku)}">查看详情</button></td>
+          <td><div class="table-actions"><button class="table-link" type="button" data-product-parent="${escapeHtml(product.parentSku)}">查看详情</button><button class="table-link" type="button" data-operation-parent="${escapeHtml(product.parentSku)}">记操作</button></div></td>
         </tr>`;
       }).join("") || emptyRow(10, "没有匹配的产品组", "清除搜索或切换完整度筛选。");
       $("#productTableCount").textContent = `${filtered.length.toLocaleString("zh-CN")} 条结果，当前显示 ${pageRows.length} 条`;
@@ -1473,6 +1652,7 @@
       $("#productPrevPage").disabled = state.productPage === 0;
       $("#productNextPage").disabled = state.productPage >= totalPages - 1;
       $$("[data-product-parent]").forEach((button) => button.addEventListener("click", () => openProductDrawer(button.dataset.productParent)));
+      $$("[data-operation-parent]").forEach((button) => button.addEventListener("click", () => prepareOperation("PARENT_SKU", button.dataset.operationParent)));
     }
 
     function rawFieldValue(value) {
@@ -1545,7 +1725,8 @@
         <td>${escapeHtml([variant.pattern, variant.material].filter(Boolean).join(" · ") || "—")}</td>
         <td class="num">${money(variant.price, 2)}</td>
         <td>${variant.updatedAt ? new Date(variant.updatedAt).toLocaleDateString("zh-CN") : "—"}</td>
-      </tr>`).join("") || emptyRow(6, "当前颜色没有 SKU", "请核对上传表的颜色与尺码字段。");
+        <td><button class="table-link" type="button" data-operation-sku="${escapeHtml(variant.sku || "")}">记操作</button></td>
+      </tr>`).join("") || emptyRow(7, "当前颜色没有 SKU", "请核对上传表的颜色与尺码字段。");
       $$("#productColorGroups [data-color-index]").forEach((button) => {
         const active = Number(button.dataset.colorIndex) === selectedIndex;
         button.classList.toggle("active", active);
@@ -1557,6 +1738,10 @@
           hero.hidden = false;
         }
         $$("#productGallery [data-gallery-url]").forEach((item) => item.classList.toggle("active", item === button));
+      }));
+      $$("#selectedColorVariants [data-operation-sku]").forEach((button) => button.addEventListener("click", () => {
+        $("#productDrawer").close();
+        prepareOperation("SKU", button.dataset.operationSku);
       }));
     }
 
@@ -1612,7 +1797,7 @@
               <div class="color-group-title"><strong id="selectedColorTitle"></strong><span id="selectedColorMeta"></span></div>
               <div class="size-chip-list" id="selectedColorSizes"></div>
             </div>
-            <div class="table-scroll"><table class="variant-table"><thead><tr><th>尺码</th><th>SKU</th><th>Product ID</th><th>图案 / 材质</th><th class="num">上传表参考价</th><th>更新时间</th></tr></thead><tbody id="selectedColorVariants"></tbody></table></div>
+            <div class="table-scroll"><table class="variant-table"><thead><tr><th>尺码</th><th>SKU</th><th>Product ID</th><th>图案 / 材质</th><th class="num">上传表参考价</th><th>更新时间</th><th>操作</th></tr></thead><tbody id="selectedColorVariants"></tbody></table></div>
           </div>
         </section>
         <section class="product-detail-section"><h3>产品属性</h3><div class="attribute-grid">${attributes || `<div class="empty-state"><strong>暂无属性</strong></div>`}</div></section>
@@ -1732,6 +1917,178 @@
       }
     }
 
+    function localDateTimeValue(value = new Date()) {
+      const local = new Date(value.getTime() - value.getTimezoneOffset() * 60000);
+      return local.toISOString().slice(0, 16);
+    }
+
+    function renderOperationTargetOptions() {
+      const type = $("#operationTargetType").value;
+      $("#operationTargetOptions").innerHTML = state.operationTargets
+        .filter((target) => target.targetType === type)
+        .map((target) => `<option value="${escapeHtml(target.targetKey)}">${escapeHtml(target.targetName || target.parentSku || "")}</option>`)
+        .join("");
+    }
+
+    async function loadOperationTargets() {
+      try {
+        const response = await fetch("/api/operations/targets?limit=200");
+        const payload = await response.json();
+        if (!response.ok || !payload.success) throw new Error(payload.message || `HTTP ${response.status}`);
+        state.operationTargets = payload.data || [];
+        renderOperationTargetOptions();
+      } catch (error) {
+        state.operationTargets = [];
+        showToast(`SKU 目标读取失败：${error.message}`);
+      }
+    }
+
+    function operationDelta(before, after) {
+      if (after === null || after === undefined) return "等待后续数据";
+      const left = number(before), right = number(after);
+      if (!left) return right ? "由 0 新增" : "持平";
+      const change = (right - left) / Math.abs(left);
+      if (Math.abs(change) < .005) return "基本持平";
+      return `${change > 0 ? "↑" : "↓"} ${Math.abs(change * 100).toFixed(1)}%`;
+    }
+
+    function operationImpactMetric(label, before, after, formatter) {
+      const afterAvailable = after !== null && after !== undefined;
+      return `<div class="operation-impact-metric"><span>${label}</span><strong>${afterAvailable ? `${formatter(before)} → ${formatter(after)}` : formatter(before)}</strong><small class="operation-delta">${operationDelta(before, after)}</small></div>`;
+    }
+
+    function renderOperations() {
+      const payload = state.operations;
+      if (!payload) return;
+      const { meta, items } = payload;
+      $("#operationRecordCount").textContent = integer(meta.recordCount);
+      $("#operationLatestDate").textContent = meta.latestDataDate ? `数据截至 ${meta.latestDataDate}` : "暂无业务数据";
+      $("#operationStatusHeadline").textContent = meta.recordCount ? "运营审计链已建立" : "还没有运营记录";
+      $("#operationStatusDetail").textContent = meta.recordCount
+        ? `${integer(meta.executedCount)} 条已执行，${integer(meta.readyCount)} 条已获得完整 ${meta.requestedDays} 天前后窗口。`
+        : "先记录一次真实调整，系统会在后续数据导入后自动追踪。";
+      $("#operationSummaryGrid").innerHTML = [
+        ["当前记录", meta.recordCount, "含计划与已执行"],
+        ["已执行", meta.executedCount, "进入效果追踪"],
+        ["系统 / AI", meta.systemCount, "真实执行来源"],
+        ["完整窗口", meta.readyCount, `${meta.requestedDays} 天前后齐全`],
+      ].map(([label, value, note]) => `<div class="operation-summary"><span>${label}</span><strong>${integer(value)}</strong><span>${note}</span></div>`).join("");
+
+      $("#operationList").innerHTML = items.map(({ record, impact }) => {
+        const impactState = operationImpactCopy[impact.state] || operationImpactCopy.WAITING;
+        const statusBadge = record.status === "EXECUTED" ? "scale" : record.status === "CANCELLED" ? "reduce" : "collect";
+        const scope = record.targetType === "PARENT_SKU" ? "整款" : "变体 SKU";
+        const beforeAfter = record.beforeValue || record.afterValue ? `<div class="operation-before-after">
+          <div class="operation-value"><span>调整前</span><strong>${escapeHtml(record.beforeValue || "未填写")}</strong></div>
+          <span class="operation-arrow">→</span>
+          <div class="operation-value"><span>调整后</span><strong>${escapeHtml(record.afterValue || "未填写")}</strong></div>
+        </div>` : "";
+        let impactBody = `<div class="operation-impact-note">${escapeHtml(impact.message || "")}</div>`;
+        if (impact.before) {
+          const before = impact.before, after = impact.after;
+          const range = after
+            ? `${before.startDate}—${before.endDate} 对比 ${after.startDate}—${after.endDate}`
+            : `操作前基线 ${before.startDate}—${before.endDate}`;
+          impactBody = `<div class="operation-impact-head"><span>${range} · 排除操作当天</span><span class="status-badge ${impactState.badge}">${impactState.label}</span></div>
+            <div class="operation-impact-grid">
+              ${operationImpactMetric("销售额日均", before.salesPerDay, after?.salesPerDay, (value) => money(value, 2))}
+              ${operationImpactMetric("订单件数日均", before.unitsPerDay, after?.unitsPerDay, (value) => `${number(value).toFixed(2)} 件`)}
+              ${operationImpactMetric("广告费日均", before.adSpendPerDay, after?.adSpendPerDay, (value) => money(value, 2))}
+              ${operationImpactMetric("广告 ROAS", before.roas, after?.roas, ratio)}
+            </div>
+            <div class="operation-impact-note">${escapeHtml(impact.message || "")}${impact.overlappingOperations ? `<br><span class="operation-overlap">同款比较窗口内另有 ${integer(impact.overlappingOperations)} 次已执行操作，结果可能受到共同影响。</span>` : ""}<br>这是数据相关性复盘，不直接证明单一操作造成了变化。</div>`;
+        }
+        return `<article class="operation-card">
+          <div class="operation-card-header">
+            <div class="operation-card-title">
+              <div class="operation-card-meta">
+                <span class="status-badge ${statusBadge}">${operationStatusCopy[record.status] || record.status}</span>
+                <span class="status-badge collect">${operationSourceCopy[record.sourceType] || record.sourceType}</span>
+                <span class="status-badge optimize">${scope}</span>
+                <span class="status-badge collect">${operationActionCopy[record.actionType] || record.actionType}</span>
+              </div>
+              <h3>${escapeHtml(record.title)}</h3>
+              <span class="operation-target">${escapeHtml(record.targetKey)}${record.targetName ? ` · ${escapeHtml(record.targetName)}` : ""}</span>
+            </div>
+            <time class="operation-time">${new Date(record.occurredAt).toLocaleString("zh-CN")}</time>
+          </div>
+          <div class="operation-copy">${beforeAfter}${record.note ? `<p>${escapeHtml(record.note)}</p>` : ""}</div>
+          <div class="operation-impact">${impactBody}</div>
+        </article>`;
+      }).join("") || `<div class="empty-state"><strong>还没有运营记录</strong>在左侧记录一次备注、Listing、价格或广告调整。</div>`;
+      updatePageMeta();
+    }
+
+    async function loadOperations() {
+      if (state.operationsLoading) return;
+      state.operationsLoading = true;
+      $("#operationList").innerHTML = `<div class="empty-state"><strong>正在读取运营记录</strong>请稍候。</div>`;
+      try {
+        const query = state.operationSearch ? `&query=${encodeURIComponent(state.operationSearch)}` : "";
+        const response = await fetch(`/api/operations?days=${state.periodDays}&limit=50${query}`);
+        const payload = await response.json();
+        if (!response.ok || !payload.success) throw new Error(payload.message || `HTTP ${response.status}`);
+        state.operations = payload.data;
+        renderOperations();
+      } catch (error) {
+        $("#operationStatusHeadline").textContent = "运营记录读取失败";
+        $("#operationStatusDetail").textContent = error.message;
+        $("#operationList").innerHTML = `<div class="empty-state"><strong>读取失败</strong>${escapeHtml(error.message)}</div>`;
+      } finally {
+        state.operationsLoading = false;
+      }
+    }
+
+    function prepareOperation(targetType, targetKey) {
+      $("#operationTargetType").value = targetType;
+      renderOperationTargetOptions();
+      $("#operationTargetKey").value = targetKey;
+      $("#operationOccurredAt").value = localDateTimeValue();
+      switchView("operations");
+      $("#operationActionType").focus();
+    }
+
+    async function saveOperation(event) {
+      event.preventDefault();
+      const button = $("#saveOperationButton");
+      button.disabled = true;
+      button.textContent = "正在保存…";
+      try {
+        const response = await fetch("/api/operations", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            targetType: $("#operationTargetType").value,
+            targetKey: $("#operationTargetKey").value.trim(),
+            actionType: $("#operationActionType").value,
+            sourceType: $("#operationSourceType").value,
+            status: $("#operationStatus").value,
+            occurredAt: $("#operationOccurredAt").value,
+            title: $("#operationTitle").value.trim(),
+            beforeValue: $("#operationBeforeValue").value.trim(),
+            afterValue: $("#operationAfterValue").value.trim(),
+            note: $("#operationNote").value.trim(),
+          }),
+        });
+        const payload = await response.json();
+        if (!response.ok || !payload.success) throw new Error(payload.message || `HTTP ${response.status}`);
+        const targetType = $("#operationTargetType").value;
+        const targetKey = $("#operationTargetKey").value;
+        $("#operationForm").reset();
+        $("#operationTargetType").value = targetType;
+        $("#operationTargetKey").value = targetKey;
+        $("#operationOccurredAt").value = localDateTimeValue();
+        renderOperationTargetOptions();
+        showToast(payload.message);
+        await loadOperations();
+      } catch (error) {
+        showToast(`运营记录保存失败：${error.message}`);
+      } finally {
+        button.disabled = false;
+        button.textContent = "保存运营记录";
+      }
+    }
+
     function updatePageMeta() {
       if (state.view === "inventory" && state.inventory?.meta.snapshotAt) {
         const meta = state.inventory.meta;
@@ -1741,6 +2098,11 @@
       if (state.view === "products" && state.products?.meta) {
         const meta = state.products.meta;
         $("#pageMeta").textContent = `${meta.sourceFileCount} 个上传文件 · ${meta.parentProductCount} 个产品组 · ${meta.variantCount} 个 SKU 变体`;
+        return;
+      }
+      if (state.view === "operations" && state.operations?.meta) {
+        const meta = state.operations.meta;
+        $("#pageMeta").textContent = `效果窗口 ${meta.requestedDays} 天 · ${meta.recordCount} 条记录 · 业务数据截至 ${meta.latestDataDate || "未知"}`;
         return;
       }
       const start = addDays(latest, -(state.periodDays - 1));
@@ -1758,6 +2120,7 @@
 
     function switchView(view) {
       state.view = view;
+      history.replaceState(null, "", `#${view}`);
       $$(".nav-button").forEach((button) => button.classList.toggle("active", button.dataset.view === view));
       $$(".view").forEach((section) => section.classList.toggle("active", section.id === `view-${view}`));
       $("#pageTitle").textContent = titles[view];
@@ -1887,6 +2250,7 @@
       $$(".period-button").forEach((item) => item.classList.toggle("active", item === button));
       renderAll();
       loadInventory();
+      loadOperations();
     }));
     $("#campaignSearch").addEventListener("input", (event) => { state.campaignSearch = event.target.value; renderDiagnosis(); });
     $$("#campaignFilters .filter-button").forEach((button) => button.addEventListener("click", () => {
@@ -1937,6 +2301,15 @@
       state.productPage += 1;
       renderProductCatalog();
     });
+    let operationSearchTimer;
+    $("#operationTargetType").addEventListener("change", renderOperationTargetOptions);
+    $("#operationForm").addEventListener("submit", saveOperation);
+    $("#refreshOperationsButton").addEventListener("click", loadOperations);
+    $("#operationSearch").addEventListener("input", (event) => {
+      state.operationSearch = event.target.value.trim();
+      clearTimeout(operationSearchTimer);
+      operationSearchTimer = setTimeout(loadOperations, 260);
+    });
     $("#productionForm").addEventListener("submit", saveProductionStock);
     $("#closeProductionDialog").addEventListener("click", () => $("#productionDialog").close());
     $("#cancelProductionDialog").addEventListener("click", () => $("#productionDialog").close());
@@ -1962,12 +2335,17 @@
     $("#minClicks").value = state.thresholds.minClicks;
     $("#minSpend").value = state.thresholds.minSpend;
     $("#sidebarSourceTime").textContent = `最新业务日 ${DATA.meta.latestDate}`;
+    $("#operationOccurredAt").value = localDateTimeValue();
     loadBatches();
     loadInventory();
     loadProducts();
+    loadOperationTargets();
+    loadOperations();
     loadAiStatus();
     loadLatestAiAnalysis();
     renderAll();
+    const requestedView = location.hash.replace("#", "");
+    if (titles[requestedView]) switchView(requestedView);
   </script>
 </body>
 </html>

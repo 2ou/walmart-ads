@@ -1,0 +1,22 @@
+CREATE TABLE wm_ads_operation_record (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    target_type VARCHAR(20) NOT NULL,
+    target_key VARCHAR(180) NOT NULL,
+    parent_sku VARCHAR(80) NULL,
+    target_name VARCHAR(500) NULL,
+    action_type VARCHAR(40) NOT NULL,
+    source_type VARCHAR(20) NOT NULL,
+    status VARCHAR(20) NOT NULL,
+    occurred_at DATETIME(6) NOT NULL,
+    title VARCHAR(240) NOT NULL,
+    before_value TEXT NULL,
+    after_value TEXT NULL,
+    note TEXT NULL,
+    external_reference VARCHAR(240) NULL,
+    created_at DATETIME(6) NOT NULL,
+    updated_at DATETIME(6) NOT NULL,
+    INDEX idx_operation_target (target_type, target_key, occurred_at),
+    INDEX idx_operation_parent (parent_sku, occurred_at),
+    INDEX idx_operation_status_time (status, occurred_at),
+    INDEX idx_operation_source_time (source_type, occurred_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

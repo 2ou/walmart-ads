@@ -9,5 +9,6 @@ public enum ImportFileType {
     WEEKLY_INVENTORY,
     PRODUCT,
     HISTORY,
-    SKU_MAPPING
+    SKU_MAPPING,
+    RETURN_ORDER
 }

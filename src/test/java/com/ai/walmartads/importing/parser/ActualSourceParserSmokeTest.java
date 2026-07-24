@@ -72,6 +72,9 @@ class ActualSourceParserSmokeTest {
         ProductWorkbookParser productParser = new ProductWorkbookParser(json);
 
         for (SourceFileCandidate candidate : sampleByType.values()) {
+            if (candidate.fileType() == ImportFileType.RETURN_ORDER) {
+                continue;
+            }
             ImportFile importFile = importFile(candidate);
             ParsedRows<?> parsed = switch (candidate.fileType()) {
                 case ORDER -> orderParser.parse(candidate.path(), importFile);
@@ -81,6 +84,7 @@ class ActualSourceParserSmokeTest {
                 case PRODUCT -> productParser.parse(candidate.path(), importFile);
                 case HISTORY -> throw new IllegalStateException("Two-argument test configuration does not scan history");
                 case SKU_MAPPING -> throw new IllegalStateException("Test configuration does not scan SKU mappings");
+                case RETURN_ORDER -> throw new IllegalStateException("Dedicated return parser test covers return workbooks");
             };
             assertThat(parsed.sourceRowCount())
                     .as("源文件应有数据行：%s", candidate.path())

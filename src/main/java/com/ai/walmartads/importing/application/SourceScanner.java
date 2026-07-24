@@ -13,6 +13,7 @@ import java.nio.file.attribute.FileTime;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.YearMonth;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
@@ -28,6 +29,10 @@ public class SourceScanner {
 
     private static final Pattern DATE_DIRECTORY = Pattern.compile("^(\\d{4})-(\\d{1,2})-(\\d{1,2})$");
     private static final Pattern INVENTORY_DATE = Pattern.compile("inventory-(\\d{4}-\\d{2}-\\d{2})", Pattern.CASE_INSENSITIVE);
+    private static final Pattern RETURN_ORDER_MONTH = Pattern.compile(
+            "^Return_Orders_(\\d{4})-(\\d{2})\\.xlsx$",
+            Pattern.CASE_INSENSITIVE
+    );
     private static final Pattern WEEKLY_INVENTORY_DATE = Pattern.compile(
             "^沃尔玛PNK周报\\s+(\\d{4})\\.(\\d{1,2})\\.(\\d{1,2})\\s*\\.xlsx$",
             Pattern.CASE_INSENSITIVE
@@ -49,6 +54,7 @@ public class SourceScanner {
         scanInventory(root, files);
         scanWeeklyInventory(files);
         scanProducts(root, files);
+        scanReturnOrders(root, files);
         scanSkuMappingWorkbook(files);
         scanHistoricalWorkbook(files);
         files.sort(Comparator
@@ -130,6 +136,42 @@ public class SourceScanner {
                         null,
                         null,
                         ImportValues.fileTime(Files.getLastModifiedTime(path).toInstant())
+                ));
+            }
+        }
+    }
+
+    private void scanReturnOrders(Path root, List<SourceFileCandidate> files) throws IOException {
+        Path returnRoot = root.resolve("source").resolve("Return_Orders");
+        if (!Files.isDirectory(returnRoot)) {
+            return;
+        }
+        try (Stream<Path> paths = Files.list(returnRoot)) {
+            for (Path path : paths.filter(Files::isRegularFile).toList()) {
+                String name = path.getFileName().toString();
+                if (name.startsWith("~$")) {
+                    continue;
+                }
+                Matcher matcher = RETURN_ORDER_MONTH.matcher(name);
+                if (!matcher.matches()) {
+                    continue;
+                }
+                LocalDate reportMonth;
+                try {
+                    reportMonth = YearMonth.of(
+                            Integer.parseInt(matcher.group(1)),
+                            Integer.parseInt(matcher.group(2))
+                    ).atDay(1);
+                } catch (RuntimeException exception) {
+                    continue;
+                }
+                files.add(new SourceFileCandidate(
+                        path,
+                        root.relativize(path),
+                        ImportFileType.RETURN_ORDER,
+                        null,
+                        reportMonth,
+                        null
                 ));
             }
         }
@@ -282,6 +324,7 @@ public class SourceScanner {
             case HISTORY -> 4;
             case ORDER -> 5;
             case AD_REPORT, AD_AUTO, AD_MANUAL -> 6;
+            case RETURN_ORDER -> 7;
         };
     }
 

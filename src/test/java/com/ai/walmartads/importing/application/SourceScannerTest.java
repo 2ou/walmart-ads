@@ -130,6 +130,27 @@ class SourceScannerTest {
                 });
     }
 
+    @Test
+    void scansMonthlyReturnOrdersUsingMonthFromFileName() throws Exception {
+        Path dataRoot = Files.createDirectories(temp.resolve("return-data"));
+        Path returns = Files.createDirectories(dataRoot.resolve("source").resolve("Return_Orders"));
+        Files.createFile(returns.resolve("Return_Orders_2026-06.xlsx"));
+        Files.createFile(returns.resolve("notes.xlsx"));
+
+        SourceScanner scanner = new SourceScanner(new WalmartAdsProperties(
+                dataRoot, temp.resolve("return-archive"), null, null, null, null
+        ));
+
+        assertThat(scanner.scan())
+                .singleElement()
+                .satisfies(candidate -> {
+                    assertThat(candidate.fileType()).isEqualTo(ImportFileType.RETURN_ORDER);
+                    assertThat(candidate.reportDate()).isEqualTo(java.time.LocalDate.of(2026, 6, 1));
+                    assertThat(candidate.relativePath())
+                            .isEqualTo(Path.of("source", "Return_Orders", "Return_Orders_2026-06.xlsx"));
+                });
+    }
+
     private static SourceFileCandidate report(List<SourceFileCandidate> candidates, String fileName) {
         return candidates.stream()
                 .filter(candidate -> candidate.path().getFileName().toString().equals(fileName))

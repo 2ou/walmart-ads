@@ -306,7 +306,7 @@
     .legend-item { display: flex; align-items: center; gap: 6px; }
     .legend-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--walmart-blue); }
     .legend-dot.yellow { background: var(--spark-yellow); }
-    .chart-wrap { min-height: 292px; padding: 18px 14px 10px; }
+    .chart-wrap { position: relative; min-height: 292px; padding: 18px 14px 10px; }
     .chart-wrap svg { width: 100%; height: 264px; overflow: visible; }
     .chart-grid-line { stroke: rgba(212, 229, 255, .08); stroke-width: 1; }
     .chart-axis-label { fill: var(--slate-dim); font: 10px "Cascadia Mono", monospace; }
@@ -314,6 +314,9 @@
     .chart-sales { fill: none; stroke: var(--walmart-blue); stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
     .chart-spend { fill: none; stroke: var(--spark-yellow); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
     .chart-point { stroke: var(--navy-panel); stroke-width: 2; }
+    .dashboard-chart-hit-target { cursor: crosshair; touch-action: pan-y; }
+    .dashboard-chart-crosshair { stroke: rgba(237, 244, 255, .32); stroke-width: 1; stroke-dasharray: 3 4; pointer-events: none; }
+    .dashboard-chart-marker { stroke: var(--navy-panel); stroke-width: 2; pointer-events: none; }
     .mix-body { display: grid; place-items: center; padding: 20px 18px 22px; }
     .donut {
       --ad-share: 50;
@@ -478,6 +481,105 @@
     .ai-action-priority { color: var(--spark-yellow); font: 700 10px "Cascadia Mono", monospace; }
     .ai-action strong { font-size: 11px; }
     .ai-action p { margin: 3px 0 0; color: var(--steel-copy); font-size: 10px; line-height: 1.5; }
+
+    .sales-metric-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
+    .sales-metric {
+      min-height: 116px;
+      padding: 15px;
+      border: 1px solid var(--line-soft);
+      border-radius: var(--radius-md);
+      background: linear-gradient(155deg, rgba(19, 34, 58, .78), rgba(13, 24, 43, .9));
+      box-shadow: var(--shadow-panel);
+    }
+    .sales-metric > span { display: block; color: var(--steel-copy); font-size: 11px; }
+    .sales-metric strong { display: block; margin-top: 14px; color: var(--frost-ink); font: 750 22px/1 "Cascadia Mono", monospace; letter-spacing: -.045em; }
+    .sales-metric small { display: flex; align-items: center; gap: 6px; margin-top: 10px; color: var(--slate-dim); font-size: 10px; }
+    .sales-change { font-weight: 800; }
+    .sales-change.up { color: var(--signal-green); }
+    .sales-change.down { color: var(--signal-red); }
+    .sales-change.new { color: var(--walmart-blue); }
+    .sales-layout { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(330px, .55fr); gap: 14px; margin-bottom: 14px; }
+    .sales-chart { position: relative; min-height: 308px; padding: 13px 12px 7px; }
+    .sales-chart svg { width: 100%; height: 282px; overflow: visible; }
+    .sales-area-units { fill: rgba(47, 144, 255, .09); }
+    .sales-line-units, .sales-line-revenue { fill: none; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+    .sales-line-units { stroke: var(--walmart-blue); stroke-width: 2.5; }
+    .sales-line-revenue { stroke: var(--spark-yellow); stroke-width: 2; }
+    .sales-chart-hit-target { cursor: crosshair; touch-action: pan-y; }
+    .sales-chart-crosshair { stroke: rgba(237, 244, 255, .32); stroke-width: 1; stroke-dasharray: 3 4; pointer-events: none; }
+    .sales-chart-marker { stroke: var(--navy-panel); stroke-width: 2; pointer-events: none; }
+    .sales-tooltip {
+      position: absolute;
+      z-index: 3;
+      top: 11px;
+      left: 50%;
+      min-width: 188px;
+      padding: 11px 12px;
+      border: 1px solid var(--line-strong);
+      border-radius: 9px;
+      color: var(--steel-copy);
+      background: rgba(13, 24, 43, .97);
+      box-shadow: 0 16px 40px rgba(2, 8, 19, .42);
+      opacity: 0;
+      transform: translate(-50%, -5px);
+      pointer-events: none;
+      transition: opacity .12s var(--ease), transform .12s var(--ease);
+    }
+    .sales-tooltip.show { opacity: 1; transform: translate(-50%, 0); }
+    .sales-tooltip strong { display: block; margin-bottom: 7px; color: var(--frost-ink); font: 750 11px "Cascadia Mono", monospace; }
+    .sales-tooltip-row { display: grid; grid-template-columns: 1fr auto; gap: 18px; min-height: 22px; align-items: center; font-size: 10px; }
+    .sales-tooltip-row b { color: var(--frost-ink); font: 700 10px "Cascadia Mono", monospace; }
+    .sales-rank-list { display: grid; gap: 11px; padding: 15px 16px 17px; }
+    .sales-rank-row { display: grid; grid-template-columns: 30px minmax(0, 1fr) auto; gap: 9px; align-items: center; }
+    .sales-rank-thumb { width: 30px; height: 38px; border: 1px solid var(--line-soft); border-radius: 6px; object-fit: cover; background: rgba(237, 244, 255, .04); }
+    .sales-rank-copy { min-width: 0; }
+    .sales-rank-copy strong { display: block; overflow: hidden; color: var(--frost-ink); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+    .sales-rank-copy span { display: block; margin-top: 3px; overflow: hidden; color: var(--slate-dim); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+    .sales-rank-value { color: var(--frost-ink); font: 700 10px "Cascadia Mono", monospace; }
+    .sales-rank-track { grid-column: 2 / -1; height: 4px; overflow: hidden; border-radius: 999px; background: rgba(145, 160, 185, .11); }
+    .sales-rank-track span { display: block; height: 100%; border-radius: inherit; background: var(--walmart-blue); }
+    .sales-dimension-layout { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-bottom: 14px; }
+    .sales-dimension-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; background: var(--line-soft); }
+    .sales-dimension-row { min-height: 58px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 7px 12px; align-content: center; padding: 10px 13px; background: var(--navy-panel); }
+    .sales-dimension-row strong { overflow: hidden; color: var(--frost-ink); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+    .sales-dimension-row span { color: var(--steel-copy); font: 700 10px "Cascadia Mono", monospace; }
+    .sales-dimension-track { grid-column: 1 / -1; height: 4px; overflow: hidden; border-radius: 999px; background: rgba(145, 160, 185, .11); }
+    .sales-dimension-track span { display: block; height: 100%; border-radius: inherit; background: var(--walmart-blue); }
+    .sales-toolbar { width: 100%; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+    .sales-toolbar-group { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; }
+    .sales-segment-button {
+      min-height: 36px;
+      padding: 0 11px;
+      border: 1px solid var(--line-soft);
+      border-radius: 9px;
+      color: var(--steel-copy);
+      background: transparent;
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 750;
+    }
+    .sales-segment-button.active { color: var(--frost-ink); border-color: rgba(47, 144, 255, .28); background: var(--blue-soft); }
+    .sales-table { min-width: 1340px; }
+    .sales-product { display: grid; grid-template-columns: 38px minmax(210px, 1fr); gap: 10px; align-items: center; }
+    .sales-thumb { width: 38px; height: 48px; border: 1px solid var(--line-soft); border-radius: 7px; object-fit: cover; background: rgba(237, 244, 255, .04); }
+    .sales-product-key { max-width: 260px; padding: 0; overflow: hidden; border: 0; color: var(--walmart-blue); background: transparent; cursor: pointer; font-weight: 800; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
+    .sales-product-key:hover { color: var(--frost-ink); text-decoration: underline; text-underline-offset: 3px; }
+    .sales-product-name, .sales-variant-meta { display: block; max-width: 280px; margin-top: 3px; overflow: hidden; color: var(--slate-dim); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+    .sales-sort-button { padding: 0; border: 0; color: inherit; background: transparent; cursor: pointer; font: inherit; font-weight: inherit; letter-spacing: inherit; white-space: nowrap; }
+    .sales-sort-button.active { color: var(--frost-ink); }
+    .sales-sort-button.active::after { content: " ↓"; color: var(--walmart-blue); }
+    .sales-sort-button.active.asc::after { content: " ↑"; }
+    .sales-share { min-width: 82px; display: grid; grid-template-columns: 1fr auto; gap: 7px; align-items: center; }
+    .sales-share-track { height: 4px; overflow: hidden; border-radius: 999px; background: rgba(145, 160, 185, .11); }
+    .sales-share-track span { display: block; height: 100%; border-radius: inherit; background: var(--walmart-blue); }
+    .sales-share b { color: var(--steel-copy); font: 650 9px "Cascadia Mono", monospace; }
+    .sales-table-delta { font: 700 10px "Cascadia Mono", monospace; }
+    .sales-table-delta.up { color: var(--signal-green); }
+    .sales-table-delta.down { color: var(--signal-red); }
+    .sales-table-delta.new { color: var(--walmart-blue); }
+    .sales-skeleton { position: relative; overflow: hidden; color: transparent !important; background: rgba(145, 160, 185, .08); }
+    .sales-skeleton::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, rgba(237, 244, 255, .06), transparent); transform: translateX(-100%); animation: salesSkeleton 1.2s infinite; }
+    @keyframes salesSkeleton { to { transform: translateX(100%); } }
 
     .inventory-metric-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
     .inventory-metric {
@@ -834,6 +936,7 @@
 
     @media (max-width: 1180px) {
       .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .sales-metric-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
       .inventory-metric-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
       .product-metric-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
       .queue-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -850,6 +953,7 @@
       .topbar { padding: 0 18px; }
       .content { padding: 20px 18px 38px; }
       .dashboard-grid, .matrix-layout, .agent-hero { grid-template-columns: 1fr; }
+      .sales-layout, .sales-dimension-layout { grid-template-columns: 1fr; }
       .inventory-layout { grid-template-columns: 1fr; }
       .product-overview { grid-template-columns: 240px minmax(0, 1fr); }
       .pipeline { grid-template-columns: repeat(2, 1fr); }
@@ -861,6 +965,7 @@
       .page-heading { width: calc(100% - 52px); }
       .top-actions { width: 100%; justify-content: space-between; }
       .metric-grid, .queue-grid, .form-grid { grid-template-columns: 1fr; }
+      .sales-metric-grid { grid-template-columns: 1fr; }
       .inventory-metric-grid, .inventory-forecast-body, .production-form-grid { grid-template-columns: 1fr; }
       .product-metric-grid, .product-overview, .attribute-grid, .raw-field-grid { grid-template-columns: 1fr; }
       .operation-form-grid, .operation-summary-grid, .operation-impact-grid { grid-template-columns: 1fr 1fr; }
@@ -875,6 +980,19 @@
       .size-chip-list { justify-content: flex-start; }
       .production-form .field-wide { grid-column: auto; }
       .inventory-table-tools, .table-footer { align-items: stretch; flex-direction: column; }
+      .sales-toolbar { align-items: stretch; flex-direction: column; }
+      .sales-toolbar-group { overflow-x: auto; flex-wrap: nowrap; padding-bottom: 4px; }
+      .sales-segment-button { min-height: 44px; }
+      #salesStatusFilters .filter-button,
+      .sales-sort-button,
+      .sales-product-key,
+      #salesPrevPage,
+      #salesNextPage { min-height: 44px; }
+      .sales-sort-button { display: inline-flex; align-items: center; justify-content: flex-end; padding-inline: 4px; }
+      .sales-product-key { display: inline-flex; align-items: center; }
+      .sales-chart { min-height: 286px; padding-inline: 5px; }
+      .sales-chart svg { height: 262px; }
+      .sales-dimension-list { grid-template-columns: 1fr; }
       .inventory-filter-group { overflow-x: auto; flex-wrap: nowrap; padding-bottom: 4px; }
       .inventory-chart-controls { width: 100%; justify-items: stretch; }
       .inventory-range, .inventory-series-toggle { justify-content: flex-start; }
@@ -922,6 +1040,10 @@
         <button class="nav-button active" type="button" data-view="dashboard">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="4" rx="1.5"/><rect x="14" y="11" width="7" height="10" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/></svg>
           <span>经营驾驶舱</span>
+        </button>
+        <button class="nav-button" type="button" data-view="sales">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 19V9m5 10V5m5 14v-7m5 7V3"/><path d="M3 21h18"/><path d="m5 7 4-3 5 5 5-6"/></svg>
+          <span>销量分析</span>
         </button>
         <button class="nav-button" type="button" data-view="diagnosis">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 19V9m5 10V5m5 14v-7m5 7V3"/><path d="M3 21h18"/></svg>
@@ -1000,8 +1122,8 @@
           <div class="dashboard-grid">
             <section class="panel" aria-labelledby="trendTitle">
               <div class="panel-header">
-                <div><h2 class="panel-title" id="trendTitle">销售与广告投入趋势</h2><p class="panel-subtitle">每日销售额与广告费，双轴独立缩放</p></div>
-                <div class="legend"><span class="legend-item"><span class="legend-dot"></span>销售额</span><span class="legend-item"><span class="legend-dot yellow"></span>广告费</span></div>
+                <div><h2 class="panel-title" id="trendTitle">销售与广告投入趋势</h2><p class="panel-subtitle">每日销售额与广告投入，双轴独立缩放</p></div>
+                <div class="legend"><span class="legend-item"><span class="legend-dot"></span>销售额</span><span class="legend-item"><span class="legend-dot yellow"></span>广告投入</span></div>
               </div>
               <div class="chart-wrap" id="trendChart"></div>
             </section>
@@ -1013,6 +1135,90 @@
           <section class="panel table-panel" aria-labelledby="topSkuTitle">
             <div class="panel-header"><div><h2 class="panel-title" id="topSkuTitle">SKU 经营摘要</h2><p class="panel-subtitle">按销售额排序，显示前 8 个父 SKU</p></div><button class="secondary-button" type="button" data-jump="sku">查看矩阵</button></div>
             <div class="table-scroll"><table><thead><tr><th>父 SKU</th><th class="num">销售额</th><th class="num">订单</th><th class="num">广告费</th><th class="num">ROAS</th><th class="num">广告订单占比</th><th>建议</th></tr></thead><tbody id="topSkuBody"></tbody></table></div>
+          </section>
+        </section>
+
+        <section class="view" id="view-sales" aria-labelledby="pageTitle">
+          <div class="section-intro">
+            <div><h2>按真实成交价看销量、销售额与库存承接</h2><p>销售日期读取订单表 Order Date，销售额按 Qty × Item Cost 计算。款号可以继续下钻到颜色、尺码和具体 SKU。</p></div>
+            <div class="section-summary"><strong id="salesSkuCount">0</strong>个动销 SKU</div>
+          </div>
+          <div class="status-banner" id="salesStatusBanner">
+            <div class="status-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 19V9m5 10V5m5 14v-7m5 7V3"/><path d="M3 21h18"/></svg></div>
+            <div class="status-copy"><strong id="salesStatusHeadline">正在读取订单销量</strong><span id="salesStatusDetail">请稍候。</span></div>
+            <div class="status-range mono" id="salesDateRange"></div>
+          </div>
+          <div class="sales-metric-grid" id="salesMetricGrid"></div>
+          <div class="sales-layout">
+            <section class="panel" aria-labelledby="salesTrendTitle">
+              <div class="panel-header">
+                <div><h2 class="panel-title" id="salesTrendTitle">销量与订单销售额趋势</h2><p class="panel-subtitle">左轴为件数，右轴为美元销售额</p></div>
+                <div class="legend"><span class="legend-item"><span class="legend-dot"></span>销量</span><span class="legend-item"><span class="legend-dot yellow"></span>订单销售额</span></div>
+              </div>
+              <div class="sales-chart" id="salesTrendChart"></div>
+            </section>
+            <section class="panel" aria-labelledby="salesRankTitle">
+              <div class="panel-header">
+                <div><h2 class="panel-title" id="salesRankTitle">款号排名</h2><p class="panel-subtitle">显示当前周期前 8 个款号</p></div>
+                <div class="sales-toolbar-group" id="salesRankMetric" role="group" aria-label="排名指标">
+                  <button class="sales-segment-button active" type="button" data-sales-rank="units" aria-pressed="true">按销量</button>
+                  <button class="sales-segment-button" type="button" data-sales-rank="revenue" aria-pressed="false">按销售额</button>
+                </div>
+              </div>
+              <div class="sales-rank-list" id="salesRankList"></div>
+            </section>
+          </div>
+          <div class="sales-dimension-layout">
+            <section class="panel" aria-labelledby="salesColorTitle">
+              <div class="panel-header"><div><h2 class="panel-title" id="salesColorTitle">颜色销量分布</h2><p class="panel-subtitle">按产品上传表颜色字段归集</p></div></div>
+              <div class="sales-dimension-list" id="salesColorList"></div>
+            </section>
+            <section class="panel" aria-labelledby="salesSizeTitle">
+              <div class="panel-header"><div><h2 class="panel-title" id="salesSizeTitle">尺码销量分布</h2><p class="panel-subtitle">按产品上传表尺码字段归集</p></div></div>
+              <div class="sales-dimension-list" id="salesSizeList"></div>
+            </section>
+          </div>
+          <section class="panel table-panel" aria-labelledby="salesTableTitle">
+            <div class="panel-header">
+              <div><h2 class="panel-title" id="salesTableTitle">销量明细</h2><p class="panel-subtitle" id="salesTableSubtitle">按销量从高到低排序</p></div>
+              <div class="table-tools"><label class="sr-only" for="salesSearch">搜索款号、SKU 或商品名称</label><input class="search-input" id="salesSearch" type="search" placeholder="搜索款号、SKU 或商品名称"></div>
+            </div>
+            <div class="panel-header">
+              <div class="sales-toolbar">
+                <div class="sales-toolbar-group" id="salesGroupControls" role="group" aria-label="销量聚合维度">
+                  <button class="sales-segment-button active" type="button" data-sales-group="parent" aria-pressed="true">按款号</button>
+                  <button class="sales-segment-button" type="button" data-sales-group="sku" aria-pressed="false">按 SKU</button>
+                </div>
+                <div class="sales-toolbar-group" id="salesStatusFilters" role="group" aria-label="销量状态筛选">
+                  <button class="filter-button active" type="button" data-sales-status="all">全部</button>
+                  <button class="filter-button" type="button" data-sales-status="GROWING">增长</button>
+                  <button class="filter-button" type="button" data-sales-status="DECLINING">下滑</button>
+                  <button class="filter-button" type="button" data-sales-status="NEW">新增动销</button>
+                  <button class="filter-button" type="button" data-sales-status="NO_SALES">无销量</button>
+                </div>
+              </div>
+            </div>
+            <div class="table-scroll">
+              <table class="sales-table">
+                <thead>
+                  <tr>
+                    <th>商品与维度</th>
+                    <th>状态</th>
+                    <th class="num"><button class="sales-sort-button active" type="button" data-sales-sort="units">销量</button></th>
+                    <th class="num"><button class="sales-sort-button" type="button" data-sales-sort="dailyUnits">日均</button></th>
+                    <th class="num"><button class="sales-sort-button" type="button" data-sales-sort="revenue">销售额</button></th>
+                    <th class="num"><button class="sales-sort-button" type="button" data-sales-sort="sharePct">占比</button></th>
+                    <th class="num"><button class="sales-sort-button" type="button" data-sales-sort="previousUnits">上期销量</button></th>
+                    <th class="num"><button class="sales-sort-button" type="button" data-sales-sort="unitsChangePct">环比</button></th>
+                    <th class="num"><button class="sales-sort-button" type="button" data-sales-sort="averageUnitPrice">成交均价</button></th>
+                    <th class="num"><button class="sales-sort-button" type="button" data-sales-sort="availableUnits">可售库存</button></th>
+                    <th class="num"><button class="sales-sort-button" type="button" data-sales-sort="availableDays">预计可售天数</button></th>
+                  </tr>
+                </thead>
+                <tbody id="salesTableBody"></tbody>
+              </table>
+            </div>
+            <div class="table-footer"><span id="salesTableInfo">0 条记录</span><div class="pagination"><button id="salesPrevPage" type="button">上一页</button><span id="salesPageInfo">1 / 1</span><button id="salesNextPage" type="button">下一页</button></div></div>
           </section>
         </section>
 
@@ -1315,6 +1521,17 @@
         minClicks: DATA.defaults.minClicks,
         minSpend: DATA.defaults.minSpend,
       },
+      sales: null,
+      salesLoading: false,
+      salesRequestId: 0,
+      salesGroup: "parent",
+      salesStatus: "all",
+      salesSearch: "",
+      salesSort: "units",
+      salesSortDirection: "desc",
+      salesRankMetric: "units",
+      salesPage: 0,
+      salesPageSize: 50,
       inventory: null,
       inventoryLoading: false,
       inventoryTargetDays: 45,
@@ -1337,7 +1554,7 @@
       aiStatus: null,
     };
 
-    const titles = { dashboard: "经营驾驶舱", diagnosis: "广告诊断", sku: "SKU 机会矩阵", inventory: "库存管理", products: "产品库", operations: "运营记录", agent: "Agent 控制室", imports: "数据导入" };
+    const titles = { dashboard: "经营驾驶舱", sales: "销量分析", diagnosis: "广告诊断", sku: "SKU 机会矩阵", inventory: "库存管理", products: "产品库", operations: "运营记录", agent: "Agent 控制室", imports: "数据导入" };
     const decisionCopy = {
       scale: { label: "建议放量", short: "放量", reason: "ROAS 达标且已有稳定广告订单，可进入小步增量测试。" },
       reduce: { label: "建议降耗", short: "降耗", reason: "达到样本门槛后仍低于降耗 ROAS，需要降低出价或暂停低效商品。" },
@@ -1355,6 +1572,13 @@
       HEALTHY: { label: "库存健康", badge: "scale", group: "healthy" },
     };
     const confidenceCopy = { HIGH: "高", MEDIUM: "中", LOW: "低" };
+    const salesStatusCopy = {
+      GROWING: { label: "增长", badge: "scale" },
+      DECLINING: { label: "下滑", badge: "reduce" },
+      NEW: { label: "新增动销", badge: "optimize" },
+      STABLE: { label: "稳定", badge: "collect" },
+      NO_SALES: { label: "无销量", badge: "collect" },
+    };
     const operationActionCopy = {
       NOTE: "仅备注",
       LISTING_TITLE: "Listing 标题",
@@ -1482,19 +1706,75 @@
     function renderTrend() {
       const rows = DATA.daily.filter((row) => inWindow(row, state.periodDays));
       if (!rows.length) { $("#trendChart").innerHTML = `<div class="empty-state"><strong>没有趋势数据</strong>请检查分析周期。</div>`; return; }
-      const width = 760, height = 260, left = 42, right = 34, top = 18, bottom = 34;
+      const width = 760, height = 260, left = 52, right = 58, top = 18, bottom = 34;
       const plotW = width - left - right, plotH = height - top - bottom;
       const maxSales = Math.max(...rows.map((row) => number(row.revenue)), 1) * 1.12;
       const maxSpend = Math.max(...rows.map((row) => number(row.spend)), 1) * 1.12;
-      const points = (key, max) => rows.map((row, index) => ({ x: left + (rows.length === 1 ? plotW / 2 : index * plotW / (rows.length - 1)), y: top + plotH - number(row[key]) / max * plotH, row }));
+      const xFor = (index) => left + (rows.length === 1 ? plotW / 2 : index * plotW / (rows.length - 1));
+      const points = (key, max) => rows.map((row, index) => ({ x: xFor(index), y: top + plotH - number(row[key]) / max * plotH, row }));
       const sales = points("revenue", maxSales), spend = points("spend", maxSpend);
       const path = (items) => items.map((point, index) => `${index ? "L" : "M"}${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(" ");
       const area = `${path(sales)} L${sales.at(-1).x.toFixed(1)},${top + plotH} L${sales[0].x.toFixed(1)},${top + plotH} Z`;
       const labelEvery = Math.max(1, Math.ceil(rows.length / 7));
-      const grid = [0, .25, .5, .75, 1].map((t) => { const y = top + plotH * t; return `<line class="chart-grid-line" x1="${left}" x2="${left + plotW}" y1="${y}" y2="${y}"/><text class="chart-axis-label" x="${left - 8}" y="${y + 3}" text-anchor="end">${money(maxSales * (1 - t))}</text>`; }).join("");
+      const grid = [0, .25, .5, .75, 1].map((t) => {
+        const y = top + plotH * t;
+        return `<line class="chart-grid-line" x1="${left}" x2="${left + plotW}" y1="${y}" y2="${y}"/><text class="chart-axis-label" x="${left - 8}" y="${y + 3}" text-anchor="end">${money(maxSales * (1 - t))}</text><text class="chart-axis-label" x="${left + plotW + 8}" y="${y + 3}" text-anchor="start">${money(maxSpend * (1 - t))}</text>`;
+      }).join("");
       const labels = rows.map((row, index) => index % labelEvery === 0 || index === rows.length - 1 ? `<text class="chart-axis-label" x="${sales[index].x}" y="${height - 9}" text-anchor="middle">${dateText(row.date)}</text>` : "").join("");
-      const dots = sales.map((point, index) => `<circle class="chart-point" cx="${point.x}" cy="${point.y}" r="4" fill="var(--walmart-blue)"><title>${point.row.date} 销售额 ${money(point.row.revenue, 2)}，广告费 ${money(point.row.spend, 2)}</title></circle><circle class="chart-point" cx="${spend[index].x}" cy="${spend[index].y}" r="3.4" fill="var(--spark-yellow)"><title>${point.row.date} 广告费 ${money(point.row.spend, 2)}</title></circle>`).join("");
-      $("#trendChart").innerHTML = `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="销售额与广告费趋势图">${grid}<path class="chart-area" d="${area}"/><path class="chart-sales" d="${path(sales)}"/><path class="chart-spend" d="${path(spend)}"/>${dots}${labels}<text class="chart-axis-label" x="${width - 4}" y="${top + 3}" text-anchor="end">广告费峰值 ${money(maxSpend / 1.12)}</text></svg>`;
+      const dots = sales.map((point, index) => `<circle class="chart-point" cx="${point.x}" cy="${point.y}" r="3.6" fill="var(--walmart-blue)"/><circle class="chart-point" cx="${spend[index].x}" cy="${spend[index].y}" r="3.2" fill="var(--spark-yellow)"/>`).join("");
+      const chart = $("#trendChart");
+      chart.innerHTML = `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="销售额与广告投入趋势图">${grid}<path class="chart-area" d="${area}"/><path class="chart-sales" d="${path(sales)}"/><path class="chart-spend" d="${path(spend)}"/>${dots}${labels}<line class="dashboard-chart-crosshair" id="dashboardTrendCrosshair" x1="${left}" x2="${left}" y1="${top}" y2="${top + plotH}" hidden/><g id="dashboardTrendMarkers"></g><rect class="dashboard-chart-hit-target" id="dashboardTrendHitTarget" x="${left}" y="${top}" width="${plotW}" height="${plotH}" fill="transparent" tabindex="0" role="slider" aria-label="销售与广告投入日期，使用左右方向键查看" aria-valuemin="1" aria-valuemax="${rows.length}" aria-valuenow="${rows.length}"/></svg><div class="sales-tooltip" id="dashboardTrendTooltip" role="status" aria-live="polite"></div>`;
+
+      const svg = chart.querySelector("svg");
+      const hitTarget = $("#dashboardTrendHitTarget");
+      const crosshair = $("#dashboardTrendCrosshair");
+      const markers = $("#dashboardTrendMarkers");
+      const tooltip = $("#dashboardTrendTooltip");
+      let activeIndex = rows.length - 1;
+      const showPoint = (index) => {
+        activeIndex = Math.max(0, Math.min(rows.length - 1, index));
+        const row = rows[activeIndex];
+        const salesPoint = sales[activeIndex];
+        const spendPoint = spend[activeIndex];
+        crosshair.setAttribute("x1", salesPoint.x);
+        crosshair.setAttribute("x2", salesPoint.x);
+        crosshair.hidden = false;
+        markers.innerHTML = `<circle class="dashboard-chart-marker" cx="${salesPoint.x}" cy="${salesPoint.y}" r="5" fill="var(--walmart-blue)"/><circle class="dashboard-chart-marker" cx="${spendPoint.x}" cy="${spendPoint.y}" r="5" fill="var(--spark-yellow)"/>`;
+        tooltip.innerHTML = `<strong>${fullDateText(row.date)}</strong><div class="sales-tooltip-row"><span>销售额</span><b>${money(row.revenue, 2)}</b></div><div class="sales-tooltip-row"><span>广告投入</span><b>${money(row.spend, 2)}</b></div>`;
+        const tooltipHalf = Math.min(108, Math.max(92, chart.clientWidth / 4));
+        const tooltipX = salesPoint.x / width * chart.clientWidth;
+        tooltip.style.left = `${Math.max(tooltipHalf, Math.min(chart.clientWidth - tooltipHalf, tooltipX))}px`;
+        tooltip.classList.add("show");
+        hitTarget.setAttribute("aria-valuenow", String(activeIndex + 1));
+        hitTarget.setAttribute("aria-valuetext", `${fullDateText(row.date)}，销售额 ${money(row.revenue, 2)}，广告投入 ${money(row.spend, 2)}`);
+      };
+      const hidePoint = () => {
+        crosshair.hidden = true;
+        markers.innerHTML = "";
+        tooltip.classList.remove("show");
+      };
+      const indexFromPointer = (event) => {
+        const rect = svg.getBoundingClientRect();
+        const pointerX = (event.clientX - rect.left) / rect.width * width;
+        return sales.reduce((nearest, point, index) => (
+          Math.abs(point.x - pointerX) < Math.abs(sales[nearest].x - pointerX) ? index : nearest
+        ), 0);
+      };
+      hitTarget.addEventListener("pointermove", (event) => showPoint(indexFromPointer(event)));
+      hitTarget.addEventListener("pointerdown", (event) => showPoint(indexFromPointer(event)));
+      hitTarget.addEventListener("pointerleave", () => {
+        if (document.activeElement !== hitTarget) hidePoint();
+      });
+      hitTarget.addEventListener("focus", () => showPoint(activeIndex));
+      hitTarget.addEventListener("blur", hidePoint);
+      hitTarget.addEventListener("keydown", (event) => {
+        if (["ArrowLeft", "ArrowRight", "Home", "End", "Escape"].includes(event.key)) event.preventDefault();
+        if (event.key === "ArrowLeft") showPoint(activeIndex - 1);
+        if (event.key === "ArrowRight") showPoint(activeIndex + 1);
+        if (event.key === "Home") showPoint(0);
+        if (event.key === "End") showPoint(rows.length - 1);
+        if (event.key === "Escape") hidePoint();
+      });
     }
 
     function renderOrderMix(current) {
@@ -1561,6 +1841,287 @@
       $("#runSummary").innerHTML = `<div class="run-stat"><strong>${counts.scale}</strong><span>建议放量</span></div><div class="run-stat"><strong>${counts.reduce}</strong><span>建议降耗</span></div><div class="run-stat"><strong>${counts.optimize}</strong><span>继续优化</span></div>`;
       const samples = rows.filter((row) => row.decision !== "collect").slice(0, 5);
       $("#runLog").innerHTML = samples.map((row, index) => `<div class="log-row"><span class="log-time">RULE-${String(index + 1).padStart(2, "0")}</span><span class="log-copy"><strong>${escapeHtml(row.sku || row.campaign)}</strong>：${decisionCopy[row.decision].reason}</span><span class="status-badge ${row.decision}">${decisionCopy[row.decision].short}</span></div>`).join("") || `<div class="empty-state"><strong>没有触发动作规则</strong>分析已完成，当前仅保留观察项。</div>`;
+    }
+
+    function salesChange(value) {
+      if (value === null || value === undefined) return { text: "新增", cls: "new", arrow: "" };
+      const current = number(value);
+      if (Math.abs(current) < .0005) return { text: "持平", cls: "", arrow: "" };
+      return {
+        text: `${Math.abs(current * 100).toFixed(1)}%`,
+        cls: current > 0 ? "up" : "down",
+        arrow: current > 0 ? "↑" : "↓",
+      };
+    }
+
+    function salesMetricCard(label, value, changeValue, note) {
+      const change = salesChange(changeValue);
+      return `<article class="sales-metric"><span>${label}</span><strong>${value}</strong><small><span class="sales-change ${change.cls}">${change.arrow} ${change.text}</span><span>${note}</span></small></article>`;
+    }
+
+    function renderSales() {
+      if (!state.sales) return;
+      const { meta, summary } = state.sales;
+      $("#salesSkuCount").textContent = integer(summary.activeSkus);
+      $("#salesStatusHeadline").textContent = meta.sampleDays >= meta.periodDays
+        ? "当前周期订单数据完整"
+        : `当前周期包含 ${meta.sampleDays} 个销量日`;
+      $("#salesStatusDetail").textContent = `销售日期读取 ${meta.dateSource}，销售额读取 ${meta.priceSource}。上传产品表售价不参与计算。`;
+      $("#salesDateRange").textContent = `${meta.currentStart} 至 ${meta.currentEnd}`;
+      $("#salesMetricGrid").innerHTML = [
+        salesMetricCard("销售件数", `${integer(summary.units)} 件`, summary.unitsChangePct, "较前一周期"),
+        salesMetricCard("订单销售额", money(summary.revenue, 2), summary.revenueChangePct, "Qty × Item Cost"),
+        salesMetricCard("日均销量", `${number(summary.dailyUnits).toFixed(2)} 件`, summary.unitsChangePct, `${meta.periodDays} 个自然日`),
+        salesMetricCard("成交均价", money(summary.averageUnitPrice, 2), summary.averagePriceChangePct, "按销售件数加权"),
+        salesMetricCard("动销 SKU", `${integer(summary.activeSkus)} / ${integer(summary.knownSkus)}`, summary.activeSkuChangePct, `动销率 ${percent(summary.activeRate)}`),
+        salesMetricCard("订单数", integer(summary.orders), summary.ordersChangePct, `${integer(summary.activeParents)} 个活跃款号`),
+      ].join("");
+      renderSalesTrend(state.sales.daily, meta.sampleDays);
+      renderSalesRanking();
+      renderSalesDimensions(state.sales.colors, "#salesColorList");
+      renderSalesDimensions(state.sales.sizes, "#salesSizeList");
+      renderSalesTable();
+      updatePageMeta();
+    }
+
+    function renderSalesTrend(rows, sampleDays) {
+      const chart = $("#salesTrendChart");
+      if (!sampleDays || !rows?.length) {
+        chart.innerHTML = `<div class="empty-state"><strong>当前周期没有订单销量</strong>导入包含 Order Date 的订单表后，这里会展示每日销量与订单销售额。</div>`;
+        return;
+      }
+      const width = 900, height = 282, left = 58, right = 70, top = 22, bottom = 38;
+      const plotW = width - left - right, plotH = height - top - bottom;
+      const maxUnits = Math.max(...rows.map((row) => number(row.units)), 1) * 1.1;
+      const maxRevenue = Math.max(...rows.map((row) => number(row.revenue)), 1) * 1.1;
+      const xFor = (index) => rows.length === 1 ? left + plotW / 2 : left + index / (rows.length - 1) * plotW;
+      const unitsPoints = rows.map((row, index) => ({
+        x: xFor(index),
+        y: top + plotH - number(row.units) / maxUnits * plotH,
+        row,
+      }));
+      const revenuePoints = rows.map((row, index) => ({
+        x: xFor(index),
+        y: top + plotH - number(row.revenue) / maxRevenue * plotH,
+        row,
+      }));
+      const path = (points) => points.map((item, index) => `${index ? "L" : "M"}${item.x.toFixed(1)},${item.y.toFixed(1)}`).join(" ");
+      const area = `${path(unitsPoints)} L${unitsPoints.at(-1).x.toFixed(1)},${top + plotH} L${unitsPoints[0].x.toFixed(1)},${top + plotH} Z`;
+      const grid = [0, .25, .5, .75, 1].map((step) => {
+        const y = top + plotH * step;
+        return `<line class="chart-grid-line" x1="${left}" x2="${left + plotW}" y1="${y}" y2="${y}"/><text class="chart-axis-label" x="${left - 8}" y="${y + 3}" text-anchor="end">${integer(maxUnits * (1 - step))}</text><text class="chart-axis-label" x="${width - right + 8}" y="${y + 3}" text-anchor="start">${money(maxRevenue * (1 - step), 0)}</text>`;
+      }).join("");
+      const labelEvery = Math.max(1, Math.ceil(rows.length / 6));
+      const labels = rows.map((row, index) => index % labelEvery === 0 || index === rows.length - 1
+        ? `<text class="chart-axis-label" x="${xFor(index)}" y="${height - 10}" text-anchor="middle">${dateText(row.date)}</text>`
+        : "").join("");
+      chart.innerHTML = `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="订单销量与订单销售额趋势">${grid}<path class="sales-area-units" d="${area}"/><path class="sales-line-units" d="${path(unitsPoints)}"/><path class="sales-line-revenue" d="${path(revenuePoints)}"/>${labels}<line class="sales-chart-crosshair" id="salesTrendCrosshair" x1="${left}" x2="${left}" y1="${top}" y2="${top + plotH}" hidden/><g id="salesTrendMarkers"></g><rect class="sales-chart-hit-target" id="salesTrendHitTarget" x="${left}" y="${top}" width="${plotW}" height="${plotH}" fill="transparent" tabindex="0" role="slider" aria-label="销量日期，使用左右方向键查看" aria-valuemin="1" aria-valuemax="${rows.length}" aria-valuenow="${rows.length}"/></svg><div class="sales-tooltip" id="salesTrendTooltip" role="status" aria-live="polite"></div>`;
+
+      const svg = chart.querySelector("svg");
+      const hitTarget = $("#salesTrendHitTarget");
+      const crosshair = $("#salesTrendCrosshair");
+      const markers = $("#salesTrendMarkers");
+      const tooltip = $("#salesTrendTooltip");
+      let activeIndex = rows.length - 1;
+      const showPoint = (index) => {
+        activeIndex = Math.max(0, Math.min(rows.length - 1, index));
+        const row = rows[activeIndex];
+        const unitsPoint = unitsPoints[activeIndex];
+        const revenuePoint = revenuePoints[activeIndex];
+        crosshair.setAttribute("x1", unitsPoint.x);
+        crosshair.setAttribute("x2", unitsPoint.x);
+        crosshair.hidden = false;
+        markers.innerHTML = `<circle class="sales-chart-marker" cx="${unitsPoint.x}" cy="${unitsPoint.y}" r="4.5" fill="var(--walmart-blue)"/><circle class="sales-chart-marker" cx="${revenuePoint.x}" cy="${revenuePoint.y}" r="4.5" fill="var(--spark-yellow)"/>`;
+        tooltip.innerHTML = `<strong>${fullDateText(row.date)}</strong><div class="sales-tooltip-row"><span>销量</span><b>${integer(row.units)} 件</b></div><div class="sales-tooltip-row"><span>订单销售额</span><b>${money(row.revenue, 2)}</b></div><div class="sales-tooltip-row"><span>订单数</span><b>${integer(row.orders)}</b></div><div class="sales-tooltip-row"><span>成交均价</span><b>${money(row.averageUnitPrice, 2)}</b></div>`;
+        const tooltipHalf = Math.min(108, Math.max(92, chart.clientWidth / 4));
+        const tooltipX = unitsPoint.x / width * chart.clientWidth;
+        tooltip.style.left = `${Math.max(tooltipHalf, Math.min(chart.clientWidth - tooltipHalf, tooltipX))}px`;
+        tooltip.classList.add("show");
+        hitTarget.setAttribute("aria-valuenow", String(activeIndex + 1));
+        hitTarget.setAttribute("aria-valuetext", `${fullDateText(row.date)}，销量 ${integer(row.units)} 件，订单销售额 ${money(row.revenue, 2)}，订单数 ${integer(row.orders)}`);
+      };
+      const hidePoint = () => {
+        crosshair.hidden = true;
+        markers.innerHTML = "";
+        tooltip.classList.remove("show");
+      };
+      const indexFromPointer = (event) => {
+        const rect = svg.getBoundingClientRect();
+        const pointerX = (event.clientX - rect.left) / rect.width * width;
+        return unitsPoints.reduce((nearest, point, index) => (
+          Math.abs(point.x - pointerX) < Math.abs(unitsPoints[nearest].x - pointerX) ? index : nearest
+        ), 0);
+      };
+      hitTarget.addEventListener("pointermove", (event) => showPoint(indexFromPointer(event)));
+      hitTarget.addEventListener("pointerdown", (event) => showPoint(indexFromPointer(event)));
+      hitTarget.addEventListener("pointerleave", () => {
+        if (document.activeElement !== hitTarget) hidePoint();
+      });
+      hitTarget.addEventListener("focus", () => showPoint(activeIndex));
+      hitTarget.addEventListener("blur", hidePoint);
+      hitTarget.addEventListener("keydown", (event) => {
+        if (["ArrowLeft", "ArrowRight", "Home", "End", "Escape"].includes(event.key)) event.preventDefault();
+        if (event.key === "ArrowLeft") showPoint(activeIndex - 1);
+        if (event.key === "ArrowRight") showPoint(activeIndex + 1);
+        if (event.key === "Home") showPoint(0);
+        if (event.key === "End") showPoint(rows.length - 1);
+        if (event.key === "Escape") hidePoint();
+      });
+    }
+
+    function renderSalesRanking() {
+      if (!state.sales) return;
+      const metric = state.salesRankMetric;
+      const rows = state.sales.parentRows
+        .filter((row) => number(row[metric]) > 0)
+        .slice()
+        .sort((a, b) => number(b[metric]) - number(a[metric]))
+        .slice(0, 8);
+      $$("#salesRankMetric [data-sales-rank]").forEach((button) => {
+        const active = button.dataset.salesRank === metric;
+        button.classList.toggle("active", active);
+        button.setAttribute("aria-pressed", String(active));
+      });
+      if (!rows.length) {
+        $("#salesRankList").innerHTML = `<div class="empty-state"><strong>当前周期没有销量</strong>切换分析周期或导入订单数据。</div>`;
+        return;
+      }
+      const max = Math.max(...rows.map((row) => number(row[metric])), 1);
+      $("#salesRankList").innerHTML = rows.map((row) => {
+        const image = row.imageUrl
+          ? `<img class="sales-rank-thumb" src="${escapeHtml(row.imageUrl)}" alt="" loading="lazy">`
+          : `<span class="sales-rank-thumb" aria-hidden="true"></span>`;
+        const value = metric === "revenue" ? money(row.revenue, 2) : `${integer(row.units)} 件`;
+        return `<div class="sales-rank-row">${image}<div class="sales-rank-copy"><strong>${escapeHtml(row.parentSku)}</strong><span>${escapeHtml(row.itemName || "")}</span></div><span class="sales-rank-value">${value}</span><div class="sales-rank-track"><span style="width:${number(row[metric]) / max * 100}%"></span></div></div>`;
+      }).join("");
+    }
+
+    function renderSalesDimensions(rows, target) {
+      const active = (rows || []).filter((row) => number(row.units) > 0).slice(0, 8);
+      if (!active.length) {
+        $(target).innerHTML = `<div class="empty-state"><strong>当前周期没有可归集销量</strong>产品颜色或尺码缺失时会归入“未填写”。</div>`;
+        return;
+      }
+      const max = Math.max(...active.map((row) => number(row.units)), 1);
+      $(target).innerHTML = active.map((row) => `<div class="sales-dimension-row"><strong title="${escapeHtml(row.label)}">${escapeHtml(row.label)}</strong><span>${integer(row.units)} 件 · ${percent(row.sharePct)}</span><div class="sales-dimension-track"><span style="width:${number(row.units) / max * 100}%"></span></div></div>`).join("");
+    }
+
+    function salesFilteredRows() {
+      if (!state.sales) return [];
+      const source = state.salesGroup === "parent" ? state.sales.parentRows : state.sales.skuRows;
+      const query = state.salesSearch.trim().toLowerCase();
+      const filtered = source.filter((row) => {
+        const key = state.salesGroup === "parent" ? row.parentSku : row.sku;
+        const haystack = `${key || ""} ${row.parentSku || ""} ${row.itemName || ""} ${row.itemId || ""} ${row.color || ""} ${row.size || ""}`.toLowerCase();
+        return (state.salesStatus === "all" || row.status === state.salesStatus)
+          && (!query || haystack.includes(query));
+      });
+      const direction = state.salesSortDirection === "asc" ? 1 : -1;
+      return filtered.slice().sort((a, b) => {
+        const left = a[state.salesSort];
+        const right = b[state.salesSort];
+        const leftNumber = left === null || left === undefined ? Number.NEGATIVE_INFINITY : number(left);
+        const rightNumber = right === null || right === undefined ? Number.NEGATIVE_INFINITY : number(right);
+        if (leftNumber !== rightNumber) return (leftNumber - rightNumber) * direction;
+        const leftKey = state.salesGroup === "parent" ? a.parentSku : a.sku;
+        const rightKey = state.salesGroup === "parent" ? b.parentSku : b.sku;
+        return String(leftKey).localeCompare(String(rightKey), "zh-CN");
+      });
+    }
+
+    function renderSalesTable() {
+      if (!state.sales) return;
+      const rows = salesFilteredRows();
+      const totalPages = Math.max(1, Math.ceil(rows.length / state.salesPageSize));
+      state.salesPage = Math.min(state.salesPage, totalPages - 1);
+      const start = state.salesPage * state.salesPageSize;
+      const pageRows = rows.slice(start, start + state.salesPageSize);
+      const groupLabel = state.salesGroup === "parent" ? "款号" : "SKU";
+      $("#salesTableSubtitle").textContent = `${state.periodDays} 天销量窗口，按${groupLabel}展示；销售额来自订单表成交价。`;
+      $$("#salesGroupControls [data-sales-group]").forEach((button) => {
+        const active = button.dataset.salesGroup === state.salesGroup;
+        button.classList.toggle("active", active);
+        button.setAttribute("aria-pressed", String(active));
+      });
+      $$("#salesStatusFilters [data-sales-status]").forEach((button) => button.classList.toggle("active", button.dataset.salesStatus === state.salesStatus));
+      $$(".sales-sort-button").forEach((button) => {
+        const active = button.dataset.salesSort === state.salesSort;
+        button.classList.toggle("active", active);
+        button.classList.toggle("asc", active && state.salesSortDirection === "asc");
+        const header = button.closest("th");
+        if (active) header.setAttribute("aria-sort", state.salesSortDirection === "asc" ? "ascending" : "descending");
+        else header.removeAttribute("aria-sort");
+      });
+      $("#salesTableBody").innerHTML = pageRows.map((row) => {
+        const key = state.salesGroup === "parent" ? row.parentSku : row.sku;
+        const image = row.imageUrl
+          ? `<img class="sales-thumb" src="${escapeHtml(row.imageUrl)}" alt="" loading="lazy">`
+          : `<span class="sales-thumb" aria-hidden="true"></span>`;
+        const variantMeta = state.salesGroup === "parent"
+          ? `${integer(row.variantCount)} SKU · ${integer(row.colorCount)} 色 · ${integer(row.sizeCount)} 码`
+          : `${escapeHtml(row.color || "颜色未填")} · ${escapeHtml(row.size || "尺码未填")} · 款号 ${escapeHtml(row.parentSku || "")}`;
+        const status = salesStatusCopy[row.status] || salesStatusCopy.STABLE;
+        const change = salesChange(row.unitsChangePct);
+        const action = state.salesGroup === "parent" ? "drill" : "product";
+        return `<tr>
+          <td><div class="sales-product">${image}<div><button class="sales-product-key" type="button" data-sales-row-action="${action}" data-sales-parent="${escapeHtml(row.parentSku || key)}">${escapeHtml(key)}</button><span class="sales-product-name" title="${escapeHtml(row.itemName || "")}">${escapeHtml(row.itemName || "")}</span><span class="sales-variant-meta">${variantMeta}</span></div></div></td>
+          <td><span class="status-badge ${status.badge}">${status.label}</span></td>
+          <td class="num">${integer(row.units)}</td>
+          <td class="num">${number(row.dailyUnits).toFixed(2)}</td>
+          <td class="num">${money(row.revenue, 2)}</td>
+          <td class="num"><div class="sales-share"><div class="sales-share-track"><span style="width:${Math.min(100, number(row.sharePct) * 100)}%"></span></div><b>${percent(row.sharePct)}</b></div></td>
+          <td class="num">${integer(row.previousUnits)}</td>
+          <td class="num"><span class="sales-table-delta ${change.cls}">${change.arrow} ${change.text}</span></td>
+          <td class="num">${money(row.averageUnitPrice, 2)}</td>
+          <td class="num">${integer(row.availableUnits)}</td>
+          <td class="num">${daysText(row.availableDays)}</td>
+        </tr>`;
+      }).join("") || emptyRow(11, "没有符合条件的销量记录", "调整搜索、状态或聚合维度后重试。");
+      $("#salesTableInfo").textContent = `${rows.length} 条${groupLabel}记录，显示 ${rows.length ? start + 1 : 0}-${Math.min(start + state.salesPageSize, rows.length)}`;
+      $("#salesPageInfo").textContent = `${state.salesPage + 1} / ${totalPages}`;
+      $("#salesPrevPage").disabled = state.salesPage === 0;
+      $("#salesNextPage").disabled = state.salesPage >= totalPages - 1;
+      $$("#salesTableBody [data-sales-row-action]").forEach((button) => button.addEventListener("click", () => {
+        const parentSku = button.dataset.salesParent;
+        if (button.dataset.salesRowAction === "drill") {
+          state.salesGroup = "sku";
+          state.salesSearch = parentSku;
+          state.salesPage = 0;
+          $("#salesSearch").value = parentSku;
+          renderSalesTable();
+          showToast(`已下钻到款号 ${parentSku} 的 SKU 变体`);
+        } else {
+          openProductDrawer(parentSku);
+        }
+      }));
+    }
+
+    async function loadSales() {
+      const requestId = ++state.salesRequestId;
+      state.salesLoading = true;
+      $("#salesStatusHeadline").textContent = "正在读取订单销量";
+      $("#salesStatusDetail").textContent = "正在按 Order Date 汇总销售件数和订单成交价。";
+      $("#salesMetricGrid").innerHTML = Array.from({ length: 6 }, () => `<div class="sales-metric sales-skeleton">读取中</div>`).join("");
+      $("#salesTrendChart").innerHTML = `<div class="empty-state"><strong>正在生成销量趋势</strong>请稍候。</div>`;
+      $("#salesTableBody").innerHTML = emptyRow(11, "正在读取销量明细", "请稍候。");
+      try {
+        const response = await fetch(`/api/sales/data?days=${state.periodDays}`);
+        const payload = await response.json();
+        if (!response.ok || !payload.success) throw new Error(payload.message || `HTTP ${response.status}`);
+        if (requestId !== state.salesRequestId) return;
+        state.sales = payload.data;
+        state.salesPage = 0;
+        renderSales();
+      } catch (error) {
+        if (requestId !== state.salesRequestId) return;
+        $("#salesStatusHeadline").textContent = "销量读取失败";
+        $("#salesStatusDetail").textContent = error.message;
+        $("#salesMetricGrid").innerHTML = "";
+        $("#salesTrendChart").innerHTML = `<div class="empty-state"><strong>销量趋势读取失败</strong>${escapeHtml(error.message)}</div>`;
+        $("#salesTableBody").innerHTML = emptyRow(11, "销量明细读取失败", escapeHtml(error.message));
+      } finally {
+        if (requestId === state.salesRequestId) state.salesLoading = false;
+      }
     }
 
     function renderInventory() {
@@ -2263,6 +2824,11 @@
     }
 
     function updatePageMeta() {
+      if (state.view === "sales" && state.sales?.meta) {
+        const meta = state.sales.meta;
+        $("#pageMeta").textContent = `${meta.periodDays} 天销量窗口 · ${meta.currentStart} 至 ${meta.currentEnd} · ${meta.sampleDays} 个销量日`;
+        return;
+      }
       if (state.view === "inventory" && state.inventory?.meta.snapshotAt) {
         const meta = state.inventory.meta;
         $("#pageMeta").textContent = `库存快照 ${new Date(meta.snapshotAt).toLocaleString("zh-CN")} · ${state.periodDays} 天销量窗口 · ${meta.sampleDays} 个销量日`;
@@ -2422,9 +2988,47 @@
       state.periodDays = number(button.dataset.period);
       $$(".period-button").forEach((item) => item.classList.toggle("active", item === button));
       renderAll();
+      loadSales();
       loadInventory();
       loadOperations();
     }));
+    $("#salesSearch").addEventListener("input", (event) => {
+      state.salesSearch = event.target.value;
+      state.salesPage = 0;
+      renderSalesTable();
+    });
+    $$("#salesGroupControls [data-sales-group]").forEach((button) => button.addEventListener("click", () => {
+      state.salesGroup = button.dataset.salesGroup;
+      state.salesPage = 0;
+      renderSalesTable();
+    }));
+    $$("#salesStatusFilters [data-sales-status]").forEach((button) => button.addEventListener("click", () => {
+      state.salesStatus = button.dataset.salesStatus;
+      state.salesPage = 0;
+      renderSalesTable();
+    }));
+    $$("#salesRankMetric [data-sales-rank]").forEach((button) => button.addEventListener("click", () => {
+      state.salesRankMetric = button.dataset.salesRank;
+      renderSalesRanking();
+    }));
+    $$(".sales-sort-button").forEach((button) => button.addEventListener("click", () => {
+      const key = button.dataset.salesSort;
+      if (state.salesSort === key) state.salesSortDirection = state.salesSortDirection === "desc" ? "asc" : "desc";
+      else {
+        state.salesSort = key;
+        state.salesSortDirection = "desc";
+      }
+      state.salesPage = 0;
+      renderSalesTable();
+    }));
+    $("#salesPrevPage").addEventListener("click", () => {
+      state.salesPage = Math.max(0, state.salesPage - 1);
+      renderSalesTable();
+    });
+    $("#salesNextPage").addEventListener("click", () => {
+      state.salesPage += 1;
+      renderSalesTable();
+    });
     $("#campaignSearch").addEventListener("input", (event) => { state.campaignSearch = event.target.value; renderDiagnosis(); });
     $$("#campaignFilters .filter-button").forEach((button) => button.addEventListener("click", () => {
       state.campaignFilter = button.dataset.filter;
@@ -2524,6 +3128,7 @@
     $("#sidebarSourceTime").textContent = `最新业务日 ${DATA.meta.latestDate}`;
     $("#operationOccurredAt").value = localDateTimeValue();
     loadBatches();
+    loadSales();
     loadInventory();
     loadProducts();
     loadOperationTargets();

@@ -5,26 +5,34 @@ import com.ai.walmartads.importing.domain.AdPerformance;
 import com.ai.walmartads.importing.domain.ImportFile;
 import com.ai.walmartads.importing.domain.ImportFileType;
 import com.ai.walmartads.importing.domain.OrderRecord;
-import org.apache.poi.ss.usermodel.Cell;
-import org.apache.poi.ss.usermodel.CellType;
+import org.apache.poi.openxml4j.opc.OPCPackage;
+import org.apache.poi.openxml4j.opc.PackageAccess;
+import org.apache.poi.ss.usermodel.DataFormatter;
 import org.apache.poi.ss.usermodel.DateUtil;
-import org.apache.poi.ss.usermodel.Row;
-import org.apache.poi.ss.usermodel.Sheet;
-import org.apache.poi.ss.usermodel.Workbook;
-import org.apache.poi.ss.usermodel.WorkbookFactory;
+import org.apache.poi.ss.util.CellReference;
+import org.apache.poi.util.XMLHelper;
+import org.apache.poi.xssf.eventusermodel.ReadOnlySharedStringsTable;
+import org.apache.poi.xssf.eventusermodel.XSSFReader;
+import org.apache.poi.xssf.eventusermodel.XSSFSheetXMLHandler;
+import org.apache.poi.xssf.model.StylesTable;
+import org.apache.poi.xssf.usermodel.XSSFComment;
 import org.springframework.stereotype.Component;
+import org.xml.sax.InputSource;
+import org.xml.sax.XMLReader;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
@@ -43,6 +51,11 @@ public class HistoricalWorkbookParser {
             "State",
             "Zip"
     );
+    private static final List<DateTimeFormatter> EXTRA_DATE_FORMATTERS = List.of(
+            DateTimeFormatter.ofPattern("M/d/yy", Locale.US),
+            DateTimeFormatter.ofPattern("M/d/yyyy", Locale.US),
+            DateTimeFormatter.ofPattern("yyyy/M/d", Locale.US)
+    );
 
     private final JsonPayloadWriter json;
     private final WalmartAdsProperties properties;
@@ -57,56 +70,144 @@ public class HistoricalWorkbookParser {
         if (endDateExclusive == null) {
             throw new IllegalArgumentException("历史数据导入缺少截止日期配置");
         }
-        try (InputStream input = Files.newInputStream(path);
-             Workbook workbook = WorkbookFactory.create(input)) {
-            ParsedRows<OrderRecord> orders = parseOrders(
-                    requiredSheet(workbook, ORDER_SHEET),
-                    importFile,
-                    endDateExclusive
-            );
-            ParsedRows<AdPerformance> ads = parseAds(
-                    requiredSheet(workbook, AD_SHEET),
-                    importFile,
-                    endDateExclusive
-            );
-            return new HistoricalWorkbookRows(
-                    orders.sourceRowCount() + ads.sourceRowCount(),
-                    orders.rows(),
-                    ads.rows()
-            );
+
+        OrderSheetHandler orderHandler = new OrderSheetHandler(importFile, endDateExclusive);
+        AdSheetHandler adHandler = new AdSheetHandler(importFile, endDateExclusive);
+        boolean ordersFound = false;
+        boolean adsFound = false;
+
+        try (OPCPackage pkg = OPCPackage.open(path.toFile(), PackageAccess.READ)) {
+            ReadOnlySharedStringsTable strings = new ReadOnlySharedStringsTable(pkg);
+            XSSFReader reader = new XSSFReader(pkg);
+            StylesTable styles = reader.getStylesTable();
+            XSSFReader.SheetIterator sheets = (XSSFReader.SheetIterator) reader.getSheetsData();
+            while (sheets.hasNext()) {
+                try (InputStream input = sheets.next()) {
+                    String sheetName = sheets.getSheetName();
+                    if (ORDER_SHEET.equals(sheetName)) {
+                        parseSheet(input, styles, strings, orderHandler);
+                        ordersFound = true;
+                    } else if (AD_SHEET.equals(sheetName)) {
+                        parseSheet(input, styles, strings, adHandler);
+                        adsFound = true;
+                    }
+                }
+            }
+        } catch (Exception exception) {
+            if (exception instanceof IllegalArgumentException illegalArgumentException) {
+                throw illegalArgumentException;
+            }
+            throw new IOException("无法流式读取历史统计表：" + path, exception);
         }
+
+        if (!ordersFound) {
+            throw new IllegalArgumentException("历史统计表缺少工作表：" + ORDER_SHEET);
+        }
+        if (!adsFound) {
+            throw new IllegalArgumentException("历史统计表缺少工作表：" + AD_SHEET);
+        }
+        return new HistoricalWorkbookRows(
+                orderHandler.sourceRows + adHandler.sourceRows,
+                orderHandler.records,
+                adHandler.records
+        );
     }
 
-    private ParsedRows<OrderRecord> parseOrders(
-            Sheet sheet,
-            ImportFile importFile,
-            LocalDate endDateExclusive
-    ) {
-        Row headerRow = sheet.getRow(sheet.getFirstRowNum());
-        Map<String, Integer> headers = headers(headerRow);
-        require(headers, "Order Date", "Order#", "SKU", "Qty", "Shipping Cost", "Tax");
+    private static void parseSheet(
+            InputStream input,
+            StylesTable styles,
+            ReadOnlySharedStringsTable strings,
+            XSSFSheetXMLHandler.SheetContentsHandler handler
+    ) throws Exception {
+        XMLReader parser = XMLHelper.newXMLReader();
+        parser.setContentHandler(new XSSFSheetXMLHandler(
+                styles,
+                null,
+                strings,
+                handler,
+                new DataFormatter(Locale.US),
+                false
+        ));
+        parser.parse(new InputSource(input));
+    }
 
-        List<OrderRecord> records = new ArrayList<>();
-        int sourceRows = 0;
-        for (int rowIndex = headerRow.getRowNum() + 1; rowIndex <= sheet.getLastRowNum(); rowIndex++) {
-            Row row = sheet.getRow(rowIndex);
-            if (row == null) {
-                continue;
+    private abstract static class StreamingSheetHandler
+            implements XSSFSheetXMLHandler.SheetContentsHandler {
+
+        private final Map<Integer, String> currentRow = new HashMap<>();
+
+        @Override
+        public void startRow(int rowNum) {
+            currentRow.clear();
+        }
+
+        @Override
+        public void endRow(int rowNum) {
+            if (!currentRow.isEmpty()) {
+                acceptRow(rowNum, Map.copyOf(currentRow));
+            }
+        }
+
+        @Override
+        public void cell(String cellReference, String formattedValue, XSSFComment comment) {
+            if (cellReference == null || formattedValue == null) {
+                return;
+            }
+            String value = ImportValues.blankToNull(formattedValue);
+            if (value != null) {
+                currentRow.put((int) new CellReference(cellReference).getCol(), value);
+            }
+        }
+
+        @Override
+        public void headerFooter(String text, boolean isHeader, String tagName) {
+            // Headers and footers are not business rows.
+        }
+
+        protected abstract void acceptRow(int rowNum, Map<Integer, String> values);
+    }
+
+    private final class OrderSheetHandler extends StreamingSheetHandler {
+
+        private final ImportFile importFile;
+        private final LocalDate endDateExclusive;
+        private final List<OrderRecord> records = new ArrayList<>();
+        private Map<String, Integer> headers;
+        private Map<Integer, String> columnNames;
+        private int sourceRows;
+
+        private OrderSheetHandler(ImportFile importFile, LocalDate endDateExclusive) {
+            this.importFile = importFile;
+            this.endDateExclusive = endDateExclusive;
+        }
+
+        @Override
+        protected void acceptRow(int rowNum, Map<Integer, String> values) {
+            if (rowNum == 0) {
+                columnNames = Map.copyOf(values);
+                headers = new HashMap<>();
+                values.forEach((column, name) -> headers.putIfAbsent(name, column));
+                require(headers, "Order Date", "Order#", "SKU", "Qty", "Shipping Cost", "Tax");
+                return;
             }
             sourceRows++;
-            LocalDate orderDate = cellDate(row.getCell(headers.get("Order Date")));
+            LocalDate orderDate = date(value(values, headers, "Order Date"));
             if (orderDate == null || !orderDate.isBefore(endDateExclusive)) {
-                continue;
+                return;
             }
-            String sku = value(row, headers, "SKU");
-            String orderNumber = value(row, headers, "Order#");
-            if (sku == null || orderNumber == null) {
-                continue;
+            String sku = value(values, headers, "SKU");
+            String orderNumber = value(values, headers, "Order#");
+            if (sku == null) {
+                return;
             }
 
-            Map<String, Object> raw = rawPayload(row, headerRow, PRIVATE_FIELDS);
-            String itemCost = value(row, headers, "Shipping Cost");
-            String actualShippingCost = value(row, headers, "Tax");
+            Map<String, Object> raw = rawPayload(values, columnNames, PRIVATE_FIELDS);
+            if (orderNumber == null) {
+                orderNumber = "HISTORY-" + orderDate + "-" + (rowNum + 1);
+                raw.put("_syntheticOrderNumber", orderNumber);
+            }
+            String itemCost = value(values, headers, "Shipping Cost");
+            String actualShippingCost = value(values, headers, "Tax");
             raw.put("_normalizedItemCost", itemCost);
             raw.put("_normalizedShippingCost", actualShippingCost);
 
@@ -114,63 +215,67 @@ public class HistoricalWorkbookParser {
                     importFile,
                     orderDate,
                     orderDate,
-                    value(row, headers, "PO#"),
+                    value(values, headers, "PO#"),
                     orderNumber,
-                    value(row, headers, "Line#"),
+                    value(values, headers, "Line#"),
                     sku,
                     ImportValues.parentSku(sku),
-                    value(row, headers, "UPC"),
-                    value(row, headers, "Status"),
-                    ImportValues.decimal(value(row, headers, "Qty")),
+                    value(values, headers, "UPC"),
+                    value(values, headers, "Status"),
+                    ImportValues.decimal(value(values, headers, "Qty")),
                     ImportValues.decimal(itemCost),
                     ImportValues.decimal(itemCost),
                     ImportValues.decimal(actualShippingCost),
-                    value(row, headers, "Item Description"),
-                    value(row, headers, "Shipping Method"),
-                    value(row, headers, "Fulfillment Entity"),
+                    value(values, headers, "Item Description"),
+                    value(values, headers, "Shipping Method"),
+                    value(values, headers, "Fulfillment Entity"),
                     json.write(raw)
             ));
         }
-        return new ParsedRows<>(sourceRows, records);
     }
 
-    private ParsedRows<AdPerformance> parseAds(
-            Sheet sheet,
-            ImportFile importFile,
-            LocalDate endDateExclusive
-    ) {
-        Row headerRow = sheet.getRow(sheet.getFirstRowNum());
-        requireColumn(headerRow, 0, "广告活动名称");
-        requireColumn(headerRow, 4, "产品ID");
-        requireColumn(headerRow, 8, "展示次数");
-        requireColumn(headerRow, 11, "广告支出");
-        requireColumn(headerRow, 32, "日期");
+    private final class AdSheetHandler extends StreamingSheetHandler {
 
-        List<AdPerformance> records = new ArrayList<>();
-        int sourceRows = 0;
-        for (int rowIndex = headerRow.getRowNum() + 1; rowIndex <= sheet.getLastRowNum(); rowIndex++) {
-            Row row = sheet.getRow(rowIndex);
-            if (row == null) {
-                continue;
+        private final ImportFile importFile;
+        private final LocalDate endDateExclusive;
+        private final List<AdPerformance> records = new ArrayList<>();
+        private Map<Integer, String> columnNames;
+        private int sourceRows;
+
+        private AdSheetHandler(ImportFile importFile, LocalDate endDateExclusive) {
+            this.importFile = importFile;
+            this.endDateExclusive = endDateExclusive;
+        }
+
+        @Override
+        protected void acceptRow(int rowNum, Map<Integer, String> values) {
+            if (rowNum == 0) {
+                columnNames = Map.copyOf(values);
+                requireColumn(values, 0, "广告活动名称");
+                requireColumn(values, 4, "产品ID");
+                requireColumn(values, 8, "展示次数");
+                requireColumn(values, 11, "广告支出");
+                requireColumn(values, 32, "日期");
+                return;
             }
             sourceRows++;
-            LocalDate reportDate = cellDate(row.getCell(32));
+            LocalDate reportDate = date(values.get(32));
             if (reportDate == null || !reportDate.isBefore(endDateExclusive)) {
-                continue;
+                return;
             }
-            String campaignName = text(row.getCell(0));
+            String campaignName = values.get(0);
             if (campaignName == null) {
-                continue;
+                return;
             }
 
             String parentSku = firstNonBlank(
-                    text(row.getCell(34)),
-                    text(row.getCell(33)),
+                    values.get(34),
+                    values.get(33),
                     ImportValues.parentSku(campaignName)
             );
-            BigDecimal spend = decimal(row.getCell(11));
-            BigDecimal sales = decimal(row.getCell(15));
-            BigDecimal roas = decimal(row.getCell(30));
+            BigDecimal spend = ImportValues.decimal(values.get(11));
+            BigDecimal sales = ImportValues.decimal(values.get(15));
+            BigDecimal roas = ImportValues.decimal(values.get(30));
             if (roas.signum() == 0 && spend.signum() > 0) {
                 roas = sales.divide(spend, 8, RoundingMode.HALF_UP);
             }
@@ -180,68 +285,50 @@ public class HistoricalWorkbookParser {
                     reportDate,
                     ImportFileType.AD_AUTO,
                     campaignName,
-                    text(row.getCell(1)),
+                    values.get(1),
                     "Sponsored Products (Auto)",
                     null,
                     BigDecimal.ZERO,
-                    text(row.getCell(2)),
-                    text(row.getCell(3)),
-                    text(row.getCell(4)),
+                    values.get(2),
+                    values.get(3),
+                    values.get(4),
                     null,
                     parentSku,
-                    text(row.getCell(5)),
+                    values.get(5),
                     null,
                     null,
                     null,
-                    decimal(row.getCell(6)),
-                    decimal(row.getCell(7)),
-                    whole(row.getCell(8)),
-                    whole(row.getCell(9)),
-                    decimal(row.getCell(10)),
+                    ImportValues.decimal(values.get(6)),
+                    ImportValues.decimal(values.get(7)),
+                    ImportValues.whole(values.get(8)),
+                    ImportValues.whole(values.get(9)),
+                    ImportValues.decimal(values.get(10)),
                     spend,
-                    decimal(row.getCell(13)),
-                    decimal(row.getCell(14)),
+                    ImportValues.decimal(values.get(13)),
+                    ImportValues.decimal(values.get(14)),
                     sales,
-                    decimal(row.getCell(16)),
-                    decimal(row.getCell(17)),
-                    decimal(row.getCell(18)),
+                    ImportValues.decimal(values.get(16)),
+                    ImportValues.decimal(values.get(17)),
+                    ImportValues.decimal(values.get(18)),
                     roas,
                     BigDecimal.ZERO,
-                    json.write(rawPayload(row, headerRow, Set.of()))
+                    json.write(rawPayload(values, columnNames, Set.of()))
             ));
         }
-        return new ParsedRows<>(sourceRows, records);
     }
 
-    private static Sheet requiredSheet(Workbook workbook, String name) {
-        Sheet sheet = workbook.getSheet(name);
-        if (sheet == null) {
-            throw new IllegalArgumentException("历史统计表缺少工作表：" + name);
-        }
-        return sheet;
-    }
-
-    private static Map<String, Integer> headers(Row row) {
-        Map<String, Integer> result = new HashMap<>();
-        row.forEach(cell -> {
-            String name = text(cell);
-            if (name != null) {
-                result.putIfAbsent(name, cell.getColumnIndex());
-            }
-        });
-        return result;
-    }
-
-    private static Map<String, Object> rawPayload(Row row, Row headerRow, Set<String> excluded) {
+    private static Map<String, Object> rawPayload(
+            Map<Integer, String> values,
+            Map<Integer, String> columnNames,
+            Set<String> excluded
+    ) {
         Map<String, Object> raw = new LinkedHashMap<>();
-        int lastColumn = Math.max(headerRow.getLastCellNum(), row.getLastCellNum());
-        for (int column = 0; column < lastColumn; column++) {
-            String name = text(headerRow.getCell(column));
-            String value = text(row.getCell(column));
-            if (name != null && value != null && !excluded.contains(name)) {
+        values.forEach((column, value) -> {
+            String name = columnNames.get(column);
+            if (name != null && !excluded.contains(name)) {
                 ImportValues.addPreservingDuplicates(raw, name, value);
             }
-        }
+        });
         return raw;
     }
 
@@ -253,8 +340,8 @@ public class HistoricalWorkbookParser {
         }
     }
 
-    private static void requireColumn(Row header, int column, String expected) {
-        String actual = text(header.getCell(column));
+    private static void requireColumn(Map<Integer, String> headers, int column, String expected) {
+        String actual = headers.get(column);
         if (!expected.equals(actual)) {
             throw new IllegalArgumentException(
                     "历史广告工作表第 " + (column + 1) + " 列应为 " + expected + "，实际为 " + actual
@@ -262,49 +349,39 @@ public class HistoricalWorkbookParser {
         }
     }
 
-    private static String value(Row row, Map<String, Integer> headers, String name) {
+    private static String value(
+            Map<Integer, String> values,
+            Map<String, Integer> headers,
+            String name
+    ) {
         Integer column = headers.get(name);
-        return column == null ? null : text(row.getCell(column));
+        return column == null ? null : values.get(column);
     }
 
-    private static String text(Cell cell) {
-        if (cell == null || cell.getCellType() == CellType.BLANK) {
+    private static LocalDate date(String value) {
+        LocalDate parsed = ImportValues.date(value);
+        if (parsed != null) {
+            return parsed;
+        }
+        if (value == null) {
             return null;
         }
-        if (cell.getCellType() == CellType.FORMULA) {
-            return switch (cell.getCachedFormulaResultType()) {
-                case STRING -> ImportValues.blankToNull(cell.getStringCellValue());
-                case NUMERIC -> numericText(cell.getNumericCellValue());
-                case BOOLEAN -> Boolean.toString(cell.getBooleanCellValue());
-                default -> null;
-            };
+        for (DateTimeFormatter formatter : EXTRA_DATE_FORMATTERS) {
+            try {
+                return LocalDate.parse(value, formatter);
+            } catch (DateTimeParseException ignored) {
+                // Try the next known display format.
+            }
         }
-        return ImportValues.text(cell);
-    }
-
-    private static String numericText(double value) {
-        return BigDecimal.valueOf(value).stripTrailingZeros().toPlainString();
-    }
-
-    private static BigDecimal decimal(Cell cell) {
-        return ImportValues.decimal(text(cell));
-    }
-
-    private static long whole(Cell cell) {
-        return decimal(cell).setScale(0, RoundingMode.HALF_UP).longValue();
-    }
-
-    private static LocalDate cellDate(Cell cell) {
-        if (cell == null) {
-            return null;
+        try {
+            double serial = new BigDecimal(value).doubleValue();
+            if (serial > 1) {
+                return DateUtil.getLocalDateTime(serial).toLocalDate();
+            }
+        } catch (NumberFormatException ignored) {
+            // Not an Excel serial date.
         }
-        CellType type = cell.getCellType() == CellType.FORMULA
-                ? cell.getCachedFormulaResultType()
-                : cell.getCellType();
-        if (type == CellType.NUMERIC) {
-            return DateUtil.getLocalDateTime(cell.getNumericCellValue()).toLocalDate();
-        }
-        return ImportValues.date(text(cell));
+        return null;
     }
 
     private static String firstNonBlank(String... values) {

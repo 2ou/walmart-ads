@@ -15,6 +15,7 @@ import com.ai.walmartads.importing.parser.OrderWorkbookParser;
 import com.ai.walmartads.importing.parser.ParsedRows;
 import com.ai.walmartads.importing.parser.ProductWorkbookParser;
 import com.ai.walmartads.importing.parser.SkuMappingWorkbookParser;
+import com.ai.walmartads.importing.parser.WeeklyInventoryWorkbookParser;
 import com.ai.walmartads.importing.repository.AdPerformanceRepository;
 import com.ai.walmartads.importing.repository.ImportFileRepository;
 import com.ai.walmartads.importing.repository.InventorySnapshotRepository;
@@ -41,6 +42,7 @@ public class FileImportProcessor {
     private final OrderWorkbookParser orderParser;
     private final AdCsvParser adParser;
     private final InventoryWorkbookParser inventoryParser;
+    private final WeeklyInventoryWorkbookParser weeklyInventoryParser;
     private final ProductWorkbookParser productParser;
     private final HistoricalWorkbookParser historicalParser;
     private final SkuMappingWorkbookParser mappingParser;
@@ -55,6 +57,7 @@ public class FileImportProcessor {
             OrderWorkbookParser orderParser,
             AdCsvParser adParser,
             InventoryWorkbookParser inventoryParser,
+            WeeklyInventoryWorkbookParser weeklyInventoryParser,
             ProductWorkbookParser productParser,
             HistoricalWorkbookParser historicalParser,
             SkuMappingWorkbookParser mappingParser
@@ -68,6 +71,7 @@ public class FileImportProcessor {
         this.orderParser = orderParser;
         this.adParser = adParser;
         this.inventoryParser = inventoryParser;
+        this.weeklyInventoryParser = weeklyInventoryParser;
         this.productParser = productParser;
         this.historicalParser = historicalParser;
         this.mappingParser = mappingParser;
@@ -81,6 +85,7 @@ public class FileImportProcessor {
             case ORDER -> saveOrders(orderParser.parse(archivePath, file));
             case AD_REPORT, AD_AUTO, AD_MANUAL -> saveAds(adParser.parse(archivePath, file));
             case INVENTORY -> saveInventory(inventoryParser.parse(archivePath, file));
+            case WEEKLY_INVENTORY -> saveInventory(weeklyInventoryParser.parse(archivePath, file));
             case PRODUCT -> saveProducts(productParser.parse(archivePath, file));
             case HISTORY -> saveHistory(historicalParser.parse(archivePath, file));
             case SKU_MAPPING -> saveSkuMappings(mappingParser.parse(archivePath, file));

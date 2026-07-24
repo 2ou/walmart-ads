@@ -43,6 +43,7 @@ class HistoricalWorkbookParserTest {
                 temp.resolve("archive"),
                 path,
                 LocalDate.of(2026, 7, 21),
+                null,
                 null
         );
         HistoricalWorkbookParser parser = new HistoricalWorkbookParser(

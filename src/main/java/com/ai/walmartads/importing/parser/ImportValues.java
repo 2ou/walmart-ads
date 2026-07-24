@@ -24,6 +24,7 @@ public final class ImportValues {
     private static final List<DateTimeFormatter> DATE_FORMATTERS = List.of(
             DateTimeFormatter.ISO_LOCAL_DATE,
             DateTimeFormatter.ofPattern("M/d/yyyy", Locale.US),
+            DateTimeFormatter.ofPattern("M/d/yy", Locale.US),
             DateTimeFormatter.ofPattern("MMM d, yyyy", Locale.US)
     );
 

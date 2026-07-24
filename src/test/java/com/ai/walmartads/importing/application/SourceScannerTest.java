@@ -26,7 +26,7 @@ class SourceScannerTest {
         Files.createFile(day.resolve("PO_Data_example.xlsx"));
 
         SourceScanner scanner = new SourceScanner(new WalmartAdsProperties(
-                temp, temp.resolve("archive"), null, null, null
+                temp, temp.resolve("archive"), null, null, null, null
         ));
         List<SourceFileCandidate> candidates = scanner.scan();
 
@@ -50,7 +50,7 @@ class SourceScannerTest {
         Files.createFile(day.resolve("PO_Data_legacy.xlsx"));
 
         SourceScanner scanner = new SourceScanner(new WalmartAdsProperties(
-                temp, temp.resolve("archive"), null, null, null
+                temp, temp.resolve("archive"), null, null, null, null
         ));
 
         assertThat(scanner.scan())
@@ -68,6 +68,7 @@ class SourceScannerTest {
                 temp.resolve("archive"),
                 workbook,
                 java.time.LocalDate.of(2026, 7, 21),
+                null,
                 null
         ));
 
@@ -92,12 +93,41 @@ class SourceScannerTest {
                 temp.resolve("mapping-archive"),
                 null,
                 null,
-                workbook
+                workbook,
+                null
         ));
 
         assertThat(scanner.scan())
                 .extracting(SourceFileCandidate::fileType)
                 .containsExactly(ImportFileType.SKU_MAPPING, ImportFileType.AD_REPORT);
+    }
+
+    @Test
+    void scansWeeklyInventoryRecursivelyUsingDateFromWorkbookName() throws Exception {
+        Path dataRoot = Files.createDirectories(temp.resolve("weekly-data"));
+        Path weeklyRoot = Files.createDirectories(temp.resolve("weekly").resolve("2025年"));
+        Files.createFile(weeklyRoot.resolve("沃尔玛PNK周报 2025.04.28 .xlsx"));
+        Files.createFile(weeklyRoot.resolve("沃尔玛PNK周转天数 2025.04.28.xlsx"));
+
+        SourceScanner scanner = new SourceScanner(new WalmartAdsProperties(
+                dataRoot,
+                temp.resolve("weekly-archive"),
+                null,
+                null,
+                null,
+                temp.resolve("weekly")
+        ));
+
+        assertThat(scanner.scan())
+                .singleElement()
+                .satisfies(candidate -> {
+                    assertThat(candidate.fileType()).isEqualTo(ImportFileType.WEEKLY_INVENTORY);
+                    assertThat(candidate.reportDate()).isEqualTo(java.time.LocalDate.of(2025, 4, 28));
+                    assertThat(candidate.snapshotAt())
+                            .isEqualTo(java.time.LocalDate.of(2025, 4, 28).atTime(12, 0));
+                    assertThat(candidate.relativePath())
+                            .isEqualTo(Path.of("weekly-inventory", "2025年", "沃尔玛PNK周报 2025.04.28 .xlsx"));
+                });
     }
 
     private static SourceFileCandidate report(List<SourceFileCandidate> candidates, String fileName) {

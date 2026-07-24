@@ -12,6 +12,7 @@ public interface InventorySnapshotRepository extends JpaRepository<InventorySnap
     @Query(value = """
             select inventory.*
               from wm_ads_inventory_snapshot inventory
+              join wm_ads_import_file file on file.id = inventory.import_file_id and file.active = true
              where inventory.item_id = :itemId
              order by inventory.snapshot_at desc, inventory.id desc
              limit 1

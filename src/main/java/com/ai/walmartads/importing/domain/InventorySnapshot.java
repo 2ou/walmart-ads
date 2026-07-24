@@ -149,4 +149,36 @@ public class InventorySnapshot {
     public String getParentSku() {
         return parentSku;
     }
+
+    public LocalDateTime getSnapshotAt() {
+        return snapshotAt;
+    }
+
+    public String getItemId() {
+        return itemId;
+    }
+
+    public BigDecimal getAvailableUnits() {
+        return availableUnits;
+    }
+
+    public BigDecimal getReservedUnits() {
+        return reservedUnits;
+    }
+
+    public BigDecimal getInboundUnits() {
+        return inboundUnits;
+    }
+
+    public BigDecimal getForecastedDaysSupply() {
+        return forecastedDaysSupply;
+    }
+
+    public BigDecimal getSuggestedUnits() {
+        return suggestedUnits;
+    }
+
+    public String getRawPayload() {
+        return rawPayload;
+    }
 }

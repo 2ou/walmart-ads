@@ -15,6 +15,12 @@ public interface ImportFileRepository extends JpaRepository<ImportFile, Long> {
 
     boolean existsBySha256(String sha256);
 
+    boolean existsBySha256AndFileTypeAndReportDate(
+            String sha256,
+            ImportFileType fileType,
+            LocalDate reportDate
+    );
+
     List<ImportFile> findByBatchIdOrderById(Long batchId);
 
     @Modifying

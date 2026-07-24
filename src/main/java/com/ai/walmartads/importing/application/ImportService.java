@@ -3,6 +3,7 @@ package com.ai.walmartads.importing.application;
 import com.ai.walmartads.config.WalmartAdsProperties;
 import com.ai.walmartads.importing.domain.ImportBatch;
 import com.ai.walmartads.importing.domain.ImportFile;
+import com.ai.walmartads.importing.domain.ImportFileType;
 import com.ai.walmartads.importing.parser.ImportValues;
 import com.ai.walmartads.importing.repository.ImportBatchRepository;
 import com.ai.walmartads.importing.repository.ImportFileRepository;
@@ -69,7 +70,14 @@ public class ImportService {
                 results.add(FileResult.failed(candidate.path(), candidate.fileType().name(), exception.getMessage()));
                 continue;
             }
-            if (fileRepository.existsBySha256(sha256)) {
+            boolean alreadyImported = candidate.fileType() == ImportFileType.WEEKLY_INVENTORY
+                    ? fileRepository.existsBySha256AndFileTypeAndReportDate(
+                            sha256,
+                            candidate.fileType(),
+                            candidate.reportDate()
+                    )
+                    : fileRepository.existsBySha256(sha256);
+            if (alreadyImported) {
                 skipped++;
                 results.add(FileResult.skipped(candidate.path(), candidateLabel(candidate)));
                 continue;

@@ -28,6 +28,10 @@ public class SourceScanner {
 
     private static final Pattern DATE_DIRECTORY = Pattern.compile("^(\\d{4})-(\\d{1,2})-(\\d{1,2})$");
     private static final Pattern INVENTORY_DATE = Pattern.compile("inventory-(\\d{4}-\\d{2}-\\d{2})", Pattern.CASE_INSENSITIVE);
+    private static final Pattern WEEKLY_INVENTORY_DATE = Pattern.compile(
+            "^沃尔玛PNK周报\\s+(\\d{4})\\.(\\d{1,2})\\.(\\d{1,2})\\s*\\.xlsx$",
+            Pattern.CASE_INSENSITIVE
+    );
 
     private final WalmartAdsProperties properties;
 
@@ -43,6 +47,7 @@ public class SourceScanner {
         List<SourceFileCandidate> files = new ArrayList<>();
         scanDailyDirectories(root, files);
         scanInventory(root, files);
+        scanWeeklyInventory(files);
         scanProducts(root, files);
         scanSkuMappingWorkbook(files);
         scanHistoricalWorkbook(files);
@@ -125,6 +130,37 @@ public class SourceScanner {
                         null,
                         null,
                         ImportValues.fileTime(Files.getLastModifiedTime(path).toInstant())
+                ));
+            }
+        }
+    }
+
+    private void scanWeeklyInventory(List<SourceFileCandidate> files) throws IOException {
+        Path configured = properties.weeklyReportsRoot();
+        if (configured == null) {
+            return;
+        }
+        Path weeklyRoot = configured.toAbsolutePath().normalize();
+        if (!Files.isDirectory(weeklyRoot)) {
+            return;
+        }
+        try (Stream<Path> paths = Files.walk(weeklyRoot)) {
+            for (Path path : paths.filter(Files::isRegularFile).toList()) {
+                String name = path.getFileName().toString();
+                if (name.startsWith("~$")) {
+                    continue;
+                }
+                LocalDate reportDate = weeklyInventoryDate(name);
+                if (reportDate == null) {
+                    continue;
+                }
+                files.add(new SourceFileCandidate(
+                        path,
+                        Path.of("weekly-inventory").resolve(weeklyRoot.relativize(path)),
+                        ImportFileType.WEEKLY_INVENTORY,
+                        null,
+                        reportDate,
+                        reportDate.atTime(LocalTime.NOON)
                 ));
             }
         }
@@ -221,14 +257,31 @@ public class SourceScanner {
         return ImportValues.fileTime(fallback.toInstant());
     }
 
+    private static LocalDate weeklyInventoryDate(String fileName) {
+        Matcher matcher = WEEKLY_INVENTORY_DATE.matcher(fileName);
+        if (!matcher.matches()) {
+            return null;
+        }
+        try {
+            return LocalDate.of(
+                    Integer.parseInt(matcher.group(1)),
+                    Integer.parseInt(matcher.group(2)),
+                    Integer.parseInt(matcher.group(3))
+            );
+        } catch (RuntimeException exception) {
+            return null;
+        }
+    }
+
     private static int priority(ImportFileType type) {
         return switch (type) {
             case SKU_MAPPING -> 0;
             case INVENTORY -> 1;
-            case PRODUCT -> 2;
-            case HISTORY -> 3;
-            case ORDER -> 4;
-            case AD_REPORT, AD_AUTO, AD_MANUAL -> 5;
+            case WEEKLY_INVENTORY -> 2;
+            case PRODUCT -> 3;
+            case HISTORY -> 4;
+            case ORDER -> 5;
+            case AD_REPORT, AD_AUTO, AD_MANUAL -> 6;
         };
     }
 

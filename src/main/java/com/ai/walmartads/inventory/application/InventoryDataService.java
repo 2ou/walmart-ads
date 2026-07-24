@@ -291,8 +291,12 @@ public class InventoryDataService {
         Integer count = jdbc.queryForObject("""
                 select count(*)
                   from wm_ads_inventory_snapshot inventory
+                  join wm_ads_import_file file on file.id = inventory.import_file_id and file.active = true
                  where inventory.snapshot_at = (
-                       select max(latest.snapshot_at) from wm_ads_inventory_snapshot latest
+                       select max(latest.snapshot_at)
+                         from wm_ads_inventory_snapshot latest
+                         join wm_ads_import_file latest_file
+                           on latest_file.id = latest.import_file_id and latest_file.active = true
                  )
                    and inventory.sku = :sku
                 """, new MapSqlParameterSource("sku", sku), Integer.class);

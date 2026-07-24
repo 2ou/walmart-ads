@@ -1,6 +1,7 @@
 package com.ai.walmartads.importing.application;
 
 import com.ai.walmartads.config.WalmartAdsProperties;
+import com.ai.walmartads.importing.domain.AdReportKind;
 import com.ai.walmartads.importing.domain.ImportFileType;
 import com.ai.walmartads.importing.parser.ImportValues;
 import org.springframework.stereotype.Component;
@@ -61,9 +62,16 @@ public class SourceScanner {
                         if (path.getFileName().toString().startsWith("~$")) {
                             continue;
                         }
-                        ImportFileType type = dailyType(path.getFileName().toString());
-                        if (type != null) {
-                            files.add(new SourceFileCandidate(path, root.relativize(path), type, reportDate, null));
+                        DailyFileDescriptor descriptor = dailyFile(path.getFileName().toString());
+                        if (descriptor != null) {
+                            files.add(new SourceFileCandidate(
+                                    path,
+                                    root.relativize(path),
+                                    descriptor.fileType(),
+                                    descriptor.reportKind(),
+                                    reportDate,
+                                    null
+                            ));
                         }
                     }
                 }
@@ -88,6 +96,7 @@ public class SourceScanner {
                         root.relativize(path),
                         ImportFileType.INVENTORY,
                         null,
+                        null,
                         snapshotAt
                 ));
             }
@@ -110,22 +119,26 @@ public class SourceScanner {
                         root.relativize(path),
                         ImportFileType.PRODUCT,
                         null,
+                        null,
                         ImportValues.fileTime(Files.getLastModifiedTime(path).toInstant())
                 ));
             }
         }
     }
 
-    private static ImportFileType dailyType(String fileName) {
+    private static DailyFileDescriptor dailyFile(String fileName) {
         String lower = fileName.toLowerCase(Locale.ROOT);
         if (lower.startsWith("itemkeywordperformance") && lower.endsWith(".csv")) {
-            return ImportFileType.AD_MANUAL;
+            return new DailyFileDescriptor(ImportFileType.AD_REPORT, AdReportKind.ITEM_KEYWORD_PERFORMANCE);
         }
         if (lower.startsWith("itemperformance") && lower.endsWith(".csv")) {
-            return ImportFileType.AD_AUTO;
+            return new DailyFileDescriptor(ImportFileType.AD_REPORT, AdReportKind.ITEM_PERFORMANCE);
+        }
+        if (lower.startsWith("keywordperformance") && lower.endsWith(".csv")) {
+            return new DailyFileDescriptor(ImportFileType.AD_REPORT, AdReportKind.KEYWORD_PERFORMANCE);
         }
         if (lower.startsWith("po_data") && lower.endsWith(".xlsx")) {
-            return ImportFileType.ORDER;
+            return new DailyFileDescriptor(ImportFileType.ORDER, null);
         }
         return null;
     }
@@ -163,8 +176,10 @@ public class SourceScanner {
             case INVENTORY -> 0;
             case PRODUCT -> 1;
             case ORDER -> 2;
-            case AD_AUTO -> 3;
-            case AD_MANUAL -> 4;
+            case AD_REPORT, AD_AUTO, AD_MANUAL -> 3;
         };
+    }
+
+    private record DailyFileDescriptor(ImportFileType fileType, AdReportKind reportKind) {
     }
 }

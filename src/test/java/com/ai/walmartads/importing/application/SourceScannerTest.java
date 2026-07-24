@@ -1,0 +1,49 @@
+package com.ai.walmartads.importing.application;
+
+import com.ai.walmartads.config.WalmartAdsProperties;
+import com.ai.walmartads.importing.domain.AdReportKind;
+import com.ai.walmartads.importing.domain.ImportFileType;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.List;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+class SourceScannerTest {
+
+    @TempDir
+    Path temp;
+
+    @Test
+    void distinguishesReportKindFromCampaignType() throws Exception {
+        Path day = Files.createDirectories(temp.resolve("2026-7-22"));
+        Files.createFile(day.resolve("ItemPerformance_example.csv"));
+        Files.createFile(day.resolve("ItemKeywordPerformance_example.csv"));
+        Files.createFile(day.resolve("KeywordPerformance_example.csv"));
+        Files.createFile(day.resolve("PO_Data_example.xlsx"));
+
+        SourceScanner scanner = new SourceScanner(new WalmartAdsProperties(temp, temp.resolve("archive")));
+        List<SourceFileCandidate> candidates = scanner.scan();
+
+        assertThat(candidates).hasSize(4);
+        assertThat(report(candidates, "ItemPerformance_example.csv").fileType())
+                .isEqualTo(ImportFileType.AD_REPORT);
+        assertThat(report(candidates, "ItemPerformance_example.csv").reportKind())
+                .isEqualTo(AdReportKind.ITEM_PERFORMANCE);
+        assertThat(report(candidates, "ItemKeywordPerformance_example.csv").reportKind())
+                .isEqualTo(AdReportKind.ITEM_KEYWORD_PERFORMANCE);
+        assertThat(report(candidates, "KeywordPerformance_example.csv").reportKind())
+                .isEqualTo(AdReportKind.KEYWORD_PERFORMANCE);
+        assertThat(report(candidates, "PO_Data_example.xlsx").reportKind()).isNull();
+    }
+
+    private static SourceFileCandidate report(List<SourceFileCandidate> candidates, String fileName) {
+        return candidates.stream()
+                .filter(candidate -> candidate.path().getFileName().toString().equals(fileName))
+                .findFirst()
+                .orElseThrow();
+    }
+}

@@ -69,14 +69,15 @@ public class ImportService {
                 results.add(FileResult.failed(candidate.path(), candidate.fileType().name(), exception.getMessage()));
                 continue;
             }
-            if (fileRepository.existsBySha256AndFileType(sha256, candidate.fileType())) {
+            if (fileRepository.existsBySha256(sha256)) {
                 skipped++;
-                results.add(FileResult.skipped(candidate.path(), candidate.fileType().name()));
+                results.add(FileResult.skipped(candidate.path(), candidateLabel(candidate)));
                 continue;
             }
             ImportFile file = new ImportFile(
                     batch,
                     candidate.fileType(),
+                    candidate.reportKind(),
                     candidate.path().getFileName().toString(),
                     candidate.path().toString(),
                     sha256,
@@ -93,7 +94,7 @@ public class ImportService {
                 imported++;
                 results.add(FileResult.imported(
                         candidate.path(),
-                        candidate.fileType().name(),
+                        candidateLabel(candidate),
                         processed.sourceRows(),
                         processed.importedRows()
                 ));
@@ -103,7 +104,7 @@ public class ImportService {
                 ImportFile failedFile = fileRepository.findById(file.getId()).orElse(file);
                 failedFile.failed(archivePath == null ? null : archivePath.toString(), rootMessage(exception));
                 fileRepository.save(failedFile);
-                results.add(FileResult.failed(candidate.path(), candidate.fileType().name(), rootMessage(exception)));
+                results.add(FileResult.failed(candidate.path(), candidateLabel(candidate), rootMessage(exception)));
             }
         }
 
@@ -120,6 +121,12 @@ public class ImportService {
             current = current.getCause();
         }
         return current.getMessage() == null ? current.getClass().getSimpleName() : current.getMessage();
+    }
+
+    private static String candidateLabel(SourceFileCandidate candidate) {
+        return candidate.reportKind() == null
+                ? candidate.fileType().name()
+                : candidate.reportKind().name();
     }
 
     public record ImportRunResult(Long batchId, String status, String message, List<FileResult> files) {

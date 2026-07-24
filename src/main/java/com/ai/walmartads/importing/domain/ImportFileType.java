@@ -2,6 +2,7 @@ package com.ai.walmartads.importing.domain;
 
 public enum ImportFileType {
     ORDER,
+    AD_REPORT,
     AD_AUTO,
     AD_MANUAL,
     INVENTORY,

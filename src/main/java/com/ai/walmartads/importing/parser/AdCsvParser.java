@@ -55,6 +55,7 @@ public class AdCsvParser {
                     continue;
                 }
                 String itemId = ImportValues.text(values, "Item Id");
+                String campaignType = ImportValues.text(values, "Campaign Type");
                 SkuResolver.ResolvedSku resolved = skuResolver.resolve(itemId, ImportValues.text(values, "SKU Id"));
                 BigDecimal spend = ImportValues.decimal(values.get("Ad Spend"));
                 BigDecimal sales = ImportValues.decimal(values.get("Total Attributed Sales"));
@@ -65,10 +66,10 @@ public class AdCsvParser {
                 rows.add(new AdPerformance(
                         importFile,
                         reportDate,
-                        importFile.getFileType(),
+                        adType(campaignType, importFile),
                         campaignName,
                         ImportValues.text(values, "Campaign Id"),
-                        ImportValues.text(values, "Campaign Type"),
+                        campaignType,
                         ImportValues.text(values, "Current Bidding Strategy"),
                         ImportValues.decimal(values.get("Current Target ROAS")),
                         ImportValues.text(values, "Ad Group Name"),
@@ -99,6 +100,26 @@ public class AdCsvParser {
             }
         }
         return new ParsedRows<>(sourceRows, rows);
+    }
+
+    private static ImportFileType adType(String campaignType, ImportFile importFile) {
+        if (campaignType != null) {
+            String normalized = campaignType.toLowerCase(java.util.Locale.ROOT);
+            if (normalized.contains("(auto)") || normalized.contains("automatic")) {
+                return ImportFileType.AD_AUTO;
+            }
+            if (normalized.contains("(manual)") || normalized.contains("keyword bidded")) {
+                return ImportFileType.AD_MANUAL;
+            }
+        }
+        if (importFile.getFileType() == ImportFileType.AD_AUTO
+                || importFile.getFileType() == ImportFileType.AD_MANUAL) {
+            return importFile.getFileType();
+        }
+        throw new IllegalArgumentException(
+                "无法根据 Campaign Type 判断自动/手动广告："
+                        + importFile.getFileName() + "，Campaign Type=" + campaignType
+        );
     }
 
     private static Reader bomSafeReader(Path path) throws IOException {

@@ -31,6 +31,10 @@ public class ImportFile {
     @Column(nullable = false, length = 30)
     private ImportFileType fileType;
 
+    @Enumerated(EnumType.STRING)
+    @Column(length = 40)
+    private AdReportKind reportKind;
+
     @Column(nullable = false, length = 500)
     private String fileName;
 
@@ -78,6 +82,7 @@ public class ImportFile {
     public ImportFile(
             ImportBatch batch,
             ImportFileType fileType,
+            AdReportKind reportKind,
             String fileName,
             String originalPath,
             String sha256,
@@ -88,6 +93,7 @@ public class ImportFile {
     ) {
         this.batch = batch;
         this.fileType = fileType;
+        this.reportKind = reportKind;
         this.fileName = fileName;
         this.originalPath = originalPath;
         this.sha256 = sha256;
@@ -124,6 +130,10 @@ public class ImportFile {
 
     public ImportFileType getFileType() {
         return fileType;
+    }
+
+    public AdReportKind getReportKind() {
+        return reportKind;
     }
 
     public String getFileName() {

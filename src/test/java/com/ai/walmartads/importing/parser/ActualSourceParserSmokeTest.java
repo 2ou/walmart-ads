@@ -3,6 +3,7 @@ package com.ai.walmartads.importing.parser;
 import com.ai.walmartads.config.WalmartAdsProperties;
 import com.ai.walmartads.importing.application.SourceFileCandidate;
 import com.ai.walmartads.importing.application.SourceScanner;
+import com.ai.walmartads.importing.domain.AdReportKind;
 import com.ai.walmartads.importing.domain.ImportBatch;
 import com.ai.walmartads.importing.domain.ImportFile;
 import com.ai.walmartads.importing.domain.ImportFileType;
@@ -41,11 +42,17 @@ class ActualSourceParserSmokeTest {
 
         assertThat(sampleByType.keySet()).contains(
                 ImportFileType.ORDER,
-                ImportFileType.AD_AUTO,
-                ImportFileType.AD_MANUAL,
+                ImportFileType.AD_REPORT,
                 ImportFileType.INVENTORY,
                 ImportFileType.PRODUCT
         );
+        assertThat(candidates)
+                .extracting(SourceFileCandidate::reportKind)
+                .contains(
+                        AdReportKind.ITEM_PERFORMANCE,
+                        AdReportKind.ITEM_KEYWORD_PERFORMANCE,
+                        AdReportKind.KEYWORD_PERFORMANCE
+                );
 
         JsonPayloadWriter json = new JsonPayloadWriter(new ObjectMapper());
         InventorySnapshotRepository inventoryRepository = mock(InventorySnapshotRepository.class);
@@ -59,7 +66,7 @@ class ActualSourceParserSmokeTest {
             ImportFile importFile = importFile(candidate);
             ParsedRows<?> parsed = switch (candidate.fileType()) {
                 case ORDER -> orderParser.parse(candidate.path(), importFile);
-                case AD_AUTO, AD_MANUAL -> adParser.parse(candidate.path(), importFile);
+                case AD_REPORT, AD_AUTO, AD_MANUAL -> adParser.parse(candidate.path(), importFile);
                 case INVENTORY -> inventoryParser.parse(candidate.path(), importFile);
                 case PRODUCT -> productParser.parse(candidate.path(), importFile);
             };
@@ -78,6 +85,7 @@ class ActualSourceParserSmokeTest {
         return new ImportFile(
                 new ImportBatch(DATA_ROOT.toString()),
                 candidate.fileType(),
+                candidate.reportKind(),
                 candidate.path().getFileName().toString(),
                 candidate.path().toString(),
                 "0".repeat(64),

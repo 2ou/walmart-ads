@@ -65,12 +65,14 @@ public class FileImportProcessor {
                 .orElseThrow(() -> new IllegalArgumentException("导入文件记录不存在：" + fileId));
         ProcessedFile result = switch (file.getFileType()) {
             case ORDER -> saveOrders(orderParser.parse(archivePath, file));
-            case AD_AUTO, AD_MANUAL -> saveAds(adParser.parse(archivePath, file));
+            case AD_REPORT, AD_AUTO, AD_MANUAL -> saveAds(adParser.parse(archivePath, file));
             case INVENTORY -> saveInventory(inventoryParser.parse(archivePath, file));
             case PRODUCT -> saveProducts(productParser.parse(archivePath, file));
         };
         file.imported(archivePath.toString(), result.sourceRows(), result.importedRows());
-        if (file.getReportDate() != null && file.getFileType() != ImportFileType.PRODUCT
+        if (file.getReportDate() != null && file.getReportKind() != null) {
+            fileRepository.deactivateAdReportVersion(file.getReportKind(), file.getReportDate(), file.getId());
+        } else if (file.getReportDate() != null && file.getFileType() != ImportFileType.PRODUCT
                 && file.getFileType() != ImportFileType.INVENTORY) {
             fileRepository.deactivateReportVersion(file.getFileType(), file.getReportDate(), file.getId());
         }

@@ -46,6 +46,7 @@ public class DashboardDataService {
                        sum(ads.attributed_sales) as ad_sales
                   from wm_ads_ad_performance ads
                   join wm_ads_import_file file on file.id = ads.import_file_id and file.active = true
+                 where file.report_kind = 'ITEM_PERFORMANCE'
                  group by ads.report_date
                 """, new MapSqlParameterSource());
 
@@ -128,6 +129,7 @@ public class DashboardDataService {
                        sum(ads.attributed_sales) as ad_sales
                   from wm_ads_ad_performance ads
                   join wm_ads_import_file file on file.id = ads.import_file_id and file.active = true
+                 where file.report_kind = 'ITEM_PERFORMANCE'
                  group by ads.report_date, coalesce(ads.parent_sku, '未映射SKU')
                 """, new MapSqlParameterSource());
         Map<SkuDate, MutableSku> result = new HashMap<>();
@@ -171,6 +173,7 @@ public class DashboardDataService {
                        count(distinct ads.item_id) as listed_products
                   from wm_ads_ad_performance ads
                   join wm_ads_import_file file on file.id = ads.import_file_id and file.active = true
+                 where file.report_kind = 'ITEM_PERFORMANCE'
                  group by ads.report_date, ads.campaign_name, ads.ad_type
                 """, new MapSqlParameterSource()).stream().map(row -> new CampaignDailyRow(
                         date(row, "report_date"),

@@ -124,6 +124,14 @@ public class AdPerformance {
     protected AdPerformance() {
     }
 
+    public ImportFileType getAdType() {
+        return adType;
+    }
+
+    public String getCampaignType() {
+        return campaignType;
+    }
+
     public AdPerformance(
             ImportFile importFile,
             LocalDate reportDate,

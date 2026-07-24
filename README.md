@@ -143,3 +143,14 @@ API Key 只从环境变量读取，不会写入源码、数据库或前端。
 
 路径和截止日期可分别通过 `WALMART_ADS_HISTORICAL_WORKBOOK` 与
 `WALMART_ADS_HISTORICAL_END_DATE_EXCLUSIVE` 调整。
+
+## SKU、Item ID 与 UPC 映射
+
+一键扫描会读取
+`D:\PNK\02后台文件\01 WFS发货计划\WFS上传模板.xlsx` 的 `Sheet1`，
+把 SKU、父 SKU、Item ID、GTIN、UPC 和 Item Name 保存到独立映射表。
+相同内容通过文件指纹跳过；模板更新后会保留旧版本，并把新版本标记为当前映射。
+
+映射导入后会自动补齐现有广告记录中可匹配的 SKU/父 SKU，以及订单记录中缺失的
+UPC。后续广告 CSV 没有 SKU、只有 Item ID 时，也会优先从当前 WFS 映射解析。
+可通过 `WALMART_ADS_SKU_MAPPING_WORKBOOK` 调整模板路径。

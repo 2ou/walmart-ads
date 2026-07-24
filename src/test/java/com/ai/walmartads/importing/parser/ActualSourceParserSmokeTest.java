@@ -8,6 +8,7 @@ import com.ai.walmartads.importing.domain.ImportBatch;
 import com.ai.walmartads.importing.domain.ImportFile;
 import com.ai.walmartads.importing.domain.ImportFileType;
 import com.ai.walmartads.importing.repository.InventorySnapshotRepository;
+import com.ai.walmartads.importing.repository.SkuMappingRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 
@@ -36,6 +37,7 @@ class ActualSourceParserSmokeTest {
                 DATA_ROOT,
                 DATA_ROOT.resolve("archive"),
                 null,
+                null,
                 null
         ));
         List<SourceFileCandidate> candidates = scanner.scan();
@@ -59,7 +61,10 @@ class ActualSourceParserSmokeTest {
         JsonPayloadWriter json = new JsonPayloadWriter(new ObjectMapper());
         InventorySnapshotRepository inventoryRepository = mock(InventorySnapshotRepository.class);
         when(inventoryRepository.findLatestByItemId(anyString())).thenReturn(Optional.empty());
-        AdCsvParser adParser = new AdCsvParser(json, new SkuResolver(inventoryRepository));
+        AdCsvParser adParser = new AdCsvParser(
+                json,
+                new SkuResolver(inventoryRepository, mock(SkuMappingRepository.class))
+        );
         OrderWorkbookParser orderParser = new OrderWorkbookParser(json);
         InventoryWorkbookParser inventoryParser = new InventoryWorkbookParser(json);
         ProductWorkbookParser productParser = new ProductWorkbookParser(json);
@@ -72,6 +77,7 @@ class ActualSourceParserSmokeTest {
                 case INVENTORY -> inventoryParser.parse(candidate.path(), importFile);
                 case PRODUCT -> productParser.parse(candidate.path(), importFile);
                 case HISTORY -> throw new IllegalStateException("Two-argument test configuration does not scan history");
+                case SKU_MAPPING -> throw new IllegalStateException("Test configuration does not scan SKU mappings");
             };
             assertThat(parsed.sourceRowCount())
                     .as("源文件应有数据行：%s", candidate.path())

@@ -31,6 +31,7 @@ walmart:
     archive-root: ${WALMART_ADS_ARCHIVE_ROOT:D:/PNK/17DATA/archive}
     historical-workbook: ${WALMART_ADS_HISTORICAL_WORKBOOK:D:/PNK/12每日销售数量统计/PNK 每日销售数据统计.xlsx}
     historical-end-date-exclusive: ${WALMART_ADS_HISTORICAL_END_DATE_EXCLUSIVE:2026-07-21}
+    sku-mapping-workbook: ${WALMART_ADS_SKU_MAPPING_WORKBOOK:D:/PNK/02后台文件/01 WFS发货计划/WFS上传模板.xlsx}
     ai:
       kie:
         enabled: ${WALMART_ADS_AI_ENABLED:false}

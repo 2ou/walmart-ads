@@ -6,6 +6,7 @@ import com.ai.walmartads.importing.domain.ImportFileType;
 import com.ai.walmartads.importing.domain.InventorySnapshot;
 import com.ai.walmartads.importing.domain.OrderRecord;
 import com.ai.walmartads.importing.domain.ProductRecord;
+import com.ai.walmartads.importing.domain.SkuMapping;
 import com.ai.walmartads.importing.parser.AdCsvParser;
 import com.ai.walmartads.importing.parser.HistoricalWorkbookParser;
 import com.ai.walmartads.importing.parser.HistoricalWorkbookRows;
@@ -13,11 +14,13 @@ import com.ai.walmartads.importing.parser.InventoryWorkbookParser;
 import com.ai.walmartads.importing.parser.OrderWorkbookParser;
 import com.ai.walmartads.importing.parser.ParsedRows;
 import com.ai.walmartads.importing.parser.ProductWorkbookParser;
+import com.ai.walmartads.importing.parser.SkuMappingWorkbookParser;
 import com.ai.walmartads.importing.repository.AdPerformanceRepository;
 import com.ai.walmartads.importing.repository.ImportFileRepository;
 import com.ai.walmartads.importing.repository.InventorySnapshotRepository;
 import com.ai.walmartads.importing.repository.OrderRecordRepository;
 import com.ai.walmartads.importing.repository.ProductRecordRepository;
+import com.ai.walmartads.importing.repository.SkuMappingRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -34,11 +37,13 @@ public class FileImportProcessor {
     private final AdPerformanceRepository adRepository;
     private final InventorySnapshotRepository inventoryRepository;
     private final ProductRecordRepository productRepository;
+    private final SkuMappingRepository mappingRepository;
     private final OrderWorkbookParser orderParser;
     private final AdCsvParser adParser;
     private final InventoryWorkbookParser inventoryParser;
     private final ProductWorkbookParser productParser;
     private final HistoricalWorkbookParser historicalParser;
+    private final SkuMappingWorkbookParser mappingParser;
 
     public FileImportProcessor(
             ImportFileRepository fileRepository,
@@ -46,22 +51,26 @@ public class FileImportProcessor {
             AdPerformanceRepository adRepository,
             InventorySnapshotRepository inventoryRepository,
             ProductRecordRepository productRepository,
+            SkuMappingRepository mappingRepository,
             OrderWorkbookParser orderParser,
             AdCsvParser adParser,
             InventoryWorkbookParser inventoryParser,
             ProductWorkbookParser productParser,
-            HistoricalWorkbookParser historicalParser
+            HistoricalWorkbookParser historicalParser,
+            SkuMappingWorkbookParser mappingParser
     ) {
         this.fileRepository = fileRepository;
         this.orderRepository = orderRepository;
         this.adRepository = adRepository;
         this.inventoryRepository = inventoryRepository;
         this.productRepository = productRepository;
+        this.mappingRepository = mappingRepository;
         this.orderParser = orderParser;
         this.adParser = adParser;
         this.inventoryParser = inventoryParser;
         this.productParser = productParser;
         this.historicalParser = historicalParser;
+        this.mappingParser = mappingParser;
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -74,6 +83,7 @@ public class FileImportProcessor {
             case INVENTORY -> saveInventory(inventoryParser.parse(archivePath, file));
             case PRODUCT -> saveProducts(productParser.parse(archivePath, file));
             case HISTORY -> saveHistory(historicalParser.parse(archivePath, file));
+            case SKU_MAPPING -> saveSkuMappings(mappingParser.parse(archivePath, file));
         };
         file.imported(archivePath.toString(), result.sourceRows(), result.importedRows());
         if (file.getReportDate() != null && file.getReportKind() != null) {
@@ -81,8 +91,9 @@ public class FileImportProcessor {
         } else if (file.getReportDate() != null && file.getFileType() != ImportFileType.PRODUCT
                 && file.getFileType() != ImportFileType.INVENTORY) {
             fileRepository.deactivateReportVersion(file.getFileType(), file.getReportDate(), file.getId());
-        } else if (file.getFileType() == ImportFileType.HISTORY) {
-            fileRepository.deactivateFileTypeVersions(ImportFileType.HISTORY, file.getId());
+        } else if (file.getFileType() == ImportFileType.HISTORY
+                || file.getFileType() == ImportFileType.SKU_MAPPING) {
+            fileRepository.deactivateFileTypeVersions(file.getFileType(), file.getId());
         }
         return result;
     }
@@ -121,6 +132,14 @@ public class FileImportProcessor {
                 parsed.sourceRowCount(),
                 parsed.orders().size() + parsed.ads().size()
         );
+    }
+
+    private ProcessedFile saveSkuMappings(ParsedRows<SkuMapping> parsed) {
+        mappingRepository.deactivateCurrentVersions();
+        mappingRepository.saveAllAndFlush(parsed.rows());
+        adRepository.backfillSkuFromCurrentMappings();
+        orderRepository.backfillUpcFromCurrentMappings();
+        return new ProcessedFile(parsed.sourceRowCount(), parsed.rows().size());
     }
 
     public record ProcessedFile(int sourceRows, int importedRows) {

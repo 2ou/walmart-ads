@@ -44,6 +44,7 @@ public class SourceScanner {
         scanDailyDirectories(root, files);
         scanInventory(root, files);
         scanProducts(root, files);
+        scanSkuMappingWorkbook(files);
         scanHistoricalWorkbook(files);
         files.sort(Comparator
                 .comparingInt((SourceFileCandidate item) -> priority(item.fileType()))
@@ -148,6 +149,33 @@ public class SourceScanner {
         ));
     }
 
+    private void scanSkuMappingWorkbook(List<SourceFileCandidate> files) {
+        Path configured = properties.skuMappingWorkbook();
+        if (configured == null) {
+            return;
+        }
+        Path path = configured.toAbsolutePath().normalize();
+        if (!Files.isRegularFile(path) || path.getFileName().toString().startsWith("~$")) {
+            return;
+        }
+        files.add(new SourceFileCandidate(
+                path,
+                Path.of("sku-mapping").resolve(path.getFileName()),
+                ImportFileType.SKU_MAPPING,
+                null,
+                null,
+                ImportValues.fileTime(lastModified(path).toInstant())
+        ));
+    }
+
+    private static FileTime lastModified(Path path) {
+        try {
+            return Files.getLastModifiedTime(path);
+        } catch (IOException exception) {
+            throw new IllegalArgumentException("无法读取 SKU 映射表修改时间：" + path, exception);
+        }
+    }
+
     private static DailyFileDescriptor dailyFile(String fileName) {
         String lower = fileName.toLowerCase(Locale.ROOT);
         if (lower.startsWith("itemkeywordperformance") && lower.endsWith(".csv")) {
@@ -195,11 +223,12 @@ public class SourceScanner {
 
     private static int priority(ImportFileType type) {
         return switch (type) {
-            case INVENTORY -> 0;
-            case PRODUCT -> 1;
-            case HISTORY -> 2;
-            case ORDER -> 3;
-            case AD_REPORT, AD_AUTO, AD_MANUAL -> 4;
+            case SKU_MAPPING -> 0;
+            case INVENTORY -> 1;
+            case PRODUCT -> 2;
+            case HISTORY -> 3;
+            case ORDER -> 4;
+            case AD_REPORT, AD_AUTO, AD_MANUAL -> 5;
         };
     }
 

@@ -42,7 +42,8 @@ class HistoricalWorkbookParserTest {
                 temp,
                 temp.resolve("archive"),
                 path,
-                LocalDate.of(2026, 7, 21)
+                LocalDate.of(2026, 7, 21),
+                null
         );
         HistoricalWorkbookParser parser = new HistoricalWorkbookParser(
                 new JsonPayloadWriter(new ObjectMapper()),

@@ -6,6 +6,7 @@ import com.ai.walmartads.importing.domain.ImportBatch;
 import com.ai.walmartads.importing.domain.ImportFile;
 import com.ai.walmartads.importing.domain.ImportFileType;
 import com.ai.walmartads.importing.repository.InventorySnapshotRepository;
+import com.ai.walmartads.importing.repository.SkuMappingRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -45,7 +46,10 @@ class AdCsvParserTest {
         );
         AdCsvParser parser = new AdCsvParser(
                 new JsonPayloadWriter(new ObjectMapper()),
-                new SkuResolver(mock(InventorySnapshotRepository.class))
+                new SkuResolver(
+                        mock(InventorySnapshotRepository.class),
+                        mock(SkuMappingRepository.class)
+                )
         );
 
         ParsedRows<AdPerformance> parsed = parser.parse(csv, importFile);

@@ -7,5 +7,6 @@ public enum ImportFileType {
     AD_MANUAL,
     INVENTORY,
     PRODUCT,
-    HISTORY
+    HISTORY,
+    SKU_MAPPING
 }

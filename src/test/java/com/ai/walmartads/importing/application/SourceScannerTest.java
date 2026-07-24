@@ -26,7 +26,7 @@ class SourceScannerTest {
         Files.createFile(day.resolve("PO_Data_example.xlsx"));
 
         SourceScanner scanner = new SourceScanner(new WalmartAdsProperties(
-                temp, temp.resolve("archive"), null, null
+                temp, temp.resolve("archive"), null, null, null
         ));
         List<SourceFileCandidate> candidates = scanner.scan();
 
@@ -50,7 +50,7 @@ class SourceScannerTest {
         Files.createFile(day.resolve("PO_Data_legacy.xlsx"));
 
         SourceScanner scanner = new SourceScanner(new WalmartAdsProperties(
-                temp, temp.resolve("archive"), null, null
+                temp, temp.resolve("archive"), null, null, null
         ));
 
         assertThat(scanner.scan())
@@ -67,7 +67,8 @@ class SourceScannerTest {
                 dataRoot,
                 temp.resolve("archive"),
                 workbook,
-                java.time.LocalDate.of(2026, 7, 21)
+                java.time.LocalDate.of(2026, 7, 21),
+                null
         ));
 
         assertThat(scanner.scan())
@@ -78,6 +79,25 @@ class SourceScannerTest {
                     assertThat(candidate.relativePath())
                             .isEqualTo(Path.of("history", "PNK 每日销售数据统计.xlsx"));
                 });
+    }
+
+    @Test
+    void scansConfiguredSkuMappingWorkbookBeforeDailyReports() throws Exception {
+        Path dataRoot = Files.createDirectories(temp.resolve("mapping-data"));
+        Path day = Files.createDirectories(dataRoot.resolve("date").resolve("2026-7-22"));
+        Files.createFile(day.resolve("ItemPerformance_example.csv"));
+        Path workbook = Files.createFile(temp.resolve("WFS-upload-template.xlsx"));
+        SourceScanner scanner = new SourceScanner(new WalmartAdsProperties(
+                dataRoot,
+                temp.resolve("mapping-archive"),
+                null,
+                null,
+                workbook
+        ));
+
+        assertThat(scanner.scan())
+                .extracting(SourceFileCandidate::fileType)
+                .containsExactly(ImportFileType.SKU_MAPPING, ImportFileType.AD_REPORT);
     }
 
     private static SourceFileCandidate report(List<SourceFileCandidate> candidates, String fileName) {

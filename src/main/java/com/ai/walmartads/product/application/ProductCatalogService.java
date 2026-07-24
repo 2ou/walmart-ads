@@ -24,6 +24,11 @@ import java.util.stream.Collectors;
 @Service
 public class ProductCatalogService {
 
+    private static final List<String> APPAREL_SIZE_ORDER = List.of(
+            "XXS", "XS", "S", "M", "L", "XL",
+            "1X", "XXL", "2XL", "2X", "XXXL", "3XL", "3X",
+            "4XL", "4X", "5XL", "5X", "6XL", "6X", "ONE SIZE", "OS"
+    );
     private static final TypeReference<List<String>> STRING_LIST = new TypeReference<>() {
     };
     private static final TypeReference<LinkedHashMap<String, Object>> OBJECT_MAP = new TypeReference<>() {
@@ -95,27 +100,10 @@ public class ProductCatalogService {
                 })
                 .toList());
         List<Variant> variants = rows.stream()
-                .sorted(Comparator
-                        .comparing(SourceProduct::color, Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER))
-                        .thenComparing(SourceProduct::size, Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER))
-                        .thenComparing(SourceProduct::sku))
-                .map(row -> new Variant(
-                        row.sku(),
-                        row.productId(),
-                        row.productIdType(),
-                        row.price(),
-                        row.color(),
-                        row.colorCategory(),
-                        row.size(),
-                        row.sizeGroup(),
-                        row.patternName(),
-                        row.materialName(),
-                        row.mainImageUrl(),
-                        row.swatchImageUrl(),
-                        row.primaryVariant(),
-                        row.sourceUpdatedAt()
-                ))
+                .sorted(variantComparator())
+                .map(ProductCatalogService::variant)
                 .toList();
+        List<ColorGroup> colorGroups = colorGroups(rows);
         PriceRange prices = priceRange(rows);
         return new ProductDetail(
                 safeParentSku,
@@ -136,8 +124,118 @@ public class ProductCatalogService {
                 representative.sourceUpdatedAt(),
                 attributes(representative),
                 representative.rawPayload(),
+                colorGroups,
                 variants
         );
+    }
+
+    private static List<ColorGroup> colorGroups(List<SourceProduct> rows) {
+        Map<String, List<SourceProduct>> grouped = new LinkedHashMap<>();
+        rows.forEach(row -> grouped.computeIfAbsent(colorKey(row.color()), ignored -> new ArrayList<>()).add(row));
+        return grouped.values().stream()
+                .map(ProductCatalogService::colorGroup)
+                .sorted(Comparator
+                        .comparing(ColorGroup::primaryColor).reversed()
+                        .thenComparing(ColorGroup::color, String.CASE_INSENSITIVE_ORDER))
+                .toList();
+    }
+
+    private static ColorGroup colorGroup(List<SourceProduct> rows) {
+        SourceProduct representative = representative(rows);
+        List<Variant> variants = rows.stream()
+                .sorted(colorVariantComparator())
+                .map(ProductCatalogService::variant)
+                .toList();
+        List<String> images = distinctStrings(rows.stream()
+                .flatMap(row -> {
+                    List<String> rowImages = new ArrayList<>();
+                    rowImages.add(row.mainImageUrl());
+                    rowImages.addAll(row.secondaryImageUrls());
+                    return rowImages.stream();
+                })
+                .toList());
+        List<String> sizes = variants.stream()
+                .map(Variant::size)
+                .filter(ProductCatalogService::present)
+                .distinct()
+                .sorted(apparelSizeComparator())
+                .toList();
+        return new ColorGroup(
+                present(representative.color()) ? representative.color().trim() : "未标注颜色",
+                representative.colorCategory(),
+                representative.patternName(),
+                representative.mainImageUrl(),
+                representative.swatchImageUrl(),
+                images,
+                sizes,
+                variants.size(),
+                variants.stream().anyMatch(Variant::primaryVariant),
+                variants
+        );
+    }
+
+    private static Variant variant(SourceProduct row) {
+        List<String> images = new ArrayList<>();
+        images.add(row.mainImageUrl());
+        images.addAll(row.secondaryImageUrls());
+        return new Variant(
+                row.sku(),
+                row.productId(),
+                row.productIdType(),
+                row.price(),
+                row.color(),
+                row.colorCategory(),
+                row.size(),
+                row.sizeGroup(),
+                row.patternName(),
+                row.materialName(),
+                row.mainImageUrl(),
+                row.swatchImageUrl(),
+                distinctStrings(images),
+                row.primaryVariant(),
+                row.sourceUpdatedAt()
+        );
+    }
+
+    private static Comparator<SourceProduct> variantComparator() {
+        return Comparator
+                .comparing(SourceProduct::primaryVariant).reversed()
+                .thenComparing(SourceProduct::color, Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER))
+                .thenComparing(SourceProduct::size, Comparator.nullsLast(apparelSizeComparator()))
+                .thenComparing(SourceProduct::sku);
+    }
+
+    private static Comparator<SourceProduct> colorVariantComparator() {
+        return Comparator
+                .comparing(SourceProduct::size, Comparator.nullsLast(apparelSizeComparator()))
+                .thenComparing(SourceProduct::sku);
+    }
+
+    private static Comparator<String> apparelSizeComparator() {
+        return Comparator
+                .comparingInt(ProductCatalogService::apparelSizeRank)
+                .thenComparing(String.CASE_INSENSITIVE_ORDER);
+    }
+
+    private static int apparelSizeRank(String value) {
+        if (!present(value)) {
+            return Integer.MAX_VALUE;
+        }
+        String normalized = value.trim().toUpperCase(Locale.ROOT).replace(" ", "");
+        for (int index = 0; index < APPAREL_SIZE_ORDER.size(); index++) {
+            if (APPAREL_SIZE_ORDER.get(index).replace(" ", "").equals(normalized)) {
+                return index;
+            }
+        }
+        try {
+            return 100 + Integer.parseInt(normalized.replaceAll("[^0-9]", ""));
+        } catch (NumberFormatException ignored) {
+            return 1000;
+        }
+    }
+
+    private static String colorKey(String value) {
+        return present(value) ? value.trim().toLowerCase(Locale.ROOT) : "__unlabeled__";
     }
 
     private List<SourceProduct> loadRows(String parentSku) {
@@ -478,6 +576,21 @@ public class ProductCatalogService {
             LocalDateTime updatedAt,
             Map<String, String> attributes,
             Map<String, Object> rawFields,
+            List<ColorGroup> colorGroups,
+            List<Variant> variants
+    ) {
+    }
+
+    public record ColorGroup(
+            String color,
+            String colorCategory,
+            String pattern,
+            String mainImageUrl,
+            String swatchImageUrl,
+            List<String> images,
+            List<String> sizes,
+            int variantCount,
+            boolean primaryColor,
             List<Variant> variants
     ) {
     }
@@ -495,6 +608,7 @@ public class ProductCatalogService {
             String material,
             String imageUrl,
             String swatchImageUrl,
+            List<String> images,
             boolean primaryVariant,
             LocalDateTime updatedAt
     ) {

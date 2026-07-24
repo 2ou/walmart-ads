@@ -86,8 +86,8 @@
       <section class="panel return-scope-panel" aria-labelledby="returnScopeTitle">
         <div class="panel-header">
           <div>
-            <h2 class="panel-title" id="returnScopeTitle">款内颜色与尺码分析</h2>
-            <p class="panel-subtitle" id="returnScopeSubtitle">先选择款号，颜色和尺码只在该款范围内统计。</p>
+            <h2 class="panel-title" id="returnScopeTitle">款内实际退款色码分析</h2>
+            <p class="panel-subtitle" id="returnScopeSubtitle">只统计已完成退款，申请中和已取消不进入退款率。</p>
           </div>
           <label class="return-parent-control" for="returnParentSelect">
             <span>分析款号</span>
@@ -102,11 +102,11 @@
       </section>
       <div class="return-dimension-layout">
         <section class="panel" aria-labelledby="returnColorTitle">
-          <div class="panel-header"><div><h2 class="panel-title" id="returnColorTitle">该款颜色退款表现</h2><p class="panel-subtitle" id="returnColorSubtitle">分母为该款各颜色的同月销量</p></div></div>
+          <div class="panel-header"><div><h2 class="panel-title" id="returnColorTitle">该款颜色实际退款表现</h2><p class="panel-subtitle" id="returnColorSubtitle">实际退款件数除以该款各颜色的同月销量</p></div></div>
           <div class="return-dimension-list" id="returnColorList"></div>
         </section>
         <section class="panel" aria-labelledby="returnSizeTitle">
-          <div class="panel-header"><div><h2 class="panel-title" id="returnSizeTitle">该款尺码退款表现</h2><p class="panel-subtitle" id="returnSizeSubtitle">分母为该款各尺码的同月销量</p></div></div>
+          <div class="panel-header"><div><h2 class="panel-title" id="returnSizeTitle">该款尺码实际退款表现</h2><p class="panel-subtitle" id="returnSizeSubtitle">实际退款件数除以该款各尺码的同月销量</p></div></div>
           <div class="return-dimension-list" id="returnSizeList"></div>
         </section>
       </div>
@@ -352,7 +352,11 @@
   }
 
   function parentRows() {
-    return (state.data?.parentRows || []).filter((row) => number(row.requestedUnits) > 0);
+    return (state.data?.parentRows || [])
+      .filter((row) => number(row.completedUnits) > 0)
+      .sort((a, b) => number(b.completedUnits) - number(a.completedUnits)
+        || number(b.completedRate) - number(a.completedRate)
+        || text(a.parentSku).localeCompare(text(b.parentSku)));
   }
 
   function ensureSelectedParent() {
@@ -364,7 +368,8 @@
       return;
     }
     if (parents.some((row) => row.parentSku === state.selectedParentSku)) return;
-    const priority = parents.find((row) => row.risk === "HIGH") || parents[0];
+    const priority = [...parents].sort((a, b) => number(b.completedRate) - number(a.completedRate)
+      || number(b.completedUnits) - number(a.completedUnits))[0];
     state.selectedParentSku = priority.parentSku;
     state.selectedColor = null;
     state.selectedSize = null;
@@ -391,7 +396,7 @@
     select.disabled = false;
     select.innerHTML = parents.map((row) => `
       <option value="${escapeHtml(row.parentSku)}" ${row.parentSku === state.selectedParentSku ? "selected" : ""}>
-        ${escapeHtml(row.parentSku)} · ${integer(row.requestedUnits)} 件申请 · ${percent(row.requestRate)}
+        ${escapeHtml(row.parentSku)} · ${integer(row.completedUnits)} 件已退款 · ${percent(row.completedRate)}
       </option>`).join("");
   }
 
@@ -401,14 +406,14 @@
     const path = [month, row?.parentSku, state.selectedColor, state.selectedSize].filter(Boolean).join(" › ");
     $("#returnScopePath").textContent = path || "等待选择款号";
     $("#returnScopeSubtitle").textContent = row
-      ? `${row.parentSku} 共 ${integer(row.requestedUnits)} 件申请，颜色和尺码均使用该款对应维度的同月销量作为分母。`
-      : "先选择款号，颜色和尺码只在该款范围内统计。";
+      ? `${row.parentSku} 共 ${integer(row.completedUnits)} 件已退款，颜色和尺码均按实际退款件数计算。`
+      : "只统计已完成退款，申请中和已取消不进入退款率。";
     $("#returnColorSubtitle").textContent = row
-      ? `${row.parentSku} · 每个颜色的退款件数 ÷ 该颜色销量`
-      : "分母为该款各颜色的同月销量";
+      ? `${row.parentSku} · 每个颜色的实际退款件数 ÷ 该颜色销量`
+      : "实际退款件数除以该款各颜色的同月销量";
     $("#returnSizeSubtitle").textContent = row
-      ? `${row.parentSku} · 每个尺码的退款件数 ÷ 该尺码销量`
-      : "分母为该款各尺码的同月销量";
+      ? `${row.parentSku} · 每个尺码的实际退款件数 ÷ 该尺码销量`
+      : "实际退款件数除以该款各尺码的同月销量";
     $("#returnScopeClear").hidden = !state.selectedColor && !state.selectedSize;
   }
 
@@ -590,9 +595,9 @@
         data-return-dimension-key="${key}" data-return-dimension-label="${escapeHtml(row.label)}"
         aria-pressed="${row.label === selectedLabel}">
         <strong title="${escapeHtml(row.label)}">${escapeHtml(row.label)}</strong>
-        <span><b>${integer(row.requestedUnits)} / ${integer(row.soldUnits)}</b><small>申请 / 销量</small></span>
-        <span><b>${percent(row.requestRate)}</b><small>申请退款率</small></span>
-        <span><b>${percent(row.shareOfParentReturns)}</b><small>占本款退款</small></span>
+        <span><b>${integer(row.completedUnits)} / ${integer(row.soldUnits)}</b><small>已退款 / 销量</small></span>
+        <span><b>${percent(row.completedRate)}</b><small>实际退款率</small></span>
+        <span><b>${percent(row.shareOfParentCompletedRefunds)}</b><small>占本款已退款</small></span>
       </button>`).join("");
     container.querySelectorAll("[data-return-dimension-key]").forEach((button) => {
       button.addEventListener("click", () => selectDimension(

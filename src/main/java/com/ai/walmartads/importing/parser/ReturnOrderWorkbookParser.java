@@ -18,6 +18,7 @@ import java.security.NoSuchAlgorithmException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
+import java.time.ZoneId;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.HexFormat;
@@ -30,6 +31,7 @@ import java.util.Set;
 public class ReturnOrderWorkbookParser {
 
     private static final String SHEET_NAME = "Return Order Details";
+    private static final ZoneId BUSINESS_ZONE = ZoneId.of("Asia/Shanghai");
     private static final Set<String> REQUIRED_HEADERS = Set.of(
             "CUSTOMER_ORDER_NO",
             "RMA_NO",
@@ -80,6 +82,7 @@ public class ReturnOrderWorkbookParser {
                 if (customerOrderNo == null || rmaNo == null || itemId == null || requestAt == null) {
                     continue;
                 }
+                LocalDate requestMonth = requestAt.toLocalDate().withDayOfMonth(1);
                 SkuResolver.ResolvedSku resolved = skuCache.computeIfAbsent(
                         itemId,
                         key -> skuResolver.resolve(key, null)
@@ -88,7 +91,7 @@ public class ReturnOrderWorkbookParser {
                         importFile,
                         rowIndex + 1,
                         businessKey(values),
-                        reportMonth.withDayOfMonth(1),
+                        requestMonth,
                         requestAt,
                         dateTime(values.get("CURRENT_STATUS_TIME")),
                         resolved.sku(),
@@ -139,7 +142,9 @@ public class ReturnOrderWorkbookParser {
             return null;
         }
         try {
-            return OffsetDateTime.parse(value.trim()).toLocalDateTime();
+            return OffsetDateTime.parse(value.trim())
+                    .atZoneSameInstant(BUSINESS_ZONE)
+                    .toLocalDateTime();
         } catch (DateTimeParseException ignored) {
             try {
                 return LocalDateTime.parse(value.trim());

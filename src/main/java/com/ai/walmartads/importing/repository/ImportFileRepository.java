@@ -3,17 +3,23 @@ package com.ai.walmartads.importing.repository;
 import com.ai.walmartads.importing.domain.ImportFile;
 import com.ai.walmartads.importing.domain.AdReportKind;
 import com.ai.walmartads.importing.domain.ImportFileType;
+import com.ai.walmartads.importing.domain.ImportFileStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 
 public interface ImportFileRepository extends JpaRepository<ImportFile, Long> {
 
     boolean existsBySha256(String sha256);
+
+    Optional<ImportFile> findBySha256AndFileType(String sha256, ImportFileType fileType);
 
     boolean existsBySha256AndFileTypeAndReportDate(
             String sha256,
@@ -61,5 +67,31 @@ public interface ImportFileRepository extends JpaRepository<ImportFile, Long> {
     int deactivateFileTypeVersions(
             @Param("fileType") ImportFileType fileType,
             @Param("keepId") Long keepId
+    );
+
+    @Modifying
+    @Transactional
+    @Query("""
+            update ImportFile file
+               set file.active = true
+             where file.id in :keepIds
+               and file.status = :status
+            """)
+    int activateImportedVersions(
+            @Param("keepIds") Collection<Long> keepIds,
+            @Param("status") ImportFileStatus status
+    );
+
+    @Modifying
+    @Transactional
+    @Query("""
+            update ImportFile file
+               set file.active = false
+             where file.fileType = :fileType
+               and file.id not in :keepIds
+            """)
+    int deactivateFileTypeVersionsExcept(
+            @Param("fileType") ImportFileType fileType,
+            @Param("keepIds") Collection<Long> keepIds
     );
 }

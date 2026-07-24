@@ -35,7 +35,9 @@ class ReturnOrderWorkbookParserTest {
 
         int sourceRows = 0;
         int importedRows = 0;
-        for (Path path : Files.list(ROOT).filter(item -> item.toString().endsWith(".xlsx")).sorted().toList()) {
+        var workbooks = Files.list(ROOT).filter(item -> item.toString().endsWith(".xlsx")).sorted().toList();
+        assertThat(workbooks).hasSize(5);
+        for (Path path : workbooks) {
             String month = path.getFileName().toString().replaceAll(".*(\\d{4}-\\d{2}).*", "$1");
             LocalDate reportMonth = LocalDate.parse(month + "-01");
             ImportFile file = new ImportFile(
@@ -51,11 +53,15 @@ class ReturnOrderWorkbookParserTest {
                     null
             );
             ParsedRows<ReturnOrderRecord> parsed = parser.parse(path, file);
+            assertThat(parsed.sourceRowCount()).as(path.toString()).isPositive();
+            assertThat(parsed.rows()).as(path.toString()).hasSize(parsed.sourceRowCount());
+            assertThat(parsed.rows()).allSatisfy(row -> assertThat(row.getReportMonth())
+                    .isEqualTo(row.getRequestAt().toLocalDate().withDayOfMonth(1)));
             sourceRows += parsed.sourceRowCount();
             importedRows += parsed.rows().size();
         }
 
-        assertThat(sourceRows).isEqualTo(557);
-        assertThat(importedRows).isEqualTo(557);
+        assertThat(sourceRows).isPositive();
+        assertThat(importedRows).isEqualTo(sourceRows);
     }
 }

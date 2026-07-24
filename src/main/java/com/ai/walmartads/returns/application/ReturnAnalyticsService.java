@@ -489,7 +489,7 @@ public class ReturnAnalyticsService {
     }
 
     private static List<DimensionRow> dimensionRows(List<SkuRow> rows, boolean color) {
-        double parentRequested = rows.stream().mapToDouble(SkuRow::requestedUnits).sum();
+        double parentCompleted = rows.stream().mapToDouble(SkuRow::completedUnits).sum();
         Map<String, DimensionAccumulator> groups = new LinkedHashMap<>();
         rows.forEach(row -> {
             String label = color ? row.color() : row.size();
@@ -497,8 +497,8 @@ public class ReturnAnalyticsService {
             groups.computeIfAbsent(label, DimensionAccumulator::new).add(row);
         });
         return groups.values().stream()
-                .map(item -> item.row(parentRequested))
-                .sorted(Comparator.comparingDouble(DimensionRow::requestedUnits).reversed()
+                .map(item -> item.row(parentCompleted))
+                .sorted(Comparator.comparingDouble(DimensionRow::completedUnits).reversed()
                         .thenComparing(DimensionRow::label))
                 .toList();
     }
@@ -512,17 +512,19 @@ public class ReturnAnalyticsService {
         return groups.entrySet().stream()
                 .map(entry -> {
                     double requested = entry.getValue().stream().mapToDouble(SkuRow::requestedUnits).sum();
+                    double completed = entry.getValue().stream().mapToDouble(SkuRow::completedUnits).sum();
                     double sold = entry.getValue().stream().mapToDouble(SkuRow::soldUnits).sum();
                     return new ParentBreakdown(
                             entry.getKey(),
                             round(requested),
+                            round(completed),
                             round(sold),
                             dimensionRows(entry.getValue(), true),
                             dimensionRows(entry.getValue(), false)
                     );
                 })
-                .filter(item -> item.requestedUnits() > 0)
-                .sorted(Comparator.comparingDouble(ParentBreakdown::requestedUnits).reversed()
+                .filter(item -> item.completedUnits() > 0)
+                .sorted(Comparator.comparingDouble(ParentBreakdown::completedUnits).reversed()
                         .thenComparing(ParentBreakdown::parentSku))
                 .toList();
     }
@@ -767,7 +769,7 @@ public class ReturnAnalyticsService {
             double refundAmount,
             double salesRevenue,
             double refundAmountRate,
-            double shareOfParentReturns,
+            double shareOfParentCompletedRefunds,
             String risk
     ) {
     }
@@ -775,6 +777,7 @@ public class ReturnAnalyticsService {
     public record ParentBreakdown(
             String parentSku,
             double requestedUnits,
+            double completedUnits,
             double soldUnits,
             List<DimensionRow> colors,
             List<DimensionRow> sizes
@@ -984,8 +987,9 @@ public class ReturnAnalyticsService {
             salesRevenue += row.salesRevenue();
         }
 
-        private DimensionRow row(double parentRequested) {
+        private DimensionRow row(double parentCompleted) {
             double requestRate = ratio(requested, sold);
+            double completedRate = ratio(completed, sold);
             return new DimensionRow(
                     label,
                     skus.size(),
@@ -995,14 +999,14 @@ public class ReturnAnalyticsService {
                     round(pending),
                     round(sold),
                     requestRate,
-                    ratio(completed, sold),
+                    completedRate,
                     round(refundAmount),
                     round(salesRevenue),
                     ratio(refundAmount, salesRevenue),
-                    ratio(requested, parentRequested),
+                    ratio(completed, parentCompleted),
                     sold <= 0 ? "NO_SALES_DENOMINATOR"
-                            : requestRate >= 0.15 ? "HIGH"
-                            : requestRate >= 0.08 ? "WATCH" : "NORMAL"
+                            : completedRate >= 0.15 ? "HIGH"
+                            : completedRate >= 0.08 ? "WATCH" : "NORMAL"
             );
         }
     }

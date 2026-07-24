@@ -208,6 +208,14 @@ public class ReturnOrderRecord {
         this.createdAt = LocalDateTime.now();
     }
 
+    public LocalDate getReportMonth() {
+        return reportMonth;
+    }
+
+    public LocalDateTime getRequestAt() {
+        return requestAt;
+    }
+
     private static String required(Map<String, String> values, String name) {
         String value = values.get(name);
         if (value == null || value.isBlank()) {

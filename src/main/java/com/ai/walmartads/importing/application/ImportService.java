@@ -3,6 +3,7 @@ package com.ai.walmartads.importing.application;
 import com.ai.walmartads.config.WalmartAdsProperties;
 import com.ai.walmartads.importing.domain.ImportBatch;
 import com.ai.walmartads.importing.domain.ImportFile;
+import com.ai.walmartads.importing.domain.ImportFileStatus;
 import com.ai.walmartads.importing.domain.ImportFileType;
 import com.ai.walmartads.importing.parser.ImportValues;
 import com.ai.walmartads.importing.repository.ImportBatchRepository;
@@ -50,33 +51,76 @@ public class ImportService {
     }
 
     public ImportRunResult scanAndImport() throws IOException {
+        return runImport(scanner.scan(), null);
+    }
+
+    public ImportRunResult replaceReturnOrders() throws IOException {
+        List<SourceFileCandidate> candidates = scanner.scan().stream()
+                .filter(candidate -> candidate.fileType() == ImportFileType.RETURN_ORDER)
+                .toList();
+        if (candidates.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "No canonical return workbooks found under source/Return_Orders"
+            );
+        }
+        return runImport(candidates, ImportFileType.RETURN_ORDER);
+    }
+
+    private ImportRunResult runImport(
+            List<SourceFileCandidate> candidates,
+            ImportFileType replacementType
+    ) throws IOException {
         ImportBatch batch = batchRepository.save(new ImportBatch(properties.dataRoot().toString()));
         Path batchDirectory = archiveService.batchDirectory(batch.getId());
         batch.setArchiveDirectory(batchDirectory.toString());
         batchRepository.save(batch);
 
-        List<SourceFileCandidate> candidates = scanner.scan();
         int imported = 0;
         int skipped = 0;
         int failed = 0;
         List<FileResult> results = new ArrayList<>();
+        List<Long> retainedFileIds = new ArrayList<>();
 
         for (SourceFileCandidate candidate : candidates) {
             String sha256;
             try {
-                sha256 = fingerprint.sha256(candidate.path());
+                sha256 = processor.importFingerprint(
+                        candidate.fileType(),
+                        fingerprint.sha256(candidate.path())
+                );
             } catch (Exception exception) {
                 failed++;
                 results.add(FileResult.failed(candidate.path(), candidate.fileType().name(), exception.getMessage()));
                 continue;
             }
-            boolean alreadyImported = candidate.fileType() == ImportFileType.WEEKLY_INVENTORY
-                    ? fileRepository.existsBySha256AndFileTypeAndReportDate(
-                            sha256,
-                            candidate.fileType(),
-                            candidate.reportDate()
-                    )
-                    : fileRepository.existsBySha256(sha256);
+            ImportFile existingReplacement = replacementType == null
+                    ? null
+                    : fileRepository.findBySha256AndFileType(sha256, candidate.fileType()).orElse(null);
+            if (existingReplacement != null
+                    && existingReplacement.getStatus() == ImportFileStatus.IMPORTED) {
+                retainedFileIds.add(existingReplacement.getId());
+                skipped++;
+                results.add(FileResult.reused(candidate.path(), candidateLabel(candidate)));
+                continue;
+            }
+            if (existingReplacement != null) {
+                failed++;
+                results.add(FileResult.failed(
+                        candidate.path(),
+                        candidateLabel(candidate),
+                        "The same document previously failed. Change the file content before rebuilding."
+                ));
+                continue;
+            }
+            boolean alreadyImported = replacementType == null && (
+                    candidate.fileType() == ImportFileType.WEEKLY_INVENTORY
+                            ? fileRepository.existsBySha256AndFileTypeAndReportDate(
+                                    sha256,
+                                    candidate.fileType(),
+                                    candidate.reportDate()
+                            )
+                            : fileRepository.existsBySha256(sha256)
+            );
             if (alreadyImported) {
                 skipped++;
                 results.add(FileResult.skipped(candidate.path(), candidateLabel(candidate)));
@@ -98,7 +142,8 @@ public class ImportService {
             Path archivePath = null;
             try {
                 archivePath = archiveService.archive(batchDirectory, candidate);
-                FileImportProcessor.ProcessedFile processed = processor.process(file.getId(), archivePath);
+                DocumentImportTool.ImportOutcome processed = processor.process(file.getId(), archivePath);
+                retainedFileIds.add(file.getId());
                 imported++;
                 results.add(FileResult.imported(
                         candidate.path(),
@@ -118,6 +163,10 @@ public class ImportService {
 
         String message = "发现 %d 个文件，导入 %d，跳过 %d，失败 %d"
                 .formatted(candidates.size(), imported, skipped, failed);
+        if (replacementType != null && failed == 0) {
+            fileRepository.activateImportedVersions(retainedFileIds, ImportFileStatus.IMPORTED);
+            fileRepository.deactivateFileTypeVersionsExcept(replacementType, retainedFileIds);
+        }
         batch.complete(candidates.size(), imported, skipped, failed, message);
         batchRepository.save(batch);
         return new ImportRunResult(batch.getId(), batch.getStatus().name(), message, results);
@@ -154,6 +203,17 @@ public class ImportService {
 
         static FileResult skipped(Path path, String type) {
             return new FileResult(path.toString(), type, "SKIPPED", 0, 0, "文件内容已导入");
+        }
+
+        static FileResult reused(Path path, String type) {
+            return new FileResult(
+                    path.toString(),
+                    type,
+                    "REUSED",
+                    0,
+                    0,
+                    "已复用相同内容的代码解析结果"
+            );
         }
 
         static FileResult failed(Path path, String type, String message) {

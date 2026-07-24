@@ -1,5 +1,6 @@
 package com.ai.walmartads.importing.web;
 
+import com.ai.walmartads.importing.application.FileImportProcessor;
 import com.ai.walmartads.importing.application.ImportService;
 import com.ai.walmartads.importing.domain.ImportBatch;
 import com.ai.walmartads.importing.domain.ImportFile;
@@ -15,6 +16,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.io.IOException;
+import java.util.Comparator;
 import java.util.List;
 
 @RestController
@@ -22,15 +24,18 @@ import java.util.List;
 public class ImportController {
 
     private final ImportService importService;
+    private final FileImportProcessor fileImportProcessor;
     private final ImportBatchRepository batchRepository;
     private final ImportFileRepository fileRepository;
 
     public ImportController(
             ImportService importService,
+            FileImportProcessor fileImportProcessor,
             ImportBatchRepository batchRepository,
             ImportFileRepository fileRepository
     ) {
         this.importService = importService;
+        this.fileImportProcessor = fileImportProcessor;
         this.batchRepository = batchRepository;
         this.fileRepository = fileRepository;
     }
@@ -38,6 +43,29 @@ public class ImportController {
     @PostMapping("/scan")
     public ApiResponse<ImportService.ImportRunResult> scan() throws IOException {
         return ApiResponse.ok("扫描导入完成", importService.scanAndImport());
+    }
+
+    @PostMapping("/rebuild/return-orders")
+    public ApiResponse<ImportService.ImportRunResult> rebuildReturnOrders() throws IOException {
+        return ApiResponse.ok(
+                "退款数据集已由本地代码工具重新构建",
+                importService.replaceReturnOrders()
+        );
+    }
+
+    @GetMapping("/tools")
+    public ApiResponse<List<CodeToolView>> tools() {
+        List<CodeToolView> result = fileImportProcessor.supportedTypes().stream()
+                .sorted(Comparator.comparing(Enum::name))
+                .map(type -> new CodeToolView(
+                        type.name(),
+                        fileImportProcessor.toolVersion(type),
+                        "LOCAL_JAVA",
+                        false,
+                        type.name().equals("RETURN_ORDER") ? "FULL_DATASET_REPLACE" : "VERSIONED_IMPORT"
+                ))
+                .toList();
+        return ApiResponse.ok(result);
     }
 
     @GetMapping("/batches")
@@ -57,6 +85,15 @@ public class ImportController {
                 .map(FileView::from)
                 .toList();
         return ApiResponse.ok(result);
+    }
+
+    public record CodeToolView(
+            String fileType,
+            String version,
+            String engine,
+            boolean usesAi,
+            String updatePolicy
+    ) {
     }
 
     public record BatchView(

@@ -572,6 +572,100 @@
     .history-row:first-child { border-top: 0; }
     .history-row strong { color: var(--frost-ink); font: 700 11px "Cascadia Mono", monospace; text-align: right; }
 
+    .product-metric-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
+    .product-metric {
+      min-height: 112px;
+      padding: 15px;
+      border: 1px solid var(--line-soft);
+      border-radius: var(--radius-md);
+      background: linear-gradient(155deg, rgba(19, 34, 58, .78), rgba(13, 24, 43, .9));
+      box-shadow: var(--shadow-panel);
+    }
+    .product-metric span { display: block; color: var(--steel-copy); font-size: 11px; }
+    .product-metric strong { display: block; margin-top: 14px; color: var(--frost-ink); font: 750 24px/1 "Cascadia Mono", monospace; letter-spacing: -.045em; }
+    .product-metric small { display: block; margin-top: 10px; color: var(--slate-dim); font-size: 10px; }
+    .product-catalog-table { min-width: 1080px; }
+    .product-cell { display: grid; grid-template-columns: 52px minmax(250px, 1fr); gap: 12px; align-items: center; }
+    .product-thumb { width: 52px; height: 64px; border: 1px solid var(--line-soft); border-radius: 9px; object-fit: cover; background: rgba(237, 244, 255, .04); }
+    .product-parent-sku { display: block; color: var(--walmart-blue); font: 700 10px "Cascadia Mono", monospace; }
+    .product-title { display: block; max-width: 440px; margin-top: 4px; overflow: hidden; color: var(--frost-ink); font-size: 12px; font-weight: 700; text-overflow: ellipsis; }
+    .product-source { display: block; max-width: 330px; margin-top: 4px; overflow: hidden; color: var(--slate-dim); font-size: 10px; text-overflow: ellipsis; }
+    .listing-score { display: inline-flex; align-items: center; gap: 7px; color: var(--steel-copy); font: 700 11px "Cascadia Mono", monospace; }
+    .listing-score::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--signal-orange); }
+    .listing-score.complete::before { background: var(--signal-green); }
+    .product-drawer {
+      position: fixed;
+      inset: 0 0 0 auto;
+      width: min(900px, calc(100vw - 24px));
+      max-width: none;
+      height: 100dvh;
+      max-height: none;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      border: 0;
+      border-left: 1px solid var(--line-strong);
+      border-radius: 18px 0 0 18px;
+      color: var(--frost-ink);
+      background: var(--navy-panel);
+      box-shadow: -26px 0 80px rgba(2, 8, 19, .62);
+    }
+    .product-drawer[open] { animation: drawer-in .28s var(--ease) both; }
+    @keyframes drawer-in { from { opacity: 0; transform: translateX(24px); } to { opacity: 1; transform: none; } }
+    .product-drawer::backdrop { background: rgba(2, 8, 19, .76); backdrop-filter: blur(4px); }
+    .product-drawer-header {
+      min-height: 78px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      padding: 14px 20px;
+      border-bottom: 1px solid var(--line-soft);
+      background: rgba(7, 16, 31, .78);
+    }
+    .product-drawer-header h2 { margin: 0; font-size: 17px; letter-spacing: -.025em; }
+    .product-drawer-header p { margin: 5px 0 0; color: var(--steel-copy); font: 10px "Cascadia Mono", monospace; }
+    .product-drawer-body { height: calc(100dvh - 78px); overflow-y: auto; padding: 18px 20px 32px; }
+    .product-overview { display: grid; grid-template-columns: minmax(260px, .8fr) minmax(0, 1.2fr); gap: 18px; }
+    .product-visual { min-width: 0; }
+    .product-hero-image {
+      width: 100%;
+      aspect-ratio: 4 / 5;
+      display: block;
+      border: 1px solid var(--line-soft);
+      border-radius: var(--radius-md);
+      object-fit: contain;
+      background: rgba(237, 244, 255, .035);
+    }
+    .product-gallery { display: flex; gap: 8px; margin-top: 10px; padding-bottom: 4px; overflow-x: auto; }
+    .gallery-button { width: 54px; height: 66px; flex: 0 0 auto; padding: 0; overflow: hidden; border: 1px solid var(--line-soft); border-radius: 8px; background: transparent; cursor: pointer; }
+    .gallery-button.active { border-color: var(--walmart-blue); box-shadow: 0 0 0 2px var(--blue-soft); }
+    .gallery-button img { width: 100%; height: 100%; display: block; object-fit: cover; }
+    .product-listing { min-width: 0; }
+    .product-listing-meta { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 12px; }
+    .product-listing h3 { margin: 0; font-size: 19px; line-height: 1.28; letter-spacing: -.025em; text-wrap: pretty; }
+    .product-price { margin: 14px 0 0; color: var(--spark-yellow); font: 750 24px/1 "Cascadia Mono", monospace; }
+    .product-description { margin: 15px 0 0; color: var(--steel-copy); font-size: 12px; line-height: 1.75; text-wrap: pretty; }
+    .feature-list { display: grid; gap: 8px; margin: 16px 0 0; padding: 0; list-style: none; }
+    .feature-list li { position: relative; padding-left: 17px; color: var(--steel-copy); font-size: 11px; line-height: 1.6; }
+    .feature-list li::before { content: ""; position: absolute; left: 1px; top: 7px; width: 6px; height: 6px; border-radius: 50%; background: var(--walmart-blue); }
+    .product-detail-section { margin-top: 18px; overflow: hidden; border: 1px solid var(--line-soft); border-radius: var(--radius-md); background: rgba(7, 16, 31, .34); }
+    .product-detail-section > h3, .raw-fields summary { margin: 0; padding: 13px 15px; color: var(--frost-ink); font-size: 12px; font-weight: 750; }
+    .attribute-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; background: var(--line-soft); }
+    .attribute-item { min-height: 62px; padding: 11px 13px; background: var(--navy-panel); }
+    .attribute-item span { display: block; color: var(--slate-dim); font-size: 10px; }
+    .attribute-item strong { display: block; margin-top: 6px; overflow-wrap: anywhere; color: var(--frost-ink); font-size: 11px; font-weight: 650; }
+    .variant-table { min-width: 1000px; }
+    .variant-sku { color: var(--frost-ink); font: 700 10px "Cascadia Mono", monospace; }
+    .variant-image { width: 28px; height: 34px; border: 1px solid var(--line-soft); border-radius: 6px; object-fit: cover; vertical-align: middle; background: rgba(237, 244, 255, .04); }
+    .raw-fields { border: 0; }
+    .raw-fields summary { cursor: pointer; border-bottom: 1px solid transparent; list-style-position: inside; }
+    .raw-fields[open] summary { border-bottom-color: var(--line-soft); }
+    .raw-field-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; background: var(--line-soft); }
+    .raw-field { min-height: 54px; padding: 10px 13px; background: var(--navy-panel); }
+    .raw-field span { display: block; color: var(--slate-dim); font: 9px "Cascadia Mono", monospace; overflow-wrap: anywhere; }
+    .raw-field strong { display: block; margin-top: 5px; color: var(--steel-copy); font-size: 10px; font-weight: 550; overflow-wrap: anywhere; white-space: pre-wrap; }
+
     .empty-state { padding: 42px 20px; text-align: center; color: var(--steel-copy); }
     .empty-state strong { display: block; margin-bottom: 5px; color: var(--frost-ink); }
     .toast { position: fixed; right: 22px; bottom: 22px; z-index: 60; min-width: 250px; padding: 13px 15px; border: 1px solid rgba(41, 211, 162, .2); border-radius: 11px; color: var(--frost-ink); background: #10243a; box-shadow: var(--shadow-panel); opacity: 0; transform: translateY(10px); pointer-events: none; transition: opacity .22s var(--ease), transform .22s var(--ease); }
@@ -581,6 +675,7 @@
     @media (max-width: 1180px) {
       .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .inventory-metric-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .product-metric-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
       .queue-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .queue-card:last-child { grid-column: 1 / -1; }
       .agent-layout { grid-template-columns: 1fr; }
@@ -596,6 +691,7 @@
       .content { padding: 20px 18px 38px; }
       .dashboard-grid, .matrix-layout, .agent-hero { grid-template-columns: 1fr; }
       .inventory-layout { grid-template-columns: 1fr; }
+      .product-overview { grid-template-columns: 240px minmax(0, 1fr); }
       .pipeline { grid-template-columns: repeat(2, 1fr); }
       .export-label { display: none; }
     }
@@ -606,6 +702,9 @@
       .top-actions { width: 100%; justify-content: space-between; }
       .metric-grid, .queue-grid, .form-grid { grid-template-columns: 1fr; }
       .inventory-metric-grid, .inventory-forecast-body, .production-form-grid { grid-template-columns: 1fr; }
+      .product-metric-grid, .product-overview, .attribute-grid, .raw-field-grid { grid-template-columns: 1fr; }
+      .product-drawer { width: 100vw; border-radius: 0; }
+      .product-hero-image { max-height: 440px; }
       .production-form .field-wide { grid-column: auto; }
       .inventory-table-tools, .table-footer { align-items: stretch; flex-direction: column; }
       .inventory-filter-group { overflow-x: auto; flex-wrap: nowrap; padding-bottom: 4px; }
@@ -662,6 +761,10 @@
         <button class="nav-button" type="button" data-view="inventory">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 6.5 12 3l8 3.5v11L12 21l-8-3.5z"/><path d="m4 6.5 8 4 8-4M12 10.5V21"/><path d="M8 8.5v4l2 1"/></svg>
           <span>库存管理</span>
+        </button>
+        <button class="nav-button" type="button" data-view="products">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 4h14v16H5z"/><path d="M8 8h8M8 12h8M8 16h5"/><path d="M9 4V2m6 2V2"/></svg>
+          <span>产品库</span>
         </button>
       </nav>
       <div class="nav-label">自动化准备</div>
@@ -816,6 +919,42 @@
           </section>
         </section>
 
+        <section class="view" id="view-products" aria-labelledby="pageTitle">
+          <div class="section-intro">
+            <div><h2>按父款核对图片、Listing 与全部变体</h2><p>内容来自 source/upload 上传表。技术字段完整保留在 MySQL，目录优先展示标题、图片、卖点、属性和 SKU 变体。</p></div>
+            <div class="section-summary"><strong id="productParentCount">0</strong>个父款</div>
+          </div>
+          <div class="status-banner">
+            <div class="status-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 4h14v16H5z"/><path d="M8 8h8M8 12h8M8 16h5"/></svg></div>
+            <div class="status-copy"><strong id="productStatusHeadline">正在读取产品资料</strong><span id="productStatusDetail">请稍候。</span></div>
+            <div class="status-range mono" id="productUpdatedAt"></div>
+          </div>
+          <div class="product-metric-grid" id="productMetricGrid"></div>
+          <section class="panel table-panel" aria-labelledby="productCatalogTitle">
+            <div class="panel-header">
+              <div><h2 class="panel-title" id="productCatalogTitle">父款产品目录</h2><p class="panel-subtitle">点击“查看详情”核对图片墙、Listing 内容、属性与全部 SKU</p></div>
+              <div class="table-tools"><label class="sr-only" for="productSearch">搜索父 SKU、标题、品牌或类型</label><input class="search-input" id="productSearch" type="search" placeholder="搜索父 SKU、标题或类型"></div>
+            </div>
+            <div class="panel-header">
+              <div class="inventory-table-tools">
+                <div class="inventory-filter-group" id="productFilters">
+                  <button class="filter-button active" type="button" data-product-filter="all">全部</button>
+                  <button class="filter-button" type="button" data-product-filter="complete">Listing 完整</button>
+                  <button class="filter-button" type="button" data-product-filter="listing-missing">Listing 待完善</button>
+                  <button class="filter-button" type="button" data-product-filter="image-missing">主图缺失</button>
+                </div>
+              </div>
+            </div>
+            <div class="table-scroll">
+              <table class="product-catalog-table">
+                <thead><tr><th>父款与 Listing</th><th>商品类型</th><th class="num">变体</th><th class="num">颜色</th><th class="num">尺码</th><th class="num">图片</th><th class="num">售价</th><th>完整度</th><th>更新时间</th><th>操作</th></tr></thead>
+                <tbody id="productCatalogBody"></tbody>
+              </table>
+            </div>
+            <div class="table-footer"><span id="productTableCount">0 条结果</span><div class="pagination"><button id="productPrevPage" type="button">上一页</button><span id="productPageText" class="mono">1 / 1</span><button id="productNextPage" type="button">下一页</button></div></div>
+          </section>
+        </section>
+
         <section class="view" id="view-agent" aria-labelledby="pageTitle">
           <section class="agent-hero">
             <div><span class="agent-kicker">分析引擎已运行</span><h2>先把建议做对，再接入广告执行</h2><p>当前版本完成数据读取、口径校验、诊断与提案。预算与出价变更保持锁定，直到规则回测、审批流和回滚机制都通过验证。</p></div>
@@ -869,6 +1008,15 @@
     </form>
     <div class="production-history"><h3>最近历史</h3><div class="history-list" id="productionHistory"></div></div>
   </dialog>
+  <dialog class="product-drawer" id="productDrawer" aria-labelledby="productDrawerTitle">
+    <div class="product-drawer-header">
+      <div><h2 id="productDrawerTitle">产品详情</h2><p id="productDrawerSku">正在读取</p></div>
+      <button class="dialog-close" id="closeProductDrawer" type="button" aria-label="关闭产品详情">×</button>
+    </div>
+    <div class="product-drawer-body" id="productDrawerBody">
+      <div class="empty-state"><strong>正在读取产品详情</strong>请稍候。</div>
+    </div>
+  </dialog>
 
   <script type="module">
     const dashboardResponse = await fetch("/api/dashboard/data");
@@ -892,10 +1040,16 @@
       inventorySearch: "",
       inventoryPage: 0,
       inventoryPageSize: 50,
+      products: null,
+      productsLoading: false,
+      productFilter: "all",
+      productSearch: "",
+      productPage: 0,
+      productPageSize: 20,
       aiStatus: null,
     };
 
-    const titles = { dashboard: "经营驾驶舱", diagnosis: "广告诊断", sku: "SKU 机会矩阵", inventory: "库存管理", agent: "Agent 控制室", imports: "数据导入" };
+    const titles = { dashboard: "经营驾驶舱", diagnosis: "广告诊断", sku: "SKU 机会矩阵", inventory: "库存管理", products: "产品库", agent: "Agent 控制室", imports: "数据导入" };
     const decisionCopy = {
       scale: { label: "建议放量", short: "放量", reason: "ROAS 达标且已有稳定广告订单，可进入小步增量测试。" },
       reduce: { label: "建议降耗", short: "降耗", reason: "达到样本门槛后仍低于降耗 ROAS，需要降低出价或暂停低效商品。" },
@@ -1207,6 +1361,171 @@
       $$("[data-production-sku]").forEach((button) => button.addEventListener("click", () => openProductionDialog(button.dataset.productionSku)));
     }
 
+    function productPriceRange(product) {
+      const minimum = number(product.minimumPrice);
+      const maximum = number(product.maximumPrice);
+      return Math.abs(maximum - minimum) < .001 ? money(minimum, 2) : `${money(minimum, 2)} - ${money(maximum, 2)}`;
+    }
+
+    function renderProductMetrics(meta) {
+      const imageCoverage = meta.variantCount ? meta.variantsWithMainImage / meta.variantCount : 0;
+      const listingCoverage = meta.variantCount ? meta.completeListingVariants / meta.variantCount : 0;
+      const metrics = [
+        ["父款数量", integer(meta.parentProductCount), "按 Parent SKU 聚合"],
+        ["SKU 变体", integer(meta.variantCount), "保留每个颜色和尺码"],
+        ["主图覆盖", percent(imageCoverage, 0), `${integer(meta.variantsWithMainImage)} 个 SKU 有主图`],
+        ["Listing 完整", percent(listingCoverage, 0), "标题、描述、卖点和图片齐全"],
+        ["上传文件", integer(meta.sourceFileCount), "source/upload 当前有效文件"],
+      ];
+      $("#productMetricGrid").innerHTML = metrics.map(([label, value, foot]) => `<article class="product-metric"><span>${label}</span><strong>${value}</strong><small>${foot}</small></article>`).join("");
+    }
+
+    function filteredProducts() {
+      const query = state.productSearch.trim().toLowerCase();
+      return (state.products?.products || []).filter((product) => {
+        const searchText = [product.parentSku, product.title, product.brand, product.productType, product.sourceFileName].join(" ").toLowerCase();
+        if (query && !searchText.includes(query)) return false;
+        if (state.productFilter === "complete") return product.listingCompleteness === 100 && product.imageUrl;
+        if (state.productFilter === "listing-missing") return product.listingCompleteness < 100;
+        if (state.productFilter === "image-missing") return !product.imageUrl;
+        return true;
+      });
+    }
+
+    function renderProductCatalog() {
+      if (!state.products) return;
+      const filtered = filteredProducts();
+      const totalPages = Math.max(1, Math.ceil(filtered.length / state.productPageSize));
+      state.productPage = Math.min(state.productPage, totalPages - 1);
+      const start = state.productPage * state.productPageSize;
+      const pageRows = filtered.slice(start, start + state.productPageSize);
+      $("#productCatalogBody").innerHTML = pageRows.map((product) => {
+        const image = product.imageUrl
+          ? `<img class="product-thumb" src="${escapeHtml(product.imageUrl)}" alt="${escapeHtml(product.title || product.parentSku)}" loading="lazy">`
+          : `<span class="product-thumb" aria-hidden="true"></span>`;
+        const complete = product.listingCompleteness === 100;
+        return `<tr>
+          <td><div class="product-cell">${image}<div><span class="product-parent-sku">${escapeHtml(product.parentSku)}</span><span class="product-title" title="${escapeHtml(product.title || "")}">${escapeHtml(product.title || "未填写 Listing 标题")}</span><span class="product-source">${escapeHtml(product.brand || "未填写品牌")} · ${escapeHtml(product.sourceFileName || "")}</span></div></div></td>
+          <td>${escapeHtml(product.productType || "未分类")}</td>
+          <td class="num">${integer(product.variantCount)}</td>
+          <td class="num">${integer(product.colorCount)}</td>
+          <td class="num">${integer(product.sizeCount)}</td>
+          <td class="num">${integer(product.imageCount)}</td>
+          <td class="num">${productPriceRange(product)}</td>
+          <td><span class="listing-score ${complete ? "complete" : ""}">${integer(product.listingCompleteness)}%</span></td>
+          <td>${product.updatedAt ? new Date(product.updatedAt).toLocaleDateString("zh-CN") : "未知"}</td>
+          <td><button class="table-link" type="button" data-product-parent="${escapeHtml(product.parentSku)}">查看详情</button></td>
+        </tr>`;
+      }).join("") || emptyRow(10, "没有匹配的父款", "清除搜索或切换完整度筛选。");
+      $("#productTableCount").textContent = `${filtered.length.toLocaleString("zh-CN")} 条结果，当前显示 ${pageRows.length} 条`;
+      $("#productPageText").textContent = `${state.productPage + 1} / ${totalPages}`;
+      $("#productPrevPage").disabled = state.productPage === 0;
+      $("#productNextPage").disabled = state.productPage >= totalPages - 1;
+      $$("[data-product-parent]").forEach((button) => button.addEventListener("click", () => openProductDrawer(button.dataset.productParent)));
+    }
+
+    function rawFieldValue(value) {
+      if (value === null || value === undefined) return "";
+      if (Array.isArray(value)) return value.join(" / ");
+      if (typeof value === "object") return JSON.stringify(value);
+      return String(value);
+    }
+
+    function listingText(value) {
+      return String(value ?? "").replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+    }
+
+    function renderProductDetail(product) {
+      const images = product.images || [];
+      const heroImage = images[0] || product.mainImageUrl;
+      const gallery = images.map((url, index) => `<button class="gallery-button ${index === 0 ? "active" : ""}" type="button" data-gallery-url="${escapeHtml(url)}" aria-label="查看第 ${index + 1} 张图片"><img src="${escapeHtml(url)}" alt="" loading="lazy"></button>`).join("");
+      const attributes = Object.entries(product.attributes || {}).map(([label, value]) => `<div class="attribute-item"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`).join("");
+      const rawFields = Object.entries(product.rawFields || {})
+        .filter(([, value]) => rawFieldValue(value).trim())
+        .map(([key, value]) => `<div class="raw-field"><span>${escapeHtml(key)}</span><strong>${escapeHtml(rawFieldValue(value))}</strong></div>`)
+        .join("");
+      const variants = (product.variants || []).map((variant) => {
+        const image = variant.imageUrl ? `<img class="variant-image" src="${escapeHtml(variant.imageUrl)}" alt="" loading="lazy">` : `<span class="variant-image" aria-hidden="true"></span>`;
+        return `<tr>
+          <td>${image}</td>
+          <td><span class="variant-sku">${escapeHtml(variant.sku)}</span>${variant.primaryVariant ? `<span class="sub-id">主变体</span>` : ""}</td>
+          <td>${escapeHtml(variant.productId || "")}<span class="sub-id">${escapeHtml(variant.productIdType || "")}</span></td>
+          <td>${escapeHtml(variant.color || "")}</td>
+          <td>${escapeHtml(variant.size || "")}</td>
+          <td>${escapeHtml(variant.pattern || "")}</td>
+          <td class="num">${money(variant.price, 2)}</td>
+          <td>${variant.updatedAt ? new Date(variant.updatedAt).toLocaleDateString("zh-CN") : ""}</td>
+        </tr>`;
+      }).join("");
+      const features = (product.keyFeatures || []).map((feature) => `<li>${escapeHtml(listingText(feature))}</li>`).join("");
+      $("#productDrawerTitle").textContent = product.title || product.parentSku;
+      $("#productDrawerSku").textContent = `${product.parentSku} · ${product.variantCount} 个 SKU · ${product.sourceFileName || "上传表"}`;
+      $("#productDrawerBody").innerHTML = `
+        <div class="product-overview">
+          <div class="product-visual">
+            ${heroImage ? `<img class="product-hero-image" id="productHeroImage" src="${escapeHtml(heroImage)}" alt="${escapeHtml(product.title || product.parentSku)}">` : `<div class="product-hero-image empty-state"><strong>暂无产品图片</strong></div>`}
+            <div class="product-gallery">${gallery}</div>
+          </div>
+          <div class="product-listing">
+            <div class="product-listing-meta"><span class="status-badge scale">${escapeHtml(product.brand || "未填写品牌")}</span><span class="status-badge collect">${escapeHtml(product.productType || "未分类")}</span><span class="status-badge ${product.listingCompleteness === 100 ? "scale" : "optimize"}">Listing ${integer(product.listingCompleteness)}%</span></div>
+            <h3>${escapeHtml(product.title || "未填写 Listing 标题")}</h3>
+            <p class="product-price">${productPriceRange(product)}</p>
+            <p class="product-description">${escapeHtml(listingText(product.shortDescription) || "未填写商品描述。")}</p>
+            <ul class="feature-list">${features || `<li>未填写 Key Features。</li>`}</ul>
+          </div>
+        </div>
+        <section class="product-detail-section"><h3>产品属性</h3><div class="attribute-grid">${attributes || `<div class="empty-state"><strong>暂无属性</strong></div>`}</div></section>
+        <section class="product-detail-section"><h3>SKU 变体</h3><div class="table-scroll"><table class="variant-table"><thead><tr><th>图片</th><th>SKU</th><th>Product ID</th><th>颜色</th><th>尺码</th><th>图案</th><th class="num">售价</th><th>更新时间</th></tr></thead><tbody>${variants}</tbody></table></div></section>
+        <section class="product-detail-section"><details class="raw-fields"><summary>查看上传表原始字段（${Object.keys(product.rawFields || {}).length}）</summary><div class="raw-field-grid">${rawFields}</div></details></section>`;
+      $$("[data-gallery-url]").forEach((button) => button.addEventListener("click", () => {
+        const hero = $("#productHeroImage");
+        if (hero) hero.src = button.dataset.galleryUrl;
+        $$("[data-gallery-url]").forEach((item) => item.classList.toggle("active", item === button));
+      }));
+    }
+
+    async function openProductDrawer(parentSku) {
+      const drawer = $("#productDrawer");
+      $("#productDrawerTitle").textContent = "正在读取产品详情";
+      $("#productDrawerSku").textContent = parentSku;
+      $("#productDrawerBody").innerHTML = `<div class="empty-state"><strong>正在解析 Listing 与图片</strong>请稍候。</div>`;
+      if (!drawer.open) drawer.showModal();
+      try {
+        const response = await fetch(`/api/products/${encodeURIComponent(parentSku)}`);
+        const payload = await response.json();
+        if (!response.ok || !payload.success) throw new Error(payload.message || `HTTP ${response.status}`);
+        renderProductDetail(payload.data);
+      } catch (error) {
+        $("#productDrawerBody").innerHTML = `<div class="empty-state"><strong>产品详情读取失败</strong>${escapeHtml(error.message)}</div>`;
+      }
+    }
+
+    async function loadProducts() {
+      if (state.productsLoading) return;
+      state.productsLoading = true;
+      $("#productCatalogBody").innerHTML = emptyRow(10, "正在读取产品上传表", "请稍候。");
+      try {
+        const response = await fetch("/api/products/catalog");
+        const payload = await response.json();
+        if (!response.ok || !payload.success) throw new Error(payload.message || `HTTP ${response.status}`);
+        state.products = payload.data;
+        const meta = payload.data.meta;
+        $("#productParentCount").textContent = integer(meta.parentProductCount);
+        $("#productStatusHeadline").textContent = "图片与 Listing 已完成结构化";
+        $("#productStatusDetail").textContent = `${integer(meta.sourceFileCount)} 个上传文件，${integer(meta.variantCount)} 个 SKU 变体；完整原始字段保留在 MySQL。`;
+        $("#productUpdatedAt").textContent = meta.latestUpdatedAt ? `更新 ${new Date(meta.latestUpdatedAt).toLocaleString("zh-CN")}` : "暂无更新时间";
+        renderProductMetrics(meta);
+        renderProductCatalog();
+        updatePageMeta();
+      } catch (error) {
+        $("#productStatusHeadline").textContent = "产品资料读取失败";
+        $("#productStatusDetail").textContent = error.message;
+        $("#productCatalogBody").innerHTML = emptyRow(10, "产品资料读取失败", escapeHtml(error.message));
+      } finally {
+        state.productsLoading = false;
+      }
+    }
+
     async function loadInventory() {
       if (state.inventoryLoading) return;
       state.inventoryLoading = true;
@@ -1278,6 +1597,11 @@
       if (state.view === "inventory" && state.inventory?.meta.snapshotAt) {
         const meta = state.inventory.meta;
         $("#pageMeta").textContent = `库存快照 ${new Date(meta.snapshotAt).toLocaleString("zh-CN")} · ${state.periodDays} 天销量窗口 · ${meta.sampleDays} 个销量日`;
+        return;
+      }
+      if (state.view === "products" && state.products?.meta) {
+        const meta = state.products.meta;
+        $("#pageMeta").textContent = `${meta.sourceFileCount} 个上传文件 · ${meta.parentProductCount} 个父款 · ${meta.variantCount} 个 SKU 变体`;
         return;
       }
       const start = addDays(latest, -(state.periodDays - 1));
@@ -1455,9 +1779,29 @@
       state.inventoryPage += 1;
       if (state.inventory) renderInventoryTable(state.inventory.rows);
     });
+    $("#productSearch").addEventListener("input", (event) => {
+      state.productSearch = event.target.value;
+      state.productPage = 0;
+      renderProductCatalog();
+    });
+    $$("#productFilters .filter-button").forEach((button) => button.addEventListener("click", () => {
+      state.productFilter = button.dataset.productFilter;
+      state.productPage = 0;
+      $$("#productFilters .filter-button").forEach((item) => item.classList.toggle("active", item === button));
+      renderProductCatalog();
+    }));
+    $("#productPrevPage").addEventListener("click", () => {
+      state.productPage = Math.max(0, state.productPage - 1);
+      renderProductCatalog();
+    });
+    $("#productNextPage").addEventListener("click", () => {
+      state.productPage += 1;
+      renderProductCatalog();
+    });
     $("#productionForm").addEventListener("submit", saveProductionStock);
     $("#closeProductionDialog").addEventListener("click", () => $("#productionDialog").close());
     $("#cancelProductionDialog").addEventListener("click", () => $("#productionDialog").close());
+    $("#closeProductDrawer").addEventListener("click", () => $("#productDrawer").close());
     $("#menuButton").addEventListener("click", () => { const open = document.body.classList.toggle("sidebar-open"); $("#menuButton").setAttribute("aria-expanded", String(open)); });
     $("#mobileScrim").addEventListener("click", () => { document.body.classList.remove("sidebar-open"); $("#menuButton").setAttribute("aria-expanded", "false"); });
     $("#exportButton").addEventListener("click", exportRecommendations);
@@ -1481,6 +1825,7 @@
     $("#sidebarSourceTime").textContent = `最新业务日 ${DATA.meta.latestDate}`;
     loadBatches();
     loadInventory();
+    loadProducts();
     loadAiStatus();
     loadLatestAiAnalysis();
     renderAll();

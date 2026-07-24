@@ -38,6 +38,12 @@ class SkuMappingWorkbookParserTest {
                     "740379280190",
                     "Black M"
             ));
+            Row formulaRow = sheet.createRow(2);
+            formulaRow.createCell(0).setCellValue("PNK0079-C-Black-M-WFS");
+            formulaRow.createCell(1).setCellValue("19885101334");
+            formulaRow.createCell(2).setCellValue("00740379283900");
+            formulaRow.createCell(3).setCellFormula("RIGHT(C3,LEN(C3)-2)");
+            formulaRow.createCell(4).setCellValue("Black M");
             try (OutputStream output = Files.newOutputStream(path)) {
                 workbook.write(output);
             }
@@ -59,16 +65,15 @@ class SkuMappingWorkbookParserTest {
                 new JsonPayloadWriter(new ObjectMapper())
         ).parse(path, importFile);
 
-        assertThat(parsed.sourceRowCount()).isEqualTo(1);
-        assertThat(parsed.rows())
-                .singleElement()
-                .satisfies(mapping -> {
-                    assertThat(mapping.getSku()).isEqualTo("PNK361002-C-Black-M-WFS");
-                    assertThat(mapping.getParentSku()).isEqualTo("PNK361002");
-                    assertThat(mapping.getItemId()).isEqualTo("5479331637");
-                    assertThat(mapping.getGtin()).isEqualTo("00740379280190");
-                    assertThat(mapping.getUpc()).isEqualTo("740379280190");
-                });
+        assertThat(parsed.sourceRowCount()).isEqualTo(2);
+        assertThat(parsed.rows()).hasSize(2);
+        SkuMapping first = parsed.rows().getFirst();
+        assertThat(first.getSku()).isEqualTo("PNK361002-C-Black-M-WFS");
+        assertThat(first.getParentSku()).isEqualTo("PNK361002");
+        assertThat(first.getItemId()).isEqualTo("5479331637");
+        assertThat(first.getGtin()).isEqualTo("00740379280190");
+        assertThat(first.getUpc()).isEqualTo("740379280190");
+        assertThat(parsed.rows().get(1).getUpc()).isEqualTo("740379283900");
     }
 
     private static void writeRow(Row row, List<String> values) {

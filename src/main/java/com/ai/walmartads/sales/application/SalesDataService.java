@@ -58,7 +58,8 @@ public class SalesDataService {
         List<DailyRow> daily = loadDaily(currentStart, latestDate);
         Map<String, SalesAggregate> sales = loadSkuSales(window);
         Map<String, ProductInfo> products = loadProducts();
-        Map<String, InventoryInfo> inventory = loadLatestInventory();
+        InventorySnapshotData inventorySnapshot = loadLatestInventory();
+        Map<String, InventoryInfo> inventory = inventorySnapshot.rows();
 
         Set<String> skuUniverse = new LinkedHashSet<>();
         skuUniverse.addAll(products.keySet());
@@ -122,7 +123,8 @@ public class SalesDataService {
                 sampleDays,
                 "USD",
                 "订单表 Item Cost",
-                "订单表 Order Date"
+                "订单表 Order Date",
+                inventorySnapshot.snapshotAt()
         );
         return new SalesPayload(
                 meta,
@@ -238,7 +240,7 @@ public class SalesDataService {
         return result;
     }
 
-    private Map<String, InventoryInfo> loadLatestInventory() {
+    private InventorySnapshotData loadLatestInventory() {
         Map<String, Object> bounds = jdbc.queryForMap("""
                 select max(inventory.snapshot_at) as snapshot_at
                   from wm_ads_inventory_snapshot inventory
@@ -247,7 +249,7 @@ public class SalesDataService {
                 """, new MapSqlParameterSource());
         LocalDateTime latestSnapshot = localDateTime(bounds.get("snapshot_at"));
         if (latestSnapshot == null) {
-            return Map.of();
+            return new InventorySnapshotData(null, Map.of());
         }
         Map<String, InventoryInfo> result = new LinkedHashMap<>();
         jdbc.queryForList("""
@@ -275,7 +277,7 @@ public class SalesDataService {
                     number(row, "transit_units")
             ));
         });
-        return result;
+        return new InventorySnapshotData(latestSnapshot, result);
     }
 
     private static SkuRow buildSkuRow(
@@ -475,7 +477,8 @@ public class SalesDataService {
             int sampleDays,
             String currency,
             String priceSource,
-            String dateSource
+            String dateSource,
+            LocalDateTime inventorySnapshotAt
     ) {
     }
 
@@ -602,6 +605,12 @@ public class SalesDataService {
             double availableUnits,
             double reservedUnits,
             double transitUnits
+    ) {
+    }
+
+    private record InventorySnapshotData(
+            LocalDateTime snapshotAt,
+            Map<String, InventoryInfo> rows
     ) {
     }
 

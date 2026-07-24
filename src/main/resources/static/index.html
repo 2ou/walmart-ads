@@ -577,6 +577,9 @@
     .sales-table-delta.up { color: var(--signal-green); }
     .sales-table-delta.down { color: var(--signal-red); }
     .sales-table-delta.new { color: var(--walmart-blue); }
+    .sales-inventory-cell { min-width: 108px; text-align: right; }
+    .sales-inventory-cell strong { display: block; color: var(--frost-ink); font: 750 11px "Cascadia Mono", monospace; }
+    .sales-inventory-cell span { display: block; margin-top: 3px; color: var(--slate-dim); font-size: 9px; white-space: nowrap; }
     .sales-skeleton { position: relative; overflow: hidden; color: transparent !important; background: rgba(145, 160, 185, .08); }
     .sales-skeleton::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, rgba(237, 244, 255, .06), transparent); transform: translateX(-100%); animation: salesSkeleton 1.2s infinite; }
     @keyframes salesSkeleton { to { transform: translateX(100%); } }
@@ -1205,14 +1208,14 @@
                     <th>商品与维度</th>
                     <th>状态</th>
                     <th class="num"><button class="sales-sort-button active" type="button" data-sales-sort="units">销量</button></th>
+                    <th class="num"><button class="sales-sort-button" type="button" data-sales-sort="availableUnits">最新库存</button></th>
+                    <th class="num"><button class="sales-sort-button" type="button" data-sales-sort="availableDays">预计可售天数</button></th>
                     <th class="num"><button class="sales-sort-button" type="button" data-sales-sort="dailyUnits">日均</button></th>
                     <th class="num"><button class="sales-sort-button" type="button" data-sales-sort="revenue">销售额</button></th>
                     <th class="num"><button class="sales-sort-button" type="button" data-sales-sort="sharePct">占比</button></th>
                     <th class="num"><button class="sales-sort-button" type="button" data-sales-sort="previousUnits">上期销量</button></th>
                     <th class="num"><button class="sales-sort-button" type="button" data-sales-sort="unitsChangePct">环比</button></th>
                     <th class="num"><button class="sales-sort-button" type="button" data-sales-sort="averageUnitPrice">成交均价</button></th>
-                    <th class="num"><button class="sales-sort-button" type="button" data-sales-sort="availableUnits">可售库存</button></th>
-                    <th class="num"><button class="sales-sort-button" type="button" data-sales-sort="availableDays">预计可售天数</button></th>
                   </tr>
                 </thead>
                 <tbody id="salesTableBody"></tbody>
@@ -2049,7 +2052,11 @@
       const start = state.salesPage * state.salesPageSize;
       const pageRows = rows.slice(start, start + state.salesPageSize);
       const groupLabel = state.salesGroup === "parent" ? "款号" : "SKU";
-      $("#salesTableSubtitle").textContent = `${state.periodDays} 天销量窗口，按${groupLabel}展示；销售额来自订单表成交价。`;
+      const inventorySnapshot = state.sales.meta.inventorySnapshotAt
+        ? new Date(state.sales.meta.inventorySnapshotAt).toLocaleString("zh-CN", { hour12: false })
+        : "暂无库存快照";
+      const inventoryScope = state.salesGroup === "parent" ? "款号库存为所属 SKU 合计" : "库存对应当前 SKU";
+      $("#salesTableSubtitle").textContent = `${state.periodDays} 天销量窗口，按${groupLabel}展示；${inventoryScope}，取 ${inventorySnapshot} 最新快照，不随销量周期累计。`;
       $$("#salesGroupControls [data-sales-group]").forEach((button) => {
         const active = button.dataset.salesGroup === state.salesGroup;
         button.classList.toggle("active", active);
@@ -2079,14 +2086,14 @@
           <td><div class="sales-product">${image}<div><button class="sales-product-key" type="button" data-sales-row-action="${action}" data-sales-parent="${escapeHtml(row.parentSku || key)}">${escapeHtml(key)}</button><span class="sales-product-name" title="${escapeHtml(row.itemName || "")}">${escapeHtml(row.itemName || "")}</span><span class="sales-variant-meta">${variantMeta}</span></div></div></td>
           <td><span class="status-badge ${status.badge}">${status.label}</span></td>
           <td class="num">${integer(row.units)}</td>
+          <td class="num"><div class="sales-inventory-cell" title="最新库存：${integer(row.availableUnits)} 可售，${integer(row.reservedUnits)} 预留，${integer(row.transitUnits)} 路途"><strong>${integer(row.availableUnits)} 可售</strong><span>${integer(row.reservedUnits)} 预留 · ${integer(row.transitUnits)} 路途</span></div></td>
+          <td class="num">${daysText(row.availableDays)}</td>
           <td class="num">${number(row.dailyUnits).toFixed(2)}</td>
           <td class="num">${money(row.revenue, 2)}</td>
           <td class="num"><div class="sales-share"><div class="sales-share-track"><span style="width:${Math.min(100, number(row.sharePct) * 100)}%"></span></div><b>${percent(row.sharePct)}</b></div></td>
           <td class="num">${integer(row.previousUnits)}</td>
           <td class="num"><span class="sales-table-delta ${change.cls}">${change.arrow} ${change.text}</span></td>
           <td class="num">${money(row.averageUnitPrice, 2)}</td>
-          <td class="num">${integer(row.availableUnits)}</td>
-          <td class="num">${daysText(row.availableDays)}</td>
         </tr>`;
       }).join("") || emptyRow(11, "没有符合条件的销量记录", "调整搜索、状态或聚合维度后重试。");
       $("#salesTableInfo").textContent = `${rows.length} 条${groupLabel}记录，显示 ${rows.length ? start + 1 : 0}-${Math.min(start + state.salesPageSize, rows.length)}`;

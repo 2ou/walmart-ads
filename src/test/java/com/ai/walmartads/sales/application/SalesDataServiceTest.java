@@ -7,6 +7,8 @@ import org.springframework.jdbc.datasource.embedded.EmbeddedDatabase;
 import org.springframework.jdbc.datasource.embedded.EmbeddedDatabaseBuilder;
 import org.springframework.jdbc.datasource.embedded.EmbeddedDatabaseType;
 
+import java.time.LocalDateTime;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 class SalesDataServiceTest {
@@ -96,6 +98,7 @@ class SalesDataServiceTest {
         assertThat(payload.meta().latestDate()).isEqualTo("2026-07-22");
         assertThat(payload.meta().currentStart()).isEqualTo("2026-07-20");
         assertThat(payload.meta().priceSource()).isEqualTo("订单表 Item Cost");
+        assertThat(payload.meta().inventorySnapshotAt()).isEqualTo(LocalDateTime.of(2026, 7, 22, 12, 0));
         assertThat(payload.summary().units()).isEqualTo(8);
         assertThat(payload.summary().revenue()).isEqualTo(107);
         assertThat(payload.summary().orders()).isEqualTo(4);
@@ -120,9 +123,16 @@ class SalesDataServiceTest {
 
         assertThat(skuA.units()).isEqualTo(6);
         assertThat(skuA.revenue()).isEqualTo(67);
+        assertThat(skuA.availableUnits()).isEqualTo(12);
+        assertThat(skuA.reservedUnits()).isEqualTo(1);
+        assertThat(skuA.transitUnits()).isEqualTo(4);
         assertThat(skuA.availableDays()).isEqualTo(6);
         assertThat(skuA.status()).isEqualTo("GROWING");
         assertThat(parent.units()).isEqualTo(8);
+        assertThat(parent.availableUnits()).isEqualTo(12);
+        assertThat(parent.reservedUnits()).isEqualTo(1);
+        assertThat(parent.transitUnits()).isEqualTo(6);
+        assertThat(parent.availableDays()).isEqualTo(4.5);
         assertThat(parent.variantCount()).isEqualTo(2);
         assertThat(parent.colorCount()).isEqualTo(2);
         assertThat(parent.sizeCount()).isEqualTo(2);

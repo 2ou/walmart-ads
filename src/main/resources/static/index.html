@@ -645,6 +645,8 @@
     .product-listing-meta { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 12px; }
     .product-listing h3 { margin: 0; font-size: 19px; line-height: 1.28; letter-spacing: -.025em; text-wrap: pretty; }
     .product-price { margin: 14px 0 0; color: var(--spark-yellow); font: 750 24px/1 "Cascadia Mono", monospace; }
+    .product-price-label { display: block; margin-bottom: 7px; color: var(--steel-copy); font: 700 10px/1.2 Inter, "Microsoft YaHei", sans-serif; letter-spacing: .05em; }
+    .product-price-note { margin: 8px 0 0; color: var(--slate-dim); font-size: 10px; line-height: 1.55; }
     .product-description { margin: 15px 0 0; color: var(--steel-copy); font-size: 12px; line-height: 1.75; text-wrap: pretty; }
     .feature-list { display: grid; gap: 8px; margin: 16px 0 0; padding: 0; list-style: none; }
     .feature-list li { position: relative; padding-left: 17px; color: var(--steel-copy); font-size: 11px; line-height: 1.6; }
@@ -921,7 +923,7 @@
 
         <section class="view" id="view-products" aria-labelledby="pageTitle">
           <div class="section-intro">
-            <div><h2>按父款核对图片、Listing 与全部变体</h2><p>内容来自 source/upload 上传表。技术字段完整保留在 MySQL，目录优先展示标题、图片、卖点、属性和 SKU 变体。</p></div>
+            <div><h2>按父款核对图片、Listing 与全部变体</h2><p>内容来自 source/upload 上传表。技术字段完整保留在 MySQL；上传表价格仅作资料参考，不参与经营分析。</p></div>
             <div class="section-summary"><strong id="productParentCount">0</strong>个父款</div>
           </div>
           <div class="status-banner">
@@ -947,7 +949,7 @@
             </div>
             <div class="table-scroll">
               <table class="product-catalog-table">
-                <thead><tr><th>父款与 Listing</th><th>商品类型</th><th class="num">变体</th><th class="num">颜色</th><th class="num">尺码</th><th class="num">图片</th><th class="num">售价</th><th>完整度</th><th>更新时间</th><th>操作</th></tr></thead>
+                <thead><tr><th>父款与 Listing</th><th>商品类型</th><th class="num">变体</th><th class="num">颜色</th><th class="num">尺码</th><th class="num">图片</th><th class="num">上传表参考价</th><th>完整度</th><th>更新时间</th><th>操作</th></tr></thead>
                 <tbody id="productCatalogBody"></tbody>
               </table>
             </div>
@@ -1469,13 +1471,14 @@
           <div class="product-listing">
             <div class="product-listing-meta"><span class="status-badge scale">${escapeHtml(product.brand || "未填写品牌")}</span><span class="status-badge collect">${escapeHtml(product.productType || "未分类")}</span><span class="status-badge ${product.listingCompleteness === 100 ? "scale" : "optimize"}">Listing ${integer(product.listingCompleteness)}%</span></div>
             <h3>${escapeHtml(product.title || "未填写 Listing 标题")}</h3>
-            <p class="product-price">${productPriceRange(product)}</p>
+            <p class="product-price"><span class="product-price-label">上传表参考价</span>${productPriceRange(product)}</p>
+            <p class="product-price-note">仅用于核对上传资料，不作为实际售价，也不参与销售额、利润、广告效果或补货计算。</p>
             <p class="product-description">${escapeHtml(listingText(product.shortDescription) || "未填写商品描述。")}</p>
             <ul class="feature-list">${features || `<li>未填写 Key Features。</li>`}</ul>
           </div>
         </div>
         <section class="product-detail-section"><h3>产品属性</h3><div class="attribute-grid">${attributes || `<div class="empty-state"><strong>暂无属性</strong></div>`}</div></section>
-        <section class="product-detail-section"><h3>SKU 变体</h3><div class="table-scroll"><table class="variant-table"><thead><tr><th>图片</th><th>SKU</th><th>Product ID</th><th>颜色</th><th>尺码</th><th>图案</th><th class="num">售价</th><th>更新时间</th></tr></thead><tbody>${variants}</tbody></table></div></section>
+        <section class="product-detail-section"><h3>SKU 变体</h3><div class="table-scroll"><table class="variant-table"><thead><tr><th>图片</th><th>SKU</th><th>Product ID</th><th>颜色</th><th>尺码</th><th>图案</th><th class="num">上传表参考价</th><th>更新时间</th></tr></thead><tbody>${variants}</tbody></table></div></section>
         <section class="product-detail-section"><details class="raw-fields"><summary>查看上传表原始字段（${Object.keys(product.rawFields || {}).length}）</summary><div class="raw-field-grid">${rawFields}</div></details></section>`;
       $$("[data-gallery-url]").forEach((button) => button.addEventListener("click", () => {
         const hero = $("#productHeroImage");

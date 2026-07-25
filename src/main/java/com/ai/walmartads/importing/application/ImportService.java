@@ -17,7 +17,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.List;
+import java.util.Set;
 
 @Service
 public class ImportService {
@@ -51,7 +53,17 @@ public class ImportService {
     }
 
     public ImportRunResult scanAndImport() throws IOException {
-        return runImport(scanner.scan(), null);
+        return scanAndImport(EnumSet.allOf(ImportSource.class));
+    }
+
+    public ImportRunResult scanAndImport(Set<ImportSource> requestedSources) throws IOException {
+        Set<ImportSource> selectedSources = requestedSources == null || requestedSources.isEmpty()
+                ? EnumSet.allOf(ImportSource.class)
+                : EnumSet.copyOf(requestedSources);
+        List<SourceFileCandidate> candidates = scanner.scan().stream()
+                .filter(candidate -> selectedSources.stream().anyMatch(source -> source.matches(candidate)))
+                .toList();
+        return runImport(candidates, null);
     }
 
     public ImportRunResult replaceReturnOrders() throws IOException {

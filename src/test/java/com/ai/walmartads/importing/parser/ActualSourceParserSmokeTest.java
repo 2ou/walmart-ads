@@ -15,9 +15,11 @@ import org.junit.jupiter.api.Test;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.EnumMap;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
@@ -45,12 +47,15 @@ class ActualSourceParserSmokeTest {
         Map<ImportFileType, SourceFileCandidate> sampleByType = new EnumMap<>(ImportFileType.class);
         candidates.forEach(candidate -> sampleByType.putIfAbsent(candidate.fileType(), candidate));
 
-        assertThat(sampleByType.keySet()).contains(
+        Set<ImportFileType> expectedTypes = EnumSet.of(
                 ImportFileType.ORDER,
                 ImportFileType.AD_REPORT,
-                ImportFileType.INVENTORY,
                 ImportFileType.PRODUCT
         );
+        if (Files.isDirectory(DATA_ROOT.resolve("source").resolve("inventory"))) {
+            expectedTypes.add(ImportFileType.INVENTORY);
+        }
+        assertThat(sampleByType.keySet()).containsAll(expectedTypes);
         assertThat(candidates)
                 .extracting(SourceFileCandidate::reportKind)
                 .contains(

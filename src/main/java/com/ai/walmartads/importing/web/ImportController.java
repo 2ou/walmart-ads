@@ -1,6 +1,7 @@
 package com.ai.walmartads.importing.web;
 
 import com.ai.walmartads.importing.application.FileImportProcessor;
+import com.ai.walmartads.importing.application.ImportSource;
 import com.ai.walmartads.importing.application.ImportService;
 import com.ai.walmartads.importing.domain.ImportBatch;
 import com.ai.walmartads.importing.domain.ImportFile;
@@ -18,6 +19,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.io.IOException;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Set;
 
 @RestController
 @RequestMapping("/api/imports")
@@ -41,8 +43,10 @@ public class ImportController {
     }
 
     @PostMapping("/scan")
-    public ApiResponse<ImportService.ImportRunResult> scan() throws IOException {
-        return ApiResponse.ok("扫描导入完成", importService.scanAndImport());
+    public ApiResponse<ImportService.ImportRunResult> scan(
+            @RequestParam(name = "source", required = false) Set<ImportSource> sources
+    ) throws IOException {
+        return ApiResponse.ok("扫描导入完成", importService.scanAndImport(sources));
     }
 
     @PostMapping("/rebuild/return-orders")

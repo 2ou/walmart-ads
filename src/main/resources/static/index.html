@@ -248,6 +248,116 @@
     .secondary-button:hover, .primary-button:hover { transform: translateY(-1px); }
     .secondary-button:disabled, .primary-button:disabled { opacity: .5; cursor: not-allowed; pointer-events: none; transform: none; }
     .secondary-button svg, .primary-button svg { width: 16px; height: 16px; }
+    .import-action-cluster { display: inline-flex; align-items: center; gap: 8px; }
+    .import-scope, .import-help { position: relative; }
+    .import-scope-trigger { min-width: 116px; justify-content: space-between; }
+    .import-scope-count {
+      min-width: 36px;
+      padding: 3px 6px;
+      border-radius: 6px;
+      color: var(--walmart-blue);
+      background: var(--blue-soft);
+      font: 750 10px "Cascadia Mono", monospace;
+      text-align: center;
+    }
+    .import-scope-chevron { color: var(--slate-dim); font-size: 10px; transition: transform .18s var(--ease); }
+    .import-scope-trigger[aria-expanded="true"] .import-scope-chevron { transform: rotate(180deg); }
+    .import-scope-popover {
+      position: absolute;
+      top: calc(100% + 10px);
+      right: 0;
+      z-index: 80;
+      width: min(430px, calc(100vw - 36px));
+      max-height: min(650px, calc(100dvh - 110px));
+      overflow-y: auto;
+      border: 1px solid var(--line-strong);
+      border-radius: var(--radius-lg);
+      color: var(--frost-ink);
+      background: #0d1a2d;
+      box-shadow: 0 24px 60px rgba(2, 8, 19, .56);
+    }
+    .import-scope-popover[hidden] { display: none; }
+    .import-scope-header, .import-scope-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 13px 15px;
+    }
+    .import-scope-header { position: sticky; top: 0; z-index: 1; border-bottom: 1px solid var(--line-soft); background: #0d1a2d; }
+    .import-scope-header strong { font-size: 12px; }
+    .import-scope-header span { color: var(--steel-copy); font-size: 10px; }
+    .import-source-groups { padding: 4px 15px 8px; }
+    .import-source-group { min-width: 0; margin: 0; padding: 10px 0 8px; border: 0; border-bottom: 1px solid var(--line-soft); }
+    .import-source-group:last-child { border-bottom: 0; }
+    .import-source-group legend { padding: 0 0 6px; color: var(--slate-dim); font-size: 9px; font-weight: 800; letter-spacing: .06em; }
+    .import-source-option {
+      min-height: 44px;
+      display: grid;
+      grid-template-columns: 18px minmax(0, 1fr);
+      align-items: center;
+      gap: 10px;
+      padding: 5px 7px;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    .import-source-option:hover { background: rgba(237, 244, 255, .035); }
+    .import-source-option input { width: 16px; height: 16px; margin: 0; accent-color: var(--walmart-blue); }
+    .import-source-option strong { display: block; color: var(--frost-ink); font-size: 11px; }
+    .import-source-option small { display: block; margin-top: 3px; overflow: hidden; color: var(--slate-dim); font: 9px "Cascadia Mono", monospace; text-overflow: ellipsis; white-space: nowrap; }
+    .import-scope-footer { position: sticky; bottom: 0; border-top: 1px solid var(--line-soft); background: #0d1a2d; }
+    .import-scope-note { max-width: 230px; color: var(--steel-copy); font-size: 9px; line-height: 1.5; }
+    .import-scope-actions { display: flex; gap: 5px; }
+    .import-text-button {
+      min-height: 34px;
+      padding: 0 9px;
+      border: 1px solid var(--line-soft);
+      border-radius: 8px;
+      color: var(--steel-copy);
+      background: transparent;
+      cursor: pointer;
+      font-size: 10px;
+      font-weight: 750;
+    }
+    .import-text-button:hover { color: var(--frost-ink); border-color: var(--line-strong); }
+    .import-help-button {
+      width: 44px;
+      height: 44px;
+      display: grid;
+      place-items: center;
+      border: 1px solid var(--line-strong);
+      border-radius: 10px;
+      color: var(--walmart-blue);
+      background: var(--navy-panel);
+      cursor: help;
+      font: 800 13px "Cascadia Mono", monospace;
+    }
+    .import-help-tooltip {
+      position: absolute;
+      top: calc(100% + 10px);
+      right: 0;
+      z-index: 81;
+      width: min(460px, calc(100vw - 36px));
+      padding: 15px;
+      border: 1px solid var(--line-strong);
+      border-radius: var(--radius-md);
+      color: var(--steel-copy);
+      background: #0d1a2d;
+      box-shadow: 0 24px 60px rgba(2, 8, 19, .56);
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+      transform: translateY(-4px);
+      transition: opacity .16s var(--ease), transform .16s var(--ease), visibility .16s;
+    }
+    .import-help:hover .import-help-tooltip, .import-help:focus-within .import-help-tooltip { opacity: 1; visibility: visible; transform: none; }
+    .import-help-tooltip strong { display: block; color: var(--frost-ink); font-size: 12px; }
+    .import-help-tooltip > p { margin: 6px 0 11px; font-size: 10px; line-height: 1.6; }
+    .import-help-paths { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+    .import-help-paths li { display: grid; grid-template-columns: 116px minmax(0, 1fr); gap: 9px; font-size: 9px; line-height: 1.5; }
+    .import-help-paths span { color: var(--frost-ink); font-weight: 700; }
+    .import-help-paths code { overflow-wrap: anywhere; color: var(--slate-dim); font: inherit; }
+    .import-help-rule { margin: 11px 0 0; padding-top: 10px; border-top: 1px solid var(--line-soft); color: var(--steel-copy); font-size: 9px; line-height: 1.55; }
 
     .content { max-width: 1500px; margin: 0 auto; padding: 24px 30px 44px; position: relative; z-index: 5; }
     .view { display: none; }
@@ -970,7 +1080,13 @@
       :root { --topbar: auto; }
       .topbar { position: sticky; min-height: 112px; align-items: flex-start; flex-wrap: wrap; padding-top: 13px; padding-bottom: 12px; }
       .page-heading { width: calc(100% - 52px); }
-      .top-actions { width: 100%; justify-content: space-between; }
+      .top-actions { width: 100%; justify-content: flex-start; overflow-x: auto; padding-bottom: 3px; }
+      .top-actions > *, .import-action-cluster { flex: 0 0 auto; }
+      .import-scope-label { display: none; }
+      .import-scope-trigger { min-width: 76px; padding-inline: 10px; }
+      .import-scope-popover { position: fixed; top: 124px; right: 18px; left: 18px; width: auto; max-height: calc(100dvh - 142px); }
+      .import-help-tooltip { position: fixed; top: auto; right: 18px; bottom: 18px; left: 18px; width: auto; }
+      .section-intro > .import-action-cluster { margin-top: 16px; }
       .metric-grid, .queue-grid, .form-grid { grid-template-columns: 1fr; }
       .sales-metric-grid { grid-template-columns: 1fr; }
       .inventory-metric-grid, .inventory-forecast-body, .production-form-grid { grid-template-columns: 1fr; }
@@ -1110,7 +1226,41 @@
             <button class="period-button" type="button" data-period="14">14天</button>
             <button class="period-button" type="button" data-period="30">30天</button>
           </div>
-          <button class="primary-button" id="scanImportButton" type="button">扫描导入</button>
+          <div class="import-action-cluster">
+            <div class="import-scope" data-import-control>
+              <button class="secondary-button import-scope-trigger" type="button" aria-expanded="false" aria-controls="topImportScope">
+                <span class="import-scope-label">导入范围</span>
+                <span class="import-scope-count" data-import-count>10/10</span>
+                <span class="import-scope-chevron" aria-hidden="true">⌄</span>
+              </button>
+              <div class="import-scope-popover" id="topImportScope" hidden>
+                <div class="import-scope-header"><strong>选择扫描内容</strong><span>两个入口同步</span></div>
+                <div class="import-source-groups" data-import-options></div>
+                <div class="import-scope-footer">
+                  <span class="import-scope-note">默认全选。未勾选的数据源不会读取文件，也不会写入数据库。</span>
+                  <div class="import-scope-actions"><button class="import-text-button" type="button" data-import-action="all">全选</button><button class="import-text-button" type="button" data-import-action="clear">清空</button></div>
+                </div>
+              </div>
+            </div>
+            <div class="import-help">
+              <button class="import-help-button" type="button" aria-label="查看扫描导入说明" aria-describedby="topImportHelp">i</button>
+              <div class="import-help-tooltip" id="topImportHelp" role="tooltip">
+                <strong>扫描导入规则</strong>
+                <p>全部由本地 Java 解析，不调用 AI。相同内容自动跳过，原文件复制到 archive 后再写入 MySQL。</p>
+                <ul class="import-help-paths">
+                  <li><span>订单与广告</span><code>17DATA/date/YYYY-M-D</code></li>
+                  <li><span>日常库存</span><code>17DATA/source/inventory</code></li>
+                  <li><span>产品资料</span><code>17DATA/source/upload/*-upload.xlsx</code></li>
+                  <li><span>月度退款</span><code>17DATA/source/Return_Orders</code></li>
+                  <li><span>历史周库存</span><code>13周报表/沃尔玛PNK周报 YYYY.M.D.xlsx</code></li>
+                  <li><span>SKU 映射</span><code>WFS发货计划/WFS上传模板.xlsx</code></li>
+                  <li><span>早期历史</span><code>每日销售数量统计/PNK 每日销售数据统计.xlsx</code></li>
+                </ul>
+                <div class="import-help-rule">同日期或同月份报表更新后启用新版本；库存快照保留历史，用于库存变化曲线。</div>
+              </div>
+            </div>
+            <button class="primary-button" id="scanImportButton" type="button">扫描导入</button>
+          </div>
           <button class="secondary-button" id="exportButton" type="button">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3v12m0 0 4-4m-4 4-4-4"/><path d="M5 19h14"/></svg>
             <span class="export-label">导出建议</span>
@@ -1477,7 +1627,41 @@
         <section class="view" id="view-imports" aria-labelledby="pageTitle">
           <div class="section-intro">
             <div><h2>从本地目录安全导入 MySQL</h2><p>系统扫描订单、自动广告、手动关键词广告、库存和商品资料。相同文件通过 SHA-256 指纹自动跳过，失败文件不会产生半批业务数据。</p></div>
-            <button class="primary-button" id="scanImportPageButton" type="button">开始扫描导入</button>
+            <div class="import-action-cluster">
+              <div class="import-scope" data-import-control>
+                <button class="secondary-button import-scope-trigger" type="button" aria-expanded="false" aria-controls="pageImportScope">
+                  <span class="import-scope-label">导入范围</span>
+                  <span class="import-scope-count" data-import-count>10/10</span>
+                  <span class="import-scope-chevron" aria-hidden="true">⌄</span>
+                </button>
+                <div class="import-scope-popover" id="pageImportScope" hidden>
+                  <div class="import-scope-header"><strong>选择扫描内容</strong><span>两个入口同步</span></div>
+                  <div class="import-source-groups" data-import-options></div>
+                  <div class="import-scope-footer">
+                    <span class="import-scope-note">默认全选。未勾选的数据源不会读取文件，也不会写入数据库。</span>
+                    <div class="import-scope-actions"><button class="import-text-button" type="button" data-import-action="all">全选</button><button class="import-text-button" type="button" data-import-action="clear">清空</button></div>
+                  </div>
+                </div>
+              </div>
+              <div class="import-help">
+                <button class="import-help-button" type="button" aria-label="查看扫描导入说明" aria-describedby="pageImportHelp">i</button>
+                <div class="import-help-tooltip" id="pageImportHelp" role="tooltip">
+                  <strong>扫描导入规则</strong>
+                  <p>全部由本地 Java 解析，不调用 AI。相同内容自动跳过，原文件复制到 archive 后再写入 MySQL。</p>
+                  <ul class="import-help-paths">
+                    <li><span>订单与广告</span><code>17DATA/date/YYYY-M-D</code></li>
+                    <li><span>日常库存</span><code>17DATA/source/inventory</code></li>
+                    <li><span>产品资料</span><code>17DATA/source/upload/*-upload.xlsx</code></li>
+                    <li><span>月度退款</span><code>17DATA/source/Return_Orders</code></li>
+                    <li><span>历史周库存</span><code>13周报表/沃尔玛PNK周报 YYYY.M.D.xlsx</code></li>
+                    <li><span>SKU 映射</span><code>WFS发货计划/WFS上传模板.xlsx</code></li>
+                    <li><span>早期历史</span><code>每日销售数量统计/PNK 每日销售数据统计.xlsx</code></li>
+                  </ul>
+                  <div class="import-help-rule">同日期或同月份报表更新后启用新版本；库存快照保留历史，用于库存变化曲线。</div>
+                </div>
+              </div>
+              <button class="primary-button" id="scanImportPageButton" type="button">开始扫描导入</button>
+            </div>
           </div>
           <section class="panel table-panel" aria-labelledby="batchTitle">
             <div class="panel-header"><div><h2 class="panel-title" id="batchTitle">最近导入批次</h2><p class="panel-subtitle">原文件保存在 archive，结构化字段写入独立 MySQL 数据库</p></div><button class="secondary-button" id="refreshBatchesButton" type="button">刷新</button></div>
@@ -1517,6 +1701,34 @@
     const dashboardResponse = await fetch("/api/dashboard/data");
     if (!dashboardResponse.ok) throw new Error(`加载数据失败：HTTP ${dashboardResponse.status}`);
     let DATA = await dashboardResponse.json();
+    const importSourceGroups = [
+      {
+        label: "日常经营",
+        sources: [
+          { key: "ORDER", label: "每日订单", hint: "PO_Data*.xlsx" },
+          { key: "ITEM_PERFORMANCE", label: "广告商品表现", hint: "ItemPerformance*.csv" },
+          { key: "ITEM_KEYWORD_PERFORMANCE", label: "自动广告搜索词", hint: "ItemKeywordPerformance*.csv" },
+          { key: "KEYWORD_PERFORMANCE", label: "手动广告关键词", hint: "KeywordPerformance*.csv" },
+        ],
+      },
+      {
+        label: "库存与产品",
+        sources: [
+          { key: "INVENTORY", label: "日常库存", hint: "source/inventory/*.xlsx" },
+          { key: "WEEKLY_INVENTORY", label: "历史周库存", hint: "沃尔玛PNK周报 YYYY.M.D.xlsx" },
+          { key: "PRODUCT", label: "产品资料", hint: "source/upload/*-upload.xlsx" },
+        ],
+      },
+      {
+        label: "专项与历史",
+        sources: [
+          { key: "RETURN_ORDER", label: "月度退款", hint: "Return_Orders_YYYY-MM.xlsx" },
+          { key: "SKU_MAPPING", label: "SKU / Item / UPC 映射", hint: "WFS上传模板.xlsx" },
+          { key: "HISTORY", label: "早期销售与广告历史", hint: "PNK 每日销售数据统计.xlsx" },
+        ],
+      },
+    ];
+    const importSources = importSourceGroups.flatMap((group) => group.sources);
     const state = {
       view: "dashboard",
       periodDays: DATA.defaults.periodDays,
@@ -1559,6 +1771,8 @@
       operationsLoading: false,
       operationSearch: "",
       aiStatus: null,
+      importSources: new Set(importSources.map((source) => source.key)),
+      importRunning: false,
     };
 
     const titles = { dashboard: "经营驾驶舱", sales: "销量分析", diagnosis: "广告诊断", sku: "SKU 机会矩阵", inventory: "库存管理", products: "产品库", operations: "运营记录", agent: "Agent 控制室", imports: "数据导入" };
@@ -2902,11 +3116,93 @@
     function escapeHtml(value) { return String(value ?? "").replace(/[&<>"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;" })[char]); }
     function showToast(message) { const toast = $("#toast"); toast.textContent = message; toast.classList.add("show"); clearTimeout(showToast.timer); showToast.timer = setTimeout(() => toast.classList.remove("show"), 3400); }
 
+    function closeImportScopes(except = null) {
+      $$("[data-import-control]").forEach((control) => {
+        if (control === except) return;
+        const trigger = control.querySelector(".import-scope-trigger");
+        const popover = control.querySelector(".import-scope-popover");
+        trigger.setAttribute("aria-expanded", "false");
+        popover.hidden = true;
+      });
+    }
+
+    function syncImportControls() {
+      const selectedCount = state.importSources.size;
+      $$("[data-import-source]").forEach((checkbox) => {
+        checkbox.checked = state.importSources.has(checkbox.value);
+      });
+      $$("[data-import-count]").forEach((counter) => {
+        counter.textContent = `${selectedCount}/${importSources.length}`;
+      });
+      [$("#scanImportButton"), $("#scanImportPageButton")].filter(Boolean).forEach((button) => {
+        button.disabled = state.importRunning || selectedCount === 0;
+      });
+    }
+
+    function initializeImportControls() {
+      const optionMarkup = importSourceGroups.map((group) => `
+        <fieldset class="import-source-group">
+          <legend>${escapeHtml(group.label)}</legend>
+          ${group.sources.map((source) => `
+            <label class="import-source-option">
+              <input type="checkbox" value="${escapeHtml(source.key)}" data-import-source checked>
+              <span><strong>${escapeHtml(source.label)}</strong><small>${escapeHtml(source.hint)}</small></span>
+            </label>
+          `).join("")}
+        </fieldset>
+      `).join("");
+
+      $$("[data-import-control]").forEach((control) => {
+        control.querySelector("[data-import-options]").innerHTML = optionMarkup;
+        const trigger = control.querySelector(".import-scope-trigger");
+        const popover = control.querySelector(".import-scope-popover");
+        trigger.addEventListener("click", () => {
+          const willOpen = popover.hidden;
+          closeImportScopes(willOpen ? control : null);
+          popover.hidden = !willOpen;
+          trigger.setAttribute("aria-expanded", String(willOpen));
+        });
+        control.addEventListener("change", (event) => {
+          const checkbox = event.target.closest("[data-import-source]");
+          if (!checkbox) return;
+          if (checkbox.checked) state.importSources.add(checkbox.value);
+          else state.importSources.delete(checkbox.value);
+          syncImportControls();
+        });
+        control.addEventListener("click", (event) => {
+          const action = event.target.closest("[data-import-action]")?.dataset.importAction;
+          if (!action) return;
+          if (action === "all") state.importSources = new Set(importSources.map((source) => source.key));
+          if (action === "clear") state.importSources.clear();
+          syncImportControls();
+        });
+      });
+
+      document.addEventListener("click", (event) => {
+        if (!event.target.closest("[data-import-control]")) closeImportScopes();
+      });
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") closeImportScopes();
+      });
+      syncImportControls();
+    }
+
     async function runImport() {
+      const selectedSources = importSources
+        .map((source) => source.key)
+        .filter((key) => state.importSources.has(key));
+      if (!selectedSources.length) {
+        showToast("请至少选择一项导入内容。");
+        return;
+      }
+      closeImportScopes();
       const buttons = [$("#scanImportButton"), $("#scanImportPageButton")].filter(Boolean);
+      const query = new URLSearchParams();
+      selectedSources.forEach((source) => query.append("source", source));
+      state.importRunning = true;
       buttons.forEach((button) => { button.disabled = true; button.textContent = "正在扫描…"; });
       try {
-        const response = await fetch("/api/imports/scan", { method: "POST" });
+        const response = await fetch(`/api/imports/scan?${query}`, { method: "POST" });
         const payload = await response.json();
         if (!response.ok || !payload.success) throw new Error(payload.message || `HTTP ${response.status}`);
         showToast(payload.data.message);
@@ -2915,7 +3211,9 @@
       } catch (error) {
         showToast(`导入失败：${error.message}`);
       } finally {
-        buttons.forEach((button) => { button.disabled = false; button.textContent = button.id === "scanImportButton" ? "扫描导入" : "开始扫描导入"; });
+        state.importRunning = false;
+        buttons.forEach((button) => { button.textContent = button.id === "scanImportButton" ? "扫描导入" : "开始扫描导入"; });
+        syncImportControls();
       }
     }
 
@@ -3137,6 +3435,7 @@
     $("#menuButton").addEventListener("click", () => { const open = document.body.classList.toggle("sidebar-open"); $("#menuButton").setAttribute("aria-expanded", String(open)); });
     $("#mobileScrim").addEventListener("click", () => { document.body.classList.remove("sidebar-open"); $("#menuButton").setAttribute("aria-expanded", "false"); });
     $("#exportButton").addEventListener("click", exportRecommendations);
+    initializeImportControls();
     $("#scanImportButton").addEventListener("click", runImport);
     $("#scanImportPageButton").addEventListener("click", runImport);
     $("#refreshBatchesButton").addEventListener("click", loadBatches);

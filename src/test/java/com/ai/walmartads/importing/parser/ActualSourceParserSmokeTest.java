@@ -50,11 +50,9 @@ class ActualSourceParserSmokeTest {
         Set<ImportFileType> expectedTypes = EnumSet.of(
                 ImportFileType.ORDER,
                 ImportFileType.AD_REPORT,
+                ImportFileType.INVENTORY,
                 ImportFileType.PRODUCT
         );
-        if (Files.isDirectory(DATA_ROOT.resolve("source").resolve("inventory"))) {
-            expectedTypes.add(ImportFileType.INVENTORY);
-        }
         assertThat(sampleByType.keySet()).containsAll(expectedTypes);
         assertThat(candidates)
                 .extracting(SourceFileCandidate::reportKind)

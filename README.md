@@ -24,14 +24,14 @@ D:\PNK\17DATA
 │     ├─ PO_Data*.xlsx               # 订单；只取 Order Date 等于目录日期的行
 │     ├─ ItemPerformance*.csv        # 全部广告的商品级经营汇总
 │     ├─ ItemKeywordPerformance*.csv # 商品 × 搜索词明细；可含自动和手动活动
-│     └─ KeywordPerformance*.csv     # 手动关键词明细
-├─ source\inventory\inventory-*.xlsx # 库存快照
+│     ├─ KeywordPerformance*.csv     # 手动关键词明细
+│     └─ inventory*.xlsx             # 当天库存；没有文件即当天未更新
 ├─ source\upload\*-upload.xlsx       # 商品资料
 └─ archive\                          # 系统归档
 ```
 
-订单和广告日报统一放在 `date\日期目录` 下。广告 CSV 没有业务日期，系统使用
-它所在的日期目录。订单文件可能包含多天数据，
+订单、广告日报和日常库存统一放在 `date\日期目录` 下。广告 CSV 没有业务日期，系统使用
+它所在的日期目录；库存快照日期也固定使用目录日期，当天没有库存文件就不生成快照。订单文件可能包含多天数据，
 系统只导入 `Order Date` 等于目录日期的记录。自动/手动类型以每行
 `Campaign Type` 为准，不根据文件名猜测。
 

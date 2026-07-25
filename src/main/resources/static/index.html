@@ -1249,7 +1249,7 @@
                 <p>全部由本地 Java 解析，不调用 AI。相同内容自动跳过，原文件复制到 archive 后再写入 MySQL。</p>
                 <ul class="import-help-paths">
                   <li><span>订单与广告</span><code>17DATA/date/YYYY-M-D</code></li>
-                  <li><span>日常库存</span><code>17DATA/source/inventory</code></li>
+                  <li><span>日常库存</span><code>17DATA/date/YYYY-M-D/inventory*.xlsx</code></li>
                   <li><span>产品资料</span><code>17DATA/source/upload/*-upload.xlsx</code></li>
                   <li><span>月度退款</span><code>17DATA/source/Return_Orders</code></li>
                   <li><span>历史周库存</span><code>13周报表/沃尔玛PNK周报 YYYY.M.D.xlsx</code></li>
@@ -1650,7 +1650,7 @@
                   <p>全部由本地 Java 解析，不调用 AI。相同内容自动跳过，原文件复制到 archive 后再写入 MySQL。</p>
                   <ul class="import-help-paths">
                     <li><span>订单与广告</span><code>17DATA/date/YYYY-M-D</code></li>
-                    <li><span>日常库存</span><code>17DATA/source/inventory</code></li>
+                    <li><span>日常库存</span><code>17DATA/date/YYYY-M-D/inventory*.xlsx</code></li>
                     <li><span>产品资料</span><code>17DATA/source/upload/*-upload.xlsx</code></li>
                     <li><span>月度退款</span><code>17DATA/source/Return_Orders</code></li>
                     <li><span>历史周库存</span><code>13周报表/沃尔玛PNK周报 YYYY.M.D.xlsx</code></li>
@@ -1714,7 +1714,7 @@
       {
         label: "库存与产品",
         sources: [
-          { key: "INVENTORY", label: "日常库存", hint: "source/inventory/*.xlsx" },
+          { key: "INVENTORY", label: "日常库存", hint: "date/YYYY-M-D/inventory*.xlsx" },
           { key: "WEEKLY_INVENTORY", label: "历史周库存", hint: "沃尔玛PNK周报 YYYY.M.D.xlsx" },
           { key: "PRODUCT", label: "产品资料", hint: "source/upload/*-upload.xlsx" },
         ],

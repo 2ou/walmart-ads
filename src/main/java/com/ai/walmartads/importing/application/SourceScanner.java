@@ -14,8 +14,6 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.YearMonth;
-import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -28,7 +26,6 @@ import java.util.stream.Stream;
 public class SourceScanner {
 
     private static final Pattern DATE_DIRECTORY = Pattern.compile("^(\\d{4})-(\\d{1,2})-(\\d{1,2})$");
-    private static final Pattern INVENTORY_DATE = Pattern.compile("inventory-(\\d{4}-\\d{2}-\\d{2})", Pattern.CASE_INSENSITIVE);
     private static final Pattern RETURN_ORDER_MONTH = Pattern.compile(
             "^Return_Orders_(\\d{4})-(\\d{2})\\.xlsx$",
             Pattern.CASE_INSENSITIVE
@@ -51,7 +48,6 @@ public class SourceScanner {
         }
         List<SourceFileCandidate> files = new ArrayList<>();
         scanDailyDirectories(root, files);
-        scanInventory(root, files);
         scanWeeklyInventory(files);
         scanProducts(root, files);
         scanReturnOrders(root, files);
@@ -79,41 +75,20 @@ public class SourceScanner {
                         }
                         DailyFileDescriptor descriptor = dailyFile(path.getFileName().toString());
                         if (descriptor != null) {
+                            LocalDateTime snapshotAt = descriptor.fileType() == ImportFileType.INVENTORY
+                                    ? reportDate.atTime(LocalTime.NOON)
+                                    : null;
                             files.add(new SourceFileCandidate(
                                     path,
                                     root.relativize(path),
                                     descriptor.fileType(),
                                     descriptor.reportKind(),
                                     reportDate,
-                                    null
+                                    snapshotAt
                             ));
                         }
                     }
                 }
-            }
-        }
-    }
-
-    private void scanInventory(Path root, List<SourceFileCandidate> files) throws IOException {
-        Path inventoryRoot = root.resolve("source").resolve("inventory");
-        if (!Files.isDirectory(inventoryRoot)) {
-            return;
-        }
-        try (Stream<Path> paths = Files.list(inventoryRoot)) {
-            for (Path path : paths.filter(Files::isRegularFile).toList()) {
-                String name = path.getFileName().toString();
-                if (name.startsWith("~$") || !name.toLowerCase(Locale.ROOT).endsWith(".xlsx")) {
-                    continue;
-                }
-                LocalDateTime snapshotAt = inventorySnapshot(name, Files.getLastModifiedTime(path));
-                files.add(new SourceFileCandidate(
-                        path,
-                        root.relativize(path),
-                        ImportFileType.INVENTORY,
-                        null,
-                        null,
-                        snapshotAt
-                ));
             }
         }
     }
@@ -268,6 +243,9 @@ public class SourceScanner {
         if (lower.startsWith("po_data") && lower.endsWith(".xlsx")) {
             return new DailyFileDescriptor(ImportFileType.ORDER, null);
         }
+        if (lower.startsWith("inventory") && lower.endsWith(".xlsx")) {
+            return new DailyFileDescriptor(ImportFileType.INVENTORY, null);
+        }
         return null;
     }
 
@@ -285,18 +263,6 @@ public class SourceScanner {
         } catch (RuntimeException exception) {
             return null;
         }
-    }
-
-    private static LocalDateTime inventorySnapshot(String fileName, FileTime fallback) {
-        Matcher matcher = INVENTORY_DATE.matcher(fileName);
-        if (matcher.find()) {
-            try {
-                return LocalDate.parse(matcher.group(1), DateTimeFormatter.ISO_LOCAL_DATE).atTime(LocalTime.NOON);
-            } catch (DateTimeParseException ignored) {
-                // Fall through to filesystem timestamp.
-            }
-        }
-        return ImportValues.fileTime(fallback.toInstant());
     }
 
     private static LocalDate weeklyInventoryDate(String fileName) {

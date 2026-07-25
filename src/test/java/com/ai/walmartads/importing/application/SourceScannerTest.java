@@ -24,13 +24,14 @@ class SourceScannerTest {
         Files.createFile(day.resolve("ItemKeywordPerformance_example.csv"));
         Files.createFile(day.resolve("KeywordPerformance_example.csv"));
         Files.createFile(day.resolve("PO_Data_example.xlsx"));
+        Files.createFile(day.resolve("inventory.xlsx"));
 
         SourceScanner scanner = new SourceScanner(new WalmartAdsProperties(
                 temp, temp.resolve("archive"), null, null, null, null
         ));
         List<SourceFileCandidate> candidates = scanner.scan();
 
-        assertThat(candidates).hasSize(4);
+        assertThat(candidates).hasSize(5);
         assertThat(report(candidates, "ItemPerformance_example.csv").fileType())
                 .isEqualTo(ImportFileType.AD_REPORT);
         assertThat(report(candidates, "ItemPerformance_example.csv").reportKind())
@@ -42,6 +43,38 @@ class SourceScannerTest {
         assertThat(report(candidates, "PO_Data_example.xlsx").reportKind()).isNull();
         assertThat(report(candidates, "PO_Data_example.xlsx").relativePath())
                 .isEqualTo(Path.of("date", "2026-7-22", "PO_Data_example.xlsx"));
+        assertThat(report(candidates, "inventory.xlsx"))
+                .satisfies(candidate -> {
+                    assertThat(candidate.fileType()).isEqualTo(ImportFileType.INVENTORY);
+                    assertThat(candidate.reportDate()).isEqualTo(java.time.LocalDate.of(2026, 7, 22));
+                    assertThat(candidate.snapshotAt())
+                            .isEqualTo(java.time.LocalDate.of(2026, 7, 22).atTime(12, 0));
+                    assertThat(candidate.relativePath())
+                            .isEqualTo(Path.of("date", "2026-7-22", "inventory.xlsx"));
+                });
+    }
+
+    @Test
+    void onlyCreatesInventorySnapshotsForDaysContainingInventoryWorkbook() throws Exception {
+        Files.createDirectories(temp.resolve("date").resolve("2026-7-22"));
+        Path updatedDay = Files.createDirectories(temp.resolve("date").resolve("2026-7-23"));
+        Files.createFile(updatedDay.resolve("inventory-latest.xlsx"));
+        Path obsoleteRoot = Files.createDirectories(temp.resolve("source").resolve("inventory"));
+        Files.createFile(obsoleteRoot.resolve("inventory-2026-07-20.xlsx"));
+
+        SourceScanner scanner = new SourceScanner(new WalmartAdsProperties(
+                temp, temp.resolve("archive"), null, null, null, null
+        ));
+
+        assertThat(scanner.scan())
+                .singleElement()
+                .satisfies(candidate -> {
+                    assertThat(candidate.fileType()).isEqualTo(ImportFileType.INVENTORY);
+                    assertThat(candidate.reportDate()).isEqualTo(java.time.LocalDate.of(2026, 7, 23));
+                    assertThat(candidate.snapshotAt())
+                            .isEqualTo(java.time.LocalDate.of(2026, 7, 23).atTime(12, 0));
+                    assertThat(candidate.path()).isEqualTo(updatedDay.resolve("inventory-latest.xlsx"));
+                });
     }
 
     @Test

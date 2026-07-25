@@ -46,6 +46,9 @@ public class ProductWorkbookParser {
                 Map<String, Object> raw = new LinkedHashMap<>();
                 for (int column = 0; column < header.names().size(); column++) {
                     String name = header.names().get(column);
+                    if (name != null && "price".equalsIgnoreCase(name.trim())) {
+                        continue;
+                    }
                     String value = ImportValues.text(row.getCell(column));
                     ImportValues.addPreservingDuplicates(raw, name, value);
                 }
@@ -59,7 +62,6 @@ public class ProductWorkbookParser {
                         ImportValues.first(raw, "productIdType"),
                         ImportValues.first(raw, "productName"),
                         ImportValues.first(raw, "brand"),
-                        ImportValues.decimal(ImportValues.first(raw, "price")),
                         ImportValues.first(raw, "shortDescription"),
                         json.write(ImportValues.list(raw, "keyFeatures")),
                         ImportValues.first(raw, "mainImageUrl"),

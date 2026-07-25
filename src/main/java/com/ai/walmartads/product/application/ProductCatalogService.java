@@ -7,7 +7,6 @@ import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.math.BigDecimal;
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -104,7 +103,6 @@ public class ProductCatalogService {
                 .map(ProductCatalogService::variant)
                 .toList();
         List<ColorGroup> colorGroups = colorGroups(rows);
-        PriceRange prices = priceRange(rows);
         return new ProductDetail(
                 safeParentSku,
                 representative.productName(),
@@ -118,8 +116,6 @@ public class ProductCatalogService {
                 rows.size(),
                 distinctCount(rows, SourceProduct::color),
                 distinctCount(rows, SourceProduct::size),
-                prices.minimum(),
-                prices.maximum(),
                 representative.sourceFileName(),
                 representative.sourceUpdatedAt(),
                 attributes(representative),
@@ -182,7 +178,6 @@ public class ProductCatalogService {
                 row.sku(),
                 row.productId(),
                 row.productIdType(),
-                row.price(),
                 row.color(),
                 row.colorCategory(),
                 row.size(),
@@ -252,7 +247,6 @@ public class ProductCatalogService {
                        product.product_id_type,
                        product.product_name,
                        product.brand,
-                       product.price,
                        product.short_description,
                        product.key_features,
                        product.main_image_url,
@@ -292,7 +286,6 @@ public class ProductCatalogService {
                 text(row, "product_id_type"),
                 text(row, "product_name"),
                 text(row, "brand"),
-                decimal(row.get("price")),
                 text(row, "short_description"),
                 stringList(row.get("key_features")),
                 text(row, "main_image_url"),
@@ -315,7 +308,6 @@ public class ProductCatalogService {
 
     private ProductSummary summary(String parentSku, List<SourceProduct> rows) {
         SourceProduct representative = representative(rows);
-        PriceRange prices = priceRange(rows);
         LocalDateTime updatedAt = rows.stream()
                 .map(SourceProduct::sourceUpdatedAt)
                 .filter(value -> value != null)
@@ -356,8 +348,6 @@ public class ProductCatalogService {
                 distinctCount(rows, SourceProduct::color),
                 distinctCount(rows, SourceProduct::size),
                 images.size(),
-                prices.minimum(),
-                prices.maximum(),
                 completeness,
                 representative.sourceFileName(),
                 updatedAt,
@@ -425,18 +415,6 @@ public class ProductCatalogService {
                 .map(value -> value.trim().toLowerCase(Locale.ROOT))
                 .distinct()
                 .count();
-    }
-
-    private static PriceRange priceRange(List<SourceProduct> rows) {
-        List<BigDecimal> prices = rows.stream()
-                .map(SourceProduct::price)
-                .filter(value -> value != null && value.signum() >= 0)
-                .sorted()
-                .toList();
-        if (prices.isEmpty()) {
-            return new PriceRange(BigDecimal.ZERO, BigDecimal.ZERO);
-        }
-        return new PriceRange(prices.getFirst(), prices.getLast());
     }
 
     private List<String> stringList(Object value) {
@@ -512,16 +490,6 @@ public class ProductCatalogService {
         return separator > 0 ? sku.substring(0, separator) : sku;
     }
 
-    private static BigDecimal decimal(Object value) {
-        if (value == null) {
-            return BigDecimal.ZERO;
-        }
-        if (value instanceof BigDecimal decimal) {
-            return decimal;
-        }
-        return new BigDecimal(String.valueOf(value));
-    }
-
     private static String text(Map<String, Object> row, String key) {
         Object value = row.get(key);
         return value == null ? null : String.valueOf(value);
@@ -567,8 +535,6 @@ public class ProductCatalogService {
             int colorCount,
             int sizeCount,
             int imageCount,
-            BigDecimal minimumPrice,
-            BigDecimal maximumPrice,
             int listingCompleteness,
             String sourceFileName,
             LocalDateTime updatedAt,
@@ -589,8 +555,6 @@ public class ProductCatalogService {
             int variantCount,
             int colorCount,
             int sizeCount,
-            BigDecimal minimumPrice,
-            BigDecimal maximumPrice,
             String sourceFileName,
             LocalDateTime updatedAt,
             Map<String, String> attributes,
@@ -618,7 +582,6 @@ public class ProductCatalogService {
             String sku,
             String productId,
             String productIdType,
-            BigDecimal price,
             String color,
             String colorCategory,
             String size,
@@ -641,7 +604,6 @@ public class ProductCatalogService {
             String productIdType,
             String productName,
             String brand,
-            BigDecimal price,
             String shortDescription,
             List<String> keyFeatures,
             String mainImageUrl,
@@ -662,6 +624,4 @@ public class ProductCatalogService {
     ) {
     }
 
-    private record PriceRange(BigDecimal minimum, BigDecimal maximum) {
-    }
 }

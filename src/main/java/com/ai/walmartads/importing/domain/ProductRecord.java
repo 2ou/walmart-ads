@@ -10,7 +10,6 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Entity
@@ -51,9 +50,6 @@ public class ProductRecord {
 
     @Column(length = 120)
     private String brand;
-
-    @Column(precision = 18, scale = 6)
-    private BigDecimal price;
 
     @Column(columnDefinition = "mediumtext")
     private String shortDescription;
@@ -110,7 +106,6 @@ public class ProductRecord {
             String productIdType,
             String productName,
             String brand,
-            BigDecimal price,
             String shortDescription,
             String keyFeatures,
             String mainImageUrl,
@@ -135,7 +130,6 @@ public class ProductRecord {
         this.productIdType = productIdType;
         this.productName = productName;
         this.brand = brand;
-        this.price = price;
         this.shortDescription = shortDescription;
         this.keyFeatures = keyFeatures;
         this.mainImageUrl = mainImageUrl;
@@ -154,5 +148,9 @@ public class ProductRecord {
 
     public String getSku() {
         return sku;
+    }
+
+    public String getRawPayload() {
+        return rawPayload;
     }
 }

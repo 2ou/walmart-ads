@@ -41,7 +41,6 @@ class ProductCatalogServiceTest {
                     product_id_type varchar(40),
                     product_name text,
                     brand varchar(120),
-                    price decimal(18,6),
                     short_description text,
                     key_features text,
                     main_image_url varchar(2500),
@@ -64,13 +63,13 @@ class ProductCatalogServiceTest {
         jdbc.getJdbcTemplate().update("""
                 insert into wm_ads_product_record (
                     id, import_file_id, current_version, sku, parent_sku, product_type,
-                    product_id, product_id_type, product_name, brand, price, short_description,
+                    product_id, product_id_type, product_name, brand, short_description,
                     key_features, main_image_url, secondary_image_urls, color, color_category,
                     size, size_group, pattern_name, material_name, gender, variant_group_id,
                     raw_payload, source_updated_at
                 ) values (
                     1, 1, true, 'PNK100-Blue-M-WFS', 'PNK100', 'Shirt',
-                    '123', 'UPC', 'Blue listing title', 'PINKSIR', 19.99, 'Listing description',
+                    '123', 'UPC', 'Blue listing title', 'PINKSIR', 'Listing description',
                     '[\"Soft fabric\",\"Daily wear\"]', 'https://img/main.jpg',
                     '[\"https://img/side.jpg\"]', 'Blue', 'Blue', 'M', 'Regular',
                     'Solid', 'Cotton', 'Female', 'PNK100',
@@ -81,13 +80,13 @@ class ProductCatalogServiceTest {
         jdbc.getJdbcTemplate().update("""
                 insert into wm_ads_product_record (
                     id, import_file_id, current_version, sku, parent_sku, product_type,
-                    product_id, product_id_type, product_name, brand, price, short_description,
+                    product_id, product_id_type, product_name, brand, short_description,
                     key_features, main_image_url, secondary_image_urls, color, color_category,
                     size, size_group, pattern_name, material_name, gender, variant_group_id,
                     raw_payload, source_updated_at
                 ) values (
                     2, 1, true, 'PNK100-Blue-XL-WFS', 'PNK100', 'Shirt',
-                    '124', 'UPC', 'Blue listing title', 'PINKSIR', 19.99, 'Listing description',
+                    '124', 'UPC', 'Blue listing title', 'PINKSIR', 'Listing description',
                     '[\"Soft fabric\",\"Daily wear\"]', 'https://img/main.jpg',
                     '[\"https://img/side.jpg\"]', 'Blue', 'Blue', 'XL', 'Regular',
                     'Solid', 'Cotton', 'Female', 'PNK100',
@@ -98,13 +97,13 @@ class ProductCatalogServiceTest {
         jdbc.getJdbcTemplate().update("""
                 insert into wm_ads_product_record (
                     id, import_file_id, current_version, sku, parent_sku, product_type,
-                    product_id, product_id_type, product_name, brand, price, short_description,
+                    product_id, product_id_type, product_name, brand, short_description,
                     key_features, main_image_url, secondary_image_urls, color, color_category,
                     size, size_group, pattern_name, material_name, gender, variant_group_id,
                     raw_payload, source_updated_at
                 ) values (
                     3, 1, true, 'PNK100-Black-S-WFS', 'PNK100', 'Shirt',
-                    '125', 'UPC', 'Black listing title', 'PINKSIR', 19.99, 'Listing description',
+                    '125', 'UPC', 'Black listing title', 'PINKSIR', 'Listing description',
                     '[\"Soft fabric\",\"Daily wear\"]', 'https://img/black-main.jpg',
                     '[\"https://img/black-side.jpg\"]', 'Black', 'Black', 'S', 'Regular',
                     'Solid', 'Cotton', 'Female', 'PNK100',
@@ -147,5 +146,10 @@ class ProductCatalogServiceTest {
         assertThat(detail.colorGroups().get(1).variants())
                 .extracting(ProductCatalogService.Variant::size)
                 .containsExactly("S");
+        ObjectMapper responseMapper = new ObjectMapper().findAndRegisterModules();
+        assertThat(responseMapper.valueToTree(catalog).toString())
+                .doesNotContain("minimumPrice", "maximumPrice", "\"price\"");
+        assertThat(responseMapper.valueToTree(detail).toString())
+                .doesNotContain("minimumPrice", "maximumPrice", "\"price\"");
     }
 }

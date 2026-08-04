@@ -7,6 +7,8 @@
     risk: "all",
     search: "",
     detailSearch: "",
+    trendSelectedParents: new Set(),
+    trendSearch: "",
     selectedParentSku: null,
     selectedColor: null,
     selectedSize: null,
@@ -30,6 +32,8 @@
   });
   const number = (value) => Number.isFinite(Number(value)) ? Number(value) : 0;
   const integer = (value) => Math.round(number(value)).toLocaleString("zh-CN");
+  const styleNumberCollator = new Intl.Collator("zh-CN", { numeric: true, sensitivity: "base" });
+  const compareStyleNo = (left, right) => styleNumberCollator.compare(String(left ?? ""), String(right ?? ""));
   const money = (value) => `$${number(value).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   const percent = (value, digits = 1) => `${(number(value) * 100).toFixed(digits)}%`;
   const escapeHtml = (value) => String(value ?? "").replace(/[&<>"]/g, (char) => ({
@@ -77,19 +81,33 @@
         </div>
         <dl class="return-account-rollup-stats">
           <div><dt>已退款 / 销量</dt><dd id="returnAccountUnits">--</dd></div>
-          <div><dt>累计申请退款率</dt><dd id="returnAccountRequestRate">--</dd></div>
           <div><dt>累计退款金额</dt><dd id="returnAccountRefundAmount">--</dd></div>
           <div><dt>覆盖月份</dt><dd id="returnAccountMonths">--</dd></div>
         </dl>
       </section>
       <div class="return-metric-grid" id="returnMetricGrid"></div>
       <div class="return-layout">
-        <section class="panel" aria-labelledby="returnTrendTitle">
+        <section class="panel return-trend-panel" aria-labelledby="returnTrendTitle">
           <div class="panel-header">
-            <div><h2 class="panel-title" id="returnTrendTitle">月度退款率趋势</h2><p class="panel-subtitle">红线为申请退款率，蓝线为已完成退款率；鼠标悬停查看数值</p></div>
-            <div class="legend">
-              <span class="legend-item"><span class="legend-dot" style="background:var(--signal-red)"></span>申请退款率</span>
-              <span class="legend-item"><span class="legend-dot"></span>已完成退款率</span>
+            <div><h2 class="panel-title" id="returnTrendTitle">月度退款率趋势</h2><p class="panel-subtitle" id="returnTrendSubtitle">默认显示店铺总体退款率，可按需叠加款号</p></div>
+            <div class="return-trend-header-actions">
+              <details class="return-trend-series-control" id="returnTrendSeriesControl">
+                <summary>
+                  <span>筛选款号</span>
+                  <strong id="returnTrendSeriesSummary">仅店铺总体</strong>
+                </summary>
+                <div class="return-trend-series-panel">
+                  <div class="return-trend-series-actions">
+                    <span>店铺总体始终显示，勾选款号后叠加对比</span>
+                    <button type="button" id="returnTrendClearSelected">清空款号</button>
+                  </div>
+                  <label class="return-trend-series-search" for="returnTrendSeriesSearch">
+                    <span class="sr-only">搜索趋势款号</span>
+                    <input id="returnTrendSeriesSearch" type="search" placeholder="搜索款号，如 PNK366076" autocomplete="off">
+                  </label>
+                  <div class="return-trend-series-options" id="returnTrendSeriesOptions"></div>
+                </div>
+              </details>
             </div>
           </div>
           <div class="return-chart" id="returnTrendChart"></div>
@@ -150,7 +168,7 @@
         </div>
         <div class="table-scroll">
           <table class="return-table">
-            <thead><tr><th>商品与维度</th><th>风险</th><th class="num">申请件数</th><th class="num">已退款</th><th class="num">已取消</th><th class="num">处理中</th><th class="num">同月销量</th><th class="num">申请退款率</th><th class="num">已完成退款率</th><th class="num">退款金额</th><th class="num">金额退款率</th></tr></thead>
+            <thead><tr><th>商品与维度</th><th>风险</th><th class="num">申请件数</th><th class="num">已退款</th><th class="num">已取消</th><th class="num">处理中</th><th class="num">同月销量</th><th class="num">本月退款率</th><th class="num" id="returnTotalRateHeader">款号累计总退款率</th><th class="num">退款金额</th><th class="num">金额退款率</th></tr></thead>
             <tbody id="returnOverviewBody"></tbody>
           </table>
         </div>
@@ -246,6 +264,21 @@
       state.detailPage = 0;
       renderDetails();
     });
+    $("#returnTrendSeriesSearch").addEventListener("input", (event) => {
+      state.trendSearch = event.target.value;
+      renderTrendSeriesControl();
+    });
+    document.addEventListener("click", (event) => {
+      const control = $("#returnTrendSeriesControl");
+      if (control?.open && !control.contains(event.target)) control.open = false;
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.key !== "Escape") return;
+      const control = $("#returnTrendSeriesControl");
+      if (!control?.open) return;
+      control.open = false;
+      control.querySelector("summary")?.focus();
+    });
     $$("[data-return-group]").forEach((button) => button.addEventListener("click", () => {
       state.group = button.dataset.returnGroup;
       state.overviewPage = 0;
@@ -311,6 +344,7 @@
       renderAccountSummary();
       $("#returnMetricGrid").innerHTML = "";
       $("#returnTrendChart").innerHTML = `<div class="empty-state"><strong>等待退款报表</strong>扫描导入后，这里会显示月度退款率与款色码下钻。</div>`;
+      renderTrendSeriesControl();
       $("#returnReasonList").innerHTML = "";
       $("#returnColorList").innerHTML = "";
       $("#returnSizeList").innerHTML = "";
@@ -331,13 +365,13 @@
     syncPageMeta();
     renderAccountSummary(accountSummary);
     $("#returnMetricGrid").innerHTML = [
-      metric("申请退款率", percent(summary.requestRate), `${integer(summary.requestedUnits)} 件申请 ÷ ${integer(summary.soldUnits)} 件销量`, "alert"),
-      metric("已完成退款率", percent(summary.completedRate), `${integer(summary.completedUnits)} 件已完成`, ""),
+      metric("已完成退款率", percent(summary.completedRate), `${integer(summary.completedUnits)} 件已完成`, "alert"),
       metric("已退款金额", money(summary.refundAmount), `金额退款率 ${percent(summary.refundAmountRate)}`, "cost"),
       metric("处理中", `${integer(summary.pendingUnits)} 件`, `已取消 ${integer(summary.cancelledUnits)} 件`, ""),
       metric("卖家承担", money(summary.sellerAmount), `沃尔玛承担 ${money(summary.walmartAmount)}`, "cost"),
       metric("受影响范围", `${integer(summary.affectedParents)} 款`, `${integer(summary.affectedSkus)} 个已映射 SKU`, ""),
     ].join("");
+    renderTrendSeriesControl();
     renderTrend();
     renderBreakdown(state.data.reasons, "#returnReasonList");
     renderParentSelect();
@@ -352,14 +386,12 @@
     const rate = $("#returnAccountCompletedRate");
     const note = $("#returnAccountRollupNote");
     const units = $("#returnAccountUnits");
-    const requestRate = $("#returnAccountRequestRate");
     const refundAmount = $("#returnAccountRefundAmount");
     const months = $("#returnAccountMonths");
     if (!account || !number(account.monthCount)) {
       rate.textContent = "--";
       note.textContent = "导入月度退款报表后，这里会汇总整个账号。";
       units.textContent = "--";
-      requestRate.textContent = "--";
       refundAmount.textContent = "--";
       months.textContent = "--";
       return;
@@ -367,7 +399,6 @@
     rate.textContent = account.soldUnits > 0 ? percent(account.completedRate) : "缺少分母";
     note.textContent = `${integer(account.monthCount)} 个已导入月份按累计件数计算，不取各月退款率的平均值。`;
     units.textContent = `${integer(account.completedUnits)} / ${integer(account.soldUnits)}`;
-    requestRate.textContent = percent(account.requestRate);
     refundAmount.textContent = money(account.refundAmount);
     months.textContent = account.firstMonth === account.lastMonth
       ? text(account.firstMonth)
@@ -395,12 +426,86 @@
       .join("");
   }
 
+  function trendParents() {
+    const parents = new Map();
+    (state.data?.parentTrend || []).forEach((row) => {
+      if (!row.parentSku) return;
+      const current = parents.get(row.parentSku);
+      if (!current || text(current.itemName) === current.parentSku) {
+        parents.set(row.parentSku, {
+          parentSku: row.parentSku,
+          itemName: text(row.itemName, row.parentSku),
+        });
+      }
+    });
+    return [...parents.values()].sort((a, b) => compareStyleNo(a.parentSku, b.parentSku));
+  }
+
+  const trendPalette = [
+    "var(--return-trend-1)",
+    "var(--return-trend-3)",
+    "var(--return-trend-4)",
+    "var(--return-trend-5)",
+    "var(--return-trend-6)",
+  ];
+
+  function trendSeriesStyle(index) {
+    const patternGroup = Math.floor(index / trendPalette.length) % 3;
+    return {
+      color: trendPalette[index % trendPalette.length],
+      dash: patternGroup === 1 ? "7 4" : patternGroup === 2 ? "2 4" : "none",
+      dashClass: patternGroup === 1 ? "dashed" : patternGroup === 2 ? "dotted" : "",
+    };
+  }
+
+  function renderTrendSeriesControl() {
+    const control = $("#returnTrendSeriesControl");
+    const options = $("#returnTrendSeriesOptions");
+    if (!control || !options) return;
+    const parents = trendParents();
+    const available = new Set(parents.map((row) => row.parentSku));
+    state.trendSelectedParents = new Set(
+      [...state.trendSelectedParents].filter((parentSku) => available.has(parentSku))
+    );
+    const selectedCount = state.trendSelectedParents.size;
+    const filteredParents = parents.filter((row) => fuzzySearchMatches(state.trendSearch, row.parentSku));
+    $("#returnTrendSeriesSummary").textContent = selectedCount
+      ? `店铺 + ${selectedCount} 个款号`
+      : "仅店铺总体";
+    control.classList.toggle("disabled", !parents.length);
+    options.innerHTML = filteredParents.length
+      ? filteredParents.map((row) => {
+        const index = parents.findIndex((parent) => parent.parentSku === row.parentSku);
+        const style = trendSeriesStyle(index);
+        const checked = state.trendSelectedParents.has(row.parentSku);
+        return `<label class="return-trend-series-option">
+          <input type="checkbox" data-return-trend-parent="${escapeHtml(row.parentSku)}" ${checked ? "checked" : ""}>
+          <span class="return-trend-series-swatch ${style.dashClass}" style="--series-color:${style.color}" aria-hidden="true"></span>
+          <span class="mono">${escapeHtml(row.parentSku)}</span>
+        </label>`;
+      }).join("")
+      : `<div class="return-trend-series-empty">${parents.length ? "没有匹配的款号" : "产品库暂无可展示款号"}</div>`;
+    options.querySelectorAll("[data-return-trend-parent]").forEach((checkbox) => {
+      checkbox.addEventListener("change", () => {
+        if (checkbox.checked) state.trendSelectedParents.add(checkbox.dataset.returnTrendParent);
+        else state.trendSelectedParents.delete(checkbox.dataset.returnTrendParent);
+        renderTrendSeriesControl();
+        renderTrend();
+      });
+    });
+    const clearButton = $("#returnTrendClearSelected");
+    clearButton.disabled = selectedCount === 0;
+    clearButton.onclick = () => {
+      state.trendSelectedParents.clear();
+      renderTrendSeriesControl();
+      renderTrend();
+    };
+  }
+
   function parentRows() {
     return (state.data?.parentRows || [])
       .filter((row) => number(row.completedUnits) > 0)
-      .sort((a, b) => number(b.completedUnits) - number(a.completedUnits)
-        || number(b.completedRate) - number(a.completedRate)
-        || text(a.parentSku).localeCompare(text(b.parentSku)));
+      .sort((a, b) => compareStyleNo(a.parentSku, b.parentSku));
   }
 
   function ensureSelectedParent() {
@@ -440,7 +545,7 @@
     select.disabled = false;
     select.innerHTML = parents.map((row) => `
       <option value="${escapeHtml(row.parentSku)}" ${row.parentSku === state.selectedParentSku ? "selected" : ""}>
-        ${escapeHtml(row.parentSku)} · ${integer(row.completedUnits)} 件已退款 · ${percent(row.completedRate)}
+        ${escapeHtml(row.parentSku)} · 本月 ${percent(row.completedRate)} · 累计 ${row.totalSoldUnits > 0 ? percent(row.totalCompletedRate) : "缺少分母"}
       </option>`).join("");
   }
 
@@ -524,92 +629,197 @@
 
   function renderTrend() {
     const chart = $("#returnTrendChart");
-    const rows = (state.data.trend || []).filter((row) => (
+    const accountRows = (state.data.trend || []).filter((row) => (
       row.month >= state.data.meta.firstMonth && row.month <= state.data.meta.latestMonth
     ));
-    if (!rows.length) {
+    const parents = trendParents();
+    const visibleParents = parents.filter((row) => state.trendSelectedParents.has(row.parentSku));
+    $("#returnTrendSubtitle").textContent = visibleParents.length
+      ? `店铺总体与 ${visibleParents.length} 个已选款号对比`
+      : "店铺总体已完成退款率，使用全部订单销量作为分母";
+    if (!accountRows.length) {
       chart.innerHTML = `<div class="empty-state"><strong>没有月度趋势</strong>当前退款明细还不能形成月份序列。</div>`;
       return;
     }
-    const width = 900;
-    const height = 284;
-    const left = 58;
-    const right = 30;
-    const top = 24;
-    const bottom = 42;
+    const parentTrend = state.data.parentTrend || [];
+    const parentSeries = visibleParents.map((parent) => {
+      const byMonth = new Map(parentTrend
+        .filter((row) => row.parentSku === parent.parentSku)
+        .map((row) => [row.month, row]));
+      return {
+        ...parent,
+        ...trendSeriesStyle(parents.findIndex((row) => row.parentSku === parent.parentSku)),
+        label: parent.parentSku,
+        account: false,
+        rows: accountRows.map((accountRow) => byMonth.get(accountRow.month) || {
+          parentSku: parent.parentSku,
+          month: accountRow.month,
+          completedRate: 0,
+        }),
+      };
+    });
+    const series = [{
+      label: "店铺总体",
+      color: "var(--walmart-blue)",
+      dash: "none",
+      dashClass: "",
+      account: true,
+      rows: accountRows,
+    }, ...parentSeries];
+    const compact = chart.clientWidth > 0 && chart.clientWidth < 520;
+    const width = compact ? Math.max(320, Math.round(chart.clientWidth - 20)) : 900;
+    const height = compact ? 220 : 284;
+    const left = compact ? 44 : 58;
+    const right = compact ? 16 : 30;
+    const top = compact ? 34 : 38;
+    const bottom = compact ? 34 : 42;
     const plotWidth = width - left - right;
     const plotHeight = height - top - bottom;
-    const maxRate = Math.max(...rows.flatMap((row) => [number(row.requestRate), number(row.completedRate)]), .01) * 1.15;
-    const xFor = (index) => rows.length === 1 ? left + plotWidth / 2 : left + index / (rows.length - 1) * plotWidth;
-    const points = (key) => rows.map((row, index) => ({
-      x: xFor(index),
-      y: top + plotHeight - number(row[key]) / maxRate * plotHeight,
-    }));
-    const requestPoints = points("requestRate");
-    const completePoints = points("completedRate");
-    const path = (items) => items.map((item, index) => `${index ? "L" : "M"}${item.x.toFixed(1)},${item.y.toFixed(1)}`).join(" ");
-    const area = `${path(requestPoints)} L${requestPoints.at(-1).x.toFixed(1)},${top + plotHeight} L${requestPoints[0].x.toFixed(1)},${top + plotHeight} Z`;
+    const maxRate = Math.max(
+      ...series.flatMap((item) => item.rows.map((row) => number(row.completedRate))),
+      .01
+    ) * 1.15;
+    const xFor = (index) => accountRows.length === 1
+      ? left + plotWidth / 2
+      : left + index / (accountRows.length - 1) * plotWidth;
+    const pathFor = (rows) => rows.map((row, index) => {
+      const x = xFor(index);
+      const y = top + plotHeight - number(row.completedRate) / maxRate * plotHeight;
+      return `${index ? "L" : "M"}${x.toFixed(1)},${y.toFixed(1)}`;
+    }).join(" ");
     const grid = [0, .25, .5, .75, 1].map((step) => {
       const y = top + plotHeight * step;
       return `<line class="chart-grid-line" x1="${left}" x2="${left + plotWidth}" y1="${y}" y2="${y}"/><text class="chart-axis-label" x="${left - 8}" y="${y + 3}" text-anchor="end">${percent(maxRate * (1 - step), 0)}</text>`;
     }).join("");
-    const labels = rows.map((row, index) => `<text class="chart-axis-label" x="${xFor(index)}" y="${height - 12}" text-anchor="middle">${row.month.slice(5)}月</text>`).join("");
+    const labels = accountRows.map((row, index) => `<text class="chart-axis-label" x="${xFor(index)}" y="${height - 12}" text-anchor="middle">${row.month.slice(5)}月</text>`).join("");
+    const lines = series.map((item) => `
+      <path class="return-chart-series ${item.account ? "account" : ""}" d="${pathFor(item.rows)}"
+        style="--series-color:${item.color};--series-dash:${item.dash}"
+        tabindex="0" role="img" aria-label="${escapeHtml(item.label)}月度退款率折线">
+        <title>${escapeHtml(item.label)}</title>
+      </path>`).join("");
+    const points = series.map((item, seriesIndex) => item.rows.map((row, index) => {
+      const x = xFor(index);
+      const y = top + plotHeight - number(row.completedRate) / maxRate * plotHeight;
+      const rate = percent(row.completedRate);
+      return `<g class="return-chart-point-group" tabindex="0" role="img"
+        aria-label="${escapeHtml(item.label)} ${escapeHtml(row.month)} ${rate}"
+        data-series-index="${seriesIndex}" data-month-index="${index}"
+        data-series-label="${escapeHtml(item.label)}" data-month="${escapeHtml(row.month)}" data-rate="${rate}">
+        <circle class="return-chart-point ${item.account ? "account" : ""}" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${item.account ? 3.5 : 3}" style="--series-color:${item.color}"></circle>
+      </g>`;
+    }).join("")).join("");
+    const valueLabels = series.map((item, seriesIndex) => item.rows.map((row, index) => {
+      const x = xFor(index);
+      const y = top + plotHeight - number(row.completedRate) / maxRate * plotHeight;
+      const lane = Math.floor(Math.max(0, seriesIndex - 1) / 2);
+      let offset = item.account ? -11 : (seriesIndex % 2 ? 15 + lane * 9 : -10 - lane * 9);
+      if (y + offset > top + plotHeight + 15) offset = -10 - lane * 9;
+      if (y + offset < top + 9) offset = 15 + lane * 9;
+      const labelY = Math.max(top + 9, Math.min(top + plotHeight + 15, y + offset));
+      return `<text class="return-chart-value ${item.account ? "account" : ""}" x="${x.toFixed(1)}" y="${labelY.toFixed(1)}" text-anchor="middle" style="--series-color:${item.color}" aria-hidden="true">${percent(row.completedRate)}</text>`;
+    }).join("")).join("");
+    const legend = series.map((item) => `
+      <span class="return-trend-active-item">
+        <i class="${item.dashClass}" style="--series-color:${item.color}" aria-hidden="true"></i>
+        ${escapeHtml(item.label)}
+      </span>`).join("");
     chart.innerHTML = `
-      <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="月度申请退款率与已完成退款率趋势">
-        ${grid}<path class="return-chart-area" d="${area}"/><path class="return-chart-line-request" d="${path(requestPoints)}"/><path class="return-chart-line-complete" d="${path(completePoints)}"/>${labels}
-        <line class="return-chart-crosshair" id="returnTrendCrosshair" x1="${left}" x2="${left}" y1="${top}" y2="${top + plotHeight}" hidden/>
-        <g id="returnTrendMarkers"></g>
-        <rect class="return-chart-hit" id="returnTrendHit" x="${left}" y="${top}" width="${plotWidth}" height="${plotHeight}" fill="transparent" tabindex="0" role="slider" aria-label="退款月份，使用左右方向键查看" aria-valuemin="1" aria-valuemax="${rows.length}" aria-valuenow="${rows.length}"/>
+      <div class="return-trend-active-series" aria-label="当前显示的趋势">${legend}</div>
+      <svg viewBox="0 0 ${width} ${height}" style="height:${height}px" role="img"
+        aria-label="店铺月度已完成退款率趋势，已叠加 ${visibleParents.length} 个款号">
+        ${grid}${lines}${points}${valueLabels}${labels}
+        <line class="return-chart-hover-axis" id="returnTrendHoverAxis"
+          x1="${left}" x2="${left}" y1="${top}" y2="${top + plotHeight}" hidden></line>
+        <rect class="return-chart-axis-hit" id="returnTrendAxisHit"
+          x="${left}" y="${top}" width="${plotWidth}" height="${plotHeight}" aria-hidden="true"></rect>
       </svg>
-      <div class="return-chart-tooltip" id="returnTrendTooltip" role="status" aria-live="polite"></div>`;
+      <div class="return-chart-point-tooltip" id="returnTrendPointTooltip" role="tooltip" hidden></div>`;
+    const tooltip = $("#returnTrendPointTooltip");
     const svg = chart.querySelector("svg");
-    const hit = $("#returnTrendHit");
-    const crosshair = $("#returnTrendCrosshair");
-    const markers = $("#returnTrendMarkers");
-    const tooltip = $("#returnTrendTooltip");
-    let active = rows.length - 1;
-    const show = (index) => {
-      active = Math.max(0, Math.min(rows.length - 1, index));
-      const row = rows[active];
-      const request = requestPoints[active];
-      const complete = completePoints[active];
-      crosshair.setAttribute("x1", request.x);
-      crosshair.setAttribute("x2", request.x);
-      crosshair.hidden = false;
-      markers.innerHTML = `<circle class="return-chart-marker" cx="${request.x}" cy="${request.y}" r="4.5" fill="var(--signal-red)"/><circle class="return-chart-marker" cx="${complete.x}" cy="${complete.y}" r="4.5" fill="var(--walmart-blue)"/>`;
-      tooltip.innerHTML = `<strong>${row.month}</strong><div class="return-tooltip-row"><span>申请退款率</span><b>${percent(row.requestRate)}</b></div><div class="return-tooltip-row"><span>已完成退款率</span><b>${percent(row.completedRate)}</b></div><div class="return-tooltip-row"><span>申请 / 销量</span><b>${integer(row.requestedUnits)} / ${integer(row.soldUnits)}</b></div><div class="return-tooltip-row"><span>退款金额</span><b>${money(row.refundAmount)}</b></div>`;
-      const x = request.x / width * chart.clientWidth;
-      tooltip.style.left = `${Math.max(110, Math.min(chart.clientWidth - 110, x))}px`;
-      tooltip.classList.add("show");
-      hit.setAttribute("aria-valuenow", String(active + 1));
-      hit.setAttribute("aria-valuetext", `${row.month}，申请退款率 ${percent(row.requestRate)}，已完成退款率 ${percent(row.completedRate)}`);
+    const axis = $("#returnTrendHoverAxis");
+    const axisHit = $("#returnTrendAxisHit");
+    const pointGroups = [...chart.querySelectorAll(".return-chart-point-group")];
+    const clearActivePoints = () => {
+      pointGroups.forEach((point) => {
+        point.classList.remove("active");
+        point.removeAttribute("aria-describedby");
+      });
     };
-    const hide = () => {
-      crosshair.hidden = true;
-      markers.innerHTML = "";
-      tooltip.classList.remove("show");
+    const hideTooltip = () => {
+      clearActivePoints();
+      axis.setAttribute("hidden", "");
+      tooltip.hidden = true;
+      tooltip.classList.remove("axis-mode");
     };
-    const pointerIndex = (event) => {
-      const rect = svg.getBoundingClientRect();
-      const x = (event.clientX - rect.left) / rect.width * width;
-      return requestPoints.reduce((nearest, point, index) => (
-        Math.abs(point.x - x) < Math.abs(requestPoints[nearest].x - x) ? index : nearest
+    const positionTooltip = (axisX, preferredTop) => {
+      const maxLeft = Math.max(8, chart.clientWidth - tooltip.offsetWidth - 8);
+      let tooltipLeft = axisX + 12;
+      if (tooltipLeft > maxLeft) tooltipLeft = axisX - tooltip.offsetWidth - 12;
+      const maxTop = Math.max(34, chart.clientHeight - tooltip.offsetHeight - 8);
+      tooltip.style.left = `${Math.max(8, Math.min(maxLeft, tooltipLeft))}px`;
+      tooltip.style.top = `${Math.max(34, Math.min(maxTop, preferredTop))}px`;
+    };
+    const showPointTooltip = (point) => {
+      const chartRect = chart.getBoundingClientRect();
+      const pointRect = point.getBoundingClientRect();
+      clearActivePoints();
+      axis.setAttribute("hidden", "");
+      tooltip.classList.remove("axis-mode");
+      tooltip.innerHTML = `
+        <strong>${escapeHtml(point.dataset.seriesLabel)}</strong>
+        <span>${escapeHtml(point.dataset.month)} · 已完成退款率</span>
+        <b>${escapeHtml(point.dataset.rate)}</b>`;
+      tooltip.hidden = false;
+      const centerX = pointRect.left + pointRect.width / 2 - chartRect.left;
+      let tooltipTop = pointRect.top - chartRect.top - tooltip.offsetHeight - 12;
+      if (tooltipTop < 34) tooltipTop = pointRect.bottom - chartRect.top + 12;
+      positionTooltip(centerX - 12, tooltipTop);
+      point.classList.add("active");
+      point.setAttribute("aria-describedby", tooltip.id);
+    };
+    const showAxisTooltip = (monthIndex) => {
+      const chartRect = chart.getBoundingClientRect();
+      const svgRect = svg.getBoundingClientRect();
+      const month = accountRows[monthIndex]?.month || "";
+      const x = xFor(monthIndex);
+      clearActivePoints();
+      pointGroups
+        .filter((point) => number(point.dataset.monthIndex) === monthIndex)
+        .forEach((point) => point.classList.add("active"));
+      tooltip.classList.add("axis-mode");
+      tooltip.innerHTML = `
+        <strong>${escapeHtml(month)}</strong>
+        <div class="return-chart-tooltip-values">
+          ${series.map((item) => `
+            <div class="return-chart-tooltip-row">
+              <span><i style="--series-color:${item.color}" aria-hidden="true"></i>${escapeHtml(item.label)}</span>
+              <b style="--series-color:${item.color}">${percent(item.rows[monthIndex]?.completedRate)}</b>
+            </div>`).join("")}
+        </div>`;
+      tooltip.hidden = false;
+      axis.setAttribute("x1", x.toFixed(1));
+      axis.setAttribute("x2", x.toFixed(1));
+      axis.removeAttribute("hidden");
+      const axisX = svgRect.left - chartRect.left + x / width * svgRect.width;
+      const plotTop = svgRect.top - chartRect.top + top / height * svgRect.height + 8;
+      positionTooltip(axisX, plotTop);
+    };
+    const monthIndexForPointer = (event) => {
+      const svgRect = svg.getBoundingClientRect();
+      const pointerX = (event.clientX - svgRect.left) / svgRect.width * width;
+      return accountRows.reduce((nearest, row, index) => (
+        Math.abs(xFor(index) - pointerX) < Math.abs(xFor(nearest) - pointerX) ? index : nearest
       ), 0);
     };
-    hit.addEventListener("pointermove", (event) => show(pointerIndex(event)));
-    hit.addEventListener("pointerdown", (event) => show(pointerIndex(event)));
-    hit.addEventListener("pointerleave", () => {
-      if (document.activeElement !== hit) hide();
-    });
-    hit.addEventListener("focus", () => show(active));
-    hit.addEventListener("blur", hide);
-    hit.addEventListener("keydown", (event) => {
-      if (["ArrowLeft", "ArrowRight", "Home", "End", "Escape"].includes(event.key)) event.preventDefault();
-      if (event.key === "ArrowLeft") show(active - 1);
-      if (event.key === "ArrowRight") show(active + 1);
-      if (event.key === "Home") show(0);
-      if (event.key === "End") show(rows.length - 1);
-      if (event.key === "Escape") hide();
+    axisHit.addEventListener("pointermove", (event) => showAxisTooltip(monthIndexForPointer(event)));
+    axisHit.addEventListener("pointerleave", hideTooltip);
+    pointGroups.forEach((point) => {
+      point.addEventListener("focus", () => showPointTooltip(point));
+      point.addEventListener("blur", hideTooltip);
+      point.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") hideTooltip();
+      });
     });
   }
 
@@ -653,13 +863,16 @@
 
   function overviewRows() {
     if (!state.data) return [];
-    if (state.group === "parent") return state.data.parentRows || [];
+    if (state.group === "parent") return [...(state.data.parentRows || [])]
+      .sort((a, b) => compareStyleNo(a.parentSku, b.parentSku));
     return scopedSkuRows();
   }
 
   function renderOverview() {
     const body = $("#returnOverviewBody");
     if (!body) return;
+    const showParentTotal = state.group === "parent";
+    $("#returnTotalRateHeader").hidden = !showParentTotal;
     let rows = overviewRows();
     if (state.risk !== "all") rows = rows.filter((row) => row.risk === state.risk);
     if (state.search) {
@@ -671,10 +884,10 @@
     state.overviewPage = Math.min(state.overviewPage, pages - 1);
     const pageRows = rows.slice(state.overviewPage * state.pageSize, (state.overviewPage + 1) * state.pageSize);
     $("#returnOverviewSubtitle").textContent = state.group === "parent"
-      ? "按款号定位问题款；点击款号后查看该款的 SKU、颜色、尺码与订单明细。"
-      : `${state.selectedParentSku || "未选择款号"} 的 SKU，退款率分母包含该款同月有销量但没有退款的变体。`;
+      ? "本月退款率用于定位当月问题，款号累计总退款率按全部完整导入月份加权计算。"
+      : `${state.selectedParentSku || "未选择款号"} 的 SKU，本月退款率按 SKU 计算。`;
     if (!pageRows.length) {
-      body.innerHTML = `<tr><td colspan="11"><div class="empty-state"><strong>没有符合条件的退款记录</strong>调整月份、维度、风险或搜索条件后重试。</div></td></tr>`;
+      body.innerHTML = `<tr><td colspan="${showParentTotal ? 11 : 10}"><div class="empty-state"><strong>没有符合条件的退款记录</strong>调整月份、维度、风险或搜索条件后重试。</div></td></tr>`;
     } else {
       body.innerHTML = pageRows.map((row) => {
         const key = text(row.parentSku || row.sku || row.label || row.itemId, "未映射");
@@ -687,20 +900,23 @@
           ? `<img class="return-product-thumb" src="${escapeHtml(row.imageUrl)}" alt="" loading="lazy">`
           : `<span class="return-product-thumb" aria-hidden="true"></span>`;
         const risk = riskCopy[row.risk] || riskCopy.NORMAL;
+        const totalRate = number(row.totalSoldUnits) > 0
+          ? `<strong>${percent(row.totalCompletedRate)}</strong><small>${integer(row.totalCompletedUnits)} / ${integer(row.totalSoldUnits)}</small>`
+          : `<strong class="return-rate-missing">缺少分母</strong><small>完整导入月份无销量</small>`;
         const selected = state.group === "parent" && row.parentSku === state.selectedParentSku;
         const keyMarkup = state.group === "parent"
           ? `<button class="return-parent-button" type="button" data-return-parent="${escapeHtml(row.parentSku)}" aria-current="${selected ? "true" : "false"}" title="查看 ${escapeHtml(key)} 的款内色码分析">${escapeHtml(key)}</button>`
           : `<strong title="${escapeHtml(key)}">${escapeHtml(key)}</strong>`;
         return `<tr class="${selected ? "return-selected-row" : ""}">
-          <td><div class="return-product-cell">${image}<div>${keyMarkup}<span title="${escapeHtml(row.itemName || detail)}">${escapeHtml(row.itemName || detail)}</span><span>${escapeHtml(detail)}</span></div></div></td>
+          <td><div class="return-product-cell">${image}<div>${keyMarkup}<span>${escapeHtml(detail)}</span></div></div></td>
           <td><span class="return-risk ${risk.className}">${risk.label}</span></td>
           <td class="num">${integer(row.requestedUnits)}</td>
           <td class="num">${integer(row.completedUnits)}</td>
           <td class="num">${integer(row.cancelledUnits)}</td>
           <td class="num">${integer(row.pendingUnits)}</td>
           <td class="num">${integer(row.soldUnits)}</td>
-          <td class="num">${percent(row.requestRate)}</td>
           <td class="num">${percent(row.completedRate)}</td>
+          ${showParentTotal ? `<td class="num"><span class="return-total-rate">${totalRate}</span></td>` : ""}
           <td class="num">${money(row.refundAmount)}</td>
           <td class="num">${percent(row.refundAmountRate)}</td>
         </tr>`;

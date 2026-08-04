@@ -1,12 +1,14 @@
 package com.ai.walmartads.importing.parser;
 
 import com.ai.walmartads.config.WalmartAdsProperties;
+import com.ai.walmartads.importing.application.DeliveryFeeCalculator;
 import com.ai.walmartads.importing.application.SourceFileCandidate;
 import com.ai.walmartads.importing.application.SourceScanner;
 import com.ai.walmartads.importing.domain.AdReportKind;
 import com.ai.walmartads.importing.domain.ImportBatch;
 import com.ai.walmartads.importing.domain.ImportFile;
 import com.ai.walmartads.importing.domain.ImportFileType;
+import com.ai.walmartads.importing.domain.ProductionOrderRecord;
 import com.ai.walmartads.importing.repository.InventorySnapshotRepository;
 import com.ai.walmartads.importing.repository.SkuMappingRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -51,7 +53,8 @@ class ActualSourceParserSmokeTest {
                 ImportFileType.ORDER,
                 ImportFileType.AD_REPORT,
                 ImportFileType.INVENTORY,
-                ImportFileType.PRODUCT
+                ImportFileType.PRODUCT,
+                ImportFileType.ITEM_REPORT
         );
         assertThat(sampleByType.keySet()).containsAll(expectedTypes);
         assertThat(candidates)
@@ -73,6 +76,12 @@ class ActualSourceParserSmokeTest {
         InventoryWorkbookParser inventoryParser = new InventoryWorkbookParser(json);
         WeeklyInventoryWorkbookParser weeklyInventoryParser = new WeeklyInventoryWorkbookParser(json);
         ProductWorkbookParser productParser = new ProductWorkbookParser(json);
+        ItemReportCsvParser itemReportParser = new ItemReportCsvParser(json, new DeliveryFeeCalculator());
+        DemandForecastParser demandForecastParser = new DemandForecastParser(json);
+        DomesticInventoryWorkbookParser domesticInventoryParser = new DomesticInventoryWorkbookParser(json);
+        ProductionOrderParser productionOrderParser = new ProductionOrderParser(json);
+        ShipmentWorkbookParser shipmentParser = new ShipmentWorkbookParser(json);
+        ShipmentLogisticsWorkbookParser shipmentLogisticsParser = new ShipmentLogisticsWorkbookParser(json);
 
         for (SourceFileCandidate candidate : sampleByType.values()) {
             if (candidate.fileType() == ImportFileType.RETURN_ORDER) {
@@ -85,6 +94,12 @@ class ActualSourceParserSmokeTest {
                 case INVENTORY -> inventoryParser.parse(candidate.path(), importFile);
                 case WEEKLY_INVENTORY -> weeklyInventoryParser.parse(candidate.path(), importFile);
                 case PRODUCT -> productParser.parse(candidate.path(), importFile);
+                case ITEM_REPORT -> itemReportParser.parse(candidate.path(), importFile);
+                case DEMAND_FORECAST -> demandForecastParser.parse(candidate.path(), importFile);
+                case DOMESTIC_INVENTORY -> domesticInventoryParser.parse(candidate.path(), importFile);
+                case PRODUCTION_ORDER -> productionOrderParser.parse(candidate.path(), importFile);
+                case SHIPMENT -> shipmentParser.parse(candidate.path(), importFile);
+                case SHIPMENT_LOGISTICS -> shipmentLogisticsParser.parse(candidate.path(), importFile);
                 case HISTORY -> throw new IllegalStateException("Two-argument test configuration does not scan history");
                 case SKU_MAPPING -> throw new IllegalStateException("Test configuration does not scan SKU mappings");
                 case RETURN_ORDER -> throw new IllegalStateException("Dedicated return parser test covers return workbooks");

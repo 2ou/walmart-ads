@@ -16,6 +16,7 @@ class ImportValuesTest {
         assertThat(ImportValues.decimal("$1,234.56")).isEqualByComparingTo("1234.56");
         assertThat(ImportValues.decimal("11.11%")).isEqualByComparingTo(new BigDecimal("0.1111000000"));
         assertThat(ImportValues.date("7/21/2026")).isEqualTo(LocalDate.of(2026, 7, 21));
+        assertThat(ImportValues.date("2026-07-15 20:02:06")).isEqualTo(LocalDate.of(2026, 7, 15));
         assertThat(ImportValues.parentSku("PNK363127-C-Steel Gray-3X-WFS")).isEqualTo("PNK363127");
     }
 

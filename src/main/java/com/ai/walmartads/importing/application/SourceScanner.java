@@ -26,12 +26,17 @@ import java.util.stream.Stream;
 public class SourceScanner {
 
     private static final Pattern DATE_DIRECTORY = Pattern.compile("^(\\d{4})-(\\d{1,2})-(\\d{1,2})$");
+    private static final Pattern DOMESTIC_INVENTORY_DATE = Pattern.compile(".*?(\\d{4})(\\d{2})(\\d{2}).*");
     private static final Pattern RETURN_ORDER_MONTH = Pattern.compile(
             "^Return_Orders_(\\d{4})-(\\d{2})\\.xlsx$",
             Pattern.CASE_INSENSITIVE
     );
     private static final Pattern WEEKLY_INVENTORY_DATE = Pattern.compile(
             "^沃尔玛PNK周报\\s+(\\d{4})\\.(\\d{1,2})\\.(\\d{1,2})\\s*\\.xlsx$",
+            Pattern.CASE_INSENSITIVE
+    );
+    private static final Pattern ITEM_REPORT_DATE = Pattern.compile(
+            "^ItemReport_(\\d{4})(\\d{2})(\\d{2})\\.csv$",
             Pattern.CASE_INSENSITIVE
     );
 
@@ -50,9 +55,14 @@ public class SourceScanner {
         scanDailyDirectories(root, files);
         scanWeeklyInventory(files);
         scanProducts(root, files);
+        scanItemReports(root, files);
         scanReturnOrders(root, files);
         scanSkuMappingWorkbook(files);
         scanHistoricalWorkbook(files);
+        scanDemandForecast(root, files);
+        scanProductionOrder(root, files);
+        scanShipments(root, files);
+        scanDomesticInventory(root, files);
         files.sort(Comparator
                 .comparingInt((SourceFileCandidate item) -> priority(item.fileType()))
                 .thenComparing(item -> item.path().toString()));
@@ -111,6 +121,33 @@ public class SourceScanner {
                         null,
                         null,
                         ImportValues.fileTime(Files.getLastModifiedTime(path).toInstant())
+                ));
+            }
+        }
+    }
+
+    private void scanItemReports(Path root, List<SourceFileCandidate> files) throws IOException {
+        Path itemReportRoot = root.resolve("source").resolve("ItemReport");
+        if (!Files.isDirectory(itemReportRoot)) {
+            return;
+        }
+        try (Stream<Path> paths = Files.list(itemReportRoot)) {
+            for (Path path : paths.filter(Files::isRegularFile).toList()) {
+                String name = path.getFileName().toString();
+                if (name.startsWith("~$")) {
+                    continue;
+                }
+                LocalDate reportDate = itemReportDate(name);
+                if (reportDate == null) {
+                    continue;
+                }
+                files.add(new SourceFileCandidate(
+                        path,
+                        root.relativize(path),
+                        ImportFileType.ITEM_REPORT,
+                        null,
+                        reportDate,
+                        null
                 ));
             }
         }
@@ -221,11 +258,113 @@ public class SourceScanner {
         ));
     }
 
+    private void scanDemandForecast(Path root, List<SourceFileCandidate> files) throws IOException {
+        Path demandRoot = root.resolve("source").resolve("demand-forecast");
+        if (!Files.isDirectory(demandRoot)) {
+            return;
+        }
+        try (Stream<Path> paths = Files.list(demandRoot)) {
+            for (Path path : paths.filter(Files::isRegularFile).toList()) {
+                String name = path.getFileName().toString();
+                if (name.startsWith("~$") || !name.toLowerCase(Locale.ROOT).endsWith(".xlsx")) {
+                    continue;
+                }
+                files.add(new SourceFileCandidate(
+                        path,
+                        root.relativize(path),
+                        ImportFileType.DEMAND_FORECAST,
+                        null,
+                        null,
+                        ImportValues.fileTime(Files.getLastModifiedTime(path).toInstant())
+                ));
+            }
+        }
+    }
+
     private static FileTime lastModified(Path path) {
         try {
             return Files.getLastModifiedTime(path);
         } catch (IOException exception) {
             throw new IllegalArgumentException("无法读取 SKU 映射表修改时间：" + path, exception);
+        }
+    }
+
+    private void scanProductionOrder(Path root, List<SourceFileCandidate> files) throws IOException {
+        Path productionRoot = root.resolve("source").resolve("生产订单");
+        if (!Files.isDirectory(productionRoot)) {
+            return;
+        }
+        try (Stream<Path> paths = Files.list(productionRoot)) {
+            for (Path path : paths.filter(Files::isRegularFile).toList()) {
+                String name = path.getFileName().toString();
+                if (name.startsWith("~$") || !name.toLowerCase(Locale.ROOT).endsWith(".xlsx")) {
+                    continue;
+                }
+                files.add(new SourceFileCandidate(
+                        path,
+                        root.relativize(path),
+                        ImportFileType.PRODUCTION_ORDER,
+                        null,
+                        null,
+                        ImportValues.fileTime(Files.getLastModifiedTime(path).toInstant())
+                ));
+            }
+        }
+    }
+
+    private void scanShipments(Path root, List<SourceFileCandidate> files) throws IOException {
+        Path shipmentRoot = root.resolve("source").resolve("货件");
+        if (!Files.isDirectory(shipmentRoot)) {
+            return;
+        }
+        try (Stream<Path> paths = Files.list(shipmentRoot)) {
+            for (Path path : paths.filter(Files::isRegularFile).toList()) {
+                String name = path.getFileName().toString();
+                String lower = name.toLowerCase(Locale.ROOT);
+                if (name.startsWith("~$") || !lower.endsWith(".xlsx")) {
+                    continue;
+                }
+                ImportFileType type;
+                if (name.contains("物流信息登记")) {
+                    type = ImportFileType.SHIPMENT_LOGISTICS;
+                } else if (name.contains("货件")) {
+                    type = ImportFileType.SHIPMENT;
+                } else {
+                    continue;
+                }
+                files.add(new SourceFileCandidate(
+                        path,
+                        root.relativize(path),
+                        type,
+                        null,
+                        null,
+                        ImportValues.fileTime(Files.getLastModifiedTime(path).toInstant())
+                ));
+            }
+        }
+    }
+
+    private void scanDomesticInventory(Path root, List<SourceFileCandidate> files) throws IOException {
+        Path domesticRoot = root.resolve("source").resolve("国内仓库存");
+        if (!Files.isDirectory(domesticRoot)) {
+            return;
+        }
+        try (Stream<Path> paths = Files.list(domesticRoot)) {
+            for (Path path : paths.filter(Files::isRegularFile).toList()) {
+                String name = path.getFileName().toString();
+                if (name.startsWith("~$") || !name.toLowerCase(Locale.ROOT).endsWith(".xlsx")) {
+                    continue;
+                }
+                LocalDateTime snapshotAt = domesticInventorySnapshotAt(name, path);
+                files.add(new SourceFileCandidate(
+                        path,
+                        root.relativize(path),
+                        ImportFileType.DOMESTIC_INVENTORY,
+                        null,
+                        snapshotAt.toLocalDate(),
+                        snapshotAt
+                ));
+            }
         }
     }
 
@@ -281,12 +420,53 @@ public class SourceScanner {
         }
     }
 
+    private static LocalDate itemReportDate(String fileName) {
+        Matcher matcher = ITEM_REPORT_DATE.matcher(fileName);
+        if (!matcher.matches()) {
+            return null;
+        }
+        try {
+            return LocalDate.of(
+                    Integer.parseInt(matcher.group(1)),
+                    Integer.parseInt(matcher.group(2)),
+                    Integer.parseInt(matcher.group(3))
+            );
+        } catch (RuntimeException exception) {
+            return null;
+        }
+    }
+
+    private static LocalDateTime domesticInventorySnapshotAt(String fileName, Path path) {
+        Matcher matcher = DOMESTIC_INVENTORY_DATE.matcher(fileName);
+        if (matcher.matches()) {
+            try {
+                return LocalDate.of(
+                        Integer.parseInt(matcher.group(1)),
+                        Integer.parseInt(matcher.group(2)),
+                        Integer.parseInt(matcher.group(3))
+                ).atTime(LocalTime.NOON);
+            } catch (RuntimeException ignored) {
+                // Fall through to file modification time.
+            }
+        }
+        try {
+            return ImportValues.fileTime(Files.getLastModifiedTime(path).toInstant());
+        } catch (IOException exception) {
+            throw new IllegalArgumentException("Unable to read domestic inventory modification time: " + path, exception);
+        }
+    }
+
     private static int priority(ImportFileType type) {
         return switch (type) {
             case SKU_MAPPING -> 0;
             case INVENTORY -> 1;
             case WEEKLY_INVENTORY -> 2;
             case PRODUCT -> 3;
+            case ITEM_REPORT -> 3;
+            case DEMAND_FORECAST -> 3;
+            case PRODUCTION_ORDER -> 3;
+            case SHIPMENT, SHIPMENT_LOGISTICS -> 3;
+            case DOMESTIC_INVENTORY -> 3;
             case HISTORY -> 4;
             case ORDER -> 5;
             case AD_REPORT, AD_AUTO, AD_MANUAL -> 6;

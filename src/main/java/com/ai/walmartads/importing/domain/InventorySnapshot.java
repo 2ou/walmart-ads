@@ -20,74 +20,98 @@ public class InventorySnapshot {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
+    /** 主键，自增 */
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "import_file_id", nullable = false)
+    /** 关联导入文件ID */
     private ImportFile importFile;
 
     @Column(nullable = false)
+    /** 快照时间 */
     private LocalDateTime snapshotAt;
 
     @Column(nullable = false, length = 180)
+    /** 商品 SKU */
     private String sku;
 
     @Column(length = 80)
+    /** 父 SKU（可空） */
     private String parentSku;
 
     @Column(length = 80)
+    /** 商品ID（可空） */
     private String itemId;
 
     @Column(length = 40)
+    /** GTIN（可空） */
     private String gtin;
 
     @Column(columnDefinition = "text")
+    /** 商品名称（可空） */
     private String itemName;
 
     @Column(length = 80)
+    /** 状态（可空） */
     private String status;
 
     @Column(precision = 18, scale = 6)
+    /** 日均销售额 */
     private BigDecimal dailySales;
 
     @Column(precision = 18, scale = 6)
+    /** 日均销量（件） */
     private BigDecimal dailyUnitsSold;
 
     @Column(precision = 18, scale = 4)
+    /** 可用库存（件） */
     private BigDecimal availableUnits;
 
     @Column(precision = 18, scale = 4)
+    /** 预留库存（件） */
     private BigDecimal reservedUnits;
 
     @Column(precision = 18, scale = 4)
+    /** 在途库存（件） */
     private BigDecimal inboundUnits;
 
     @Column(precision = 18, scale = 4)
+    /** 预计可售天数 */
     private BigDecimal forecastedDaysSupply;
+    /** 预计缺货日期（可空） */
     private LocalDate outOfStockDate;
 
     @Column(precision = 18, scale = 4)
+    /** 建议补货量（件） */
     private BigDecimal suggestedUnits;
 
     @Column(length = 120)
+    /** 品牌（可空） */
     private String brand;
 
     @Column(precision = 18, scale = 4)
+    /** 冗余库存（件） */
     private BigDecimal surplusUnits;
 
     @Column(precision = 18, scale = 8)
+    /** 售罄率 */
     private BigDecimal sellThroughRate;
 
     @Column(length = 80)
+    /** 上架状态（可空） */
     private String publishingStatus;
 
     @Column(length = 80)
+    /** 商品生命周期阶段（可空） */
     private String itemLifecycle;
 
     @Column(nullable = false, columnDefinition = "json")
+    /** 原始报文（JSON） */
     private String rawPayload;
 
     @Column(nullable = false)
+    /** 创建时间 */
     private LocalDateTime createdAt;
 
     protected InventorySnapshot() {

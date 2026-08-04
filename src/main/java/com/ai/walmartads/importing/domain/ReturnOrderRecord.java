@@ -21,132 +21,175 @@ public class ReturnOrderRecord {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
+    /** 主键，自增 */
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "import_file_id", nullable = false)
+    /** 关联导入文件ID */
     private ImportFile importFile;
 
     @Column(nullable = false)
+    /** 源数据行号 */
     private int sourceRowNumber;
 
     @Column(nullable = false, length = 64, columnDefinition = "char(64)")
+    /** 业务唯一键（sha256，用于去重） */
     private String businessKey;
 
     @Column(nullable = false)
+    /** 报表月份 */
     private LocalDate reportMonth;
 
     @Column(nullable = false)
+    /** 退货申请时间 */
     private LocalDateTime requestAt;
 
     @Column(nullable = false)
+    /** 退货申请日期 */
     private LocalDate requestDate;
 
     @Column(nullable = false, length = 80)
+    /** 客户订单号 */
     private String customerOrderNo;
 
     @Column(length = 80)
+    /** 采购单号（可空） */
     private String poNo;
 
     @Column(length = 40)
+    /** 采购单行号（可空） */
     private String poLineNo;
 
     @Column(nullable = false, length = 100)
+    /** RMA 号 */
     private String rmaNo;
 
     @Column(length = 40)
+    /** 退货单行号（可空） */
     private String returnOrderLineNo;
 
     @Column(nullable = false, precision = 18, scale = 4)
+    /** 数量 */
     private BigDecimal quantity;
 
     @Column(length = 300)
+    /** 退货原因（可空） */
     private String returnReason;
 
     @Column(nullable = false, length = 80)
+    /** 商品ID */
     private String itemId;
 
     @Column(length = 180)
+    /** 商品 SKU（可空） */
     private String sku;
 
     @Column(length = 80)
+    /** 父 SKU（可空） */
     private String parentSku;
 
     @Column(name = "condition_name", length = 80)
+    /** 商品状态（可空） */
     private String itemCondition;
 
     @Column(length = 100)
+    /** 当前状态（可空） */
     private String currentStatus;
 
+    /** 当前状态时间（可空） */
     private LocalDateTime currentStatusTime;
 
     @Column(nullable = false)
+    /** 是否保留（1是/0否） */
     private boolean keepIt;
 
     @Column(columnDefinition = "text")
+    /** 商品名称（可空） */
     private String itemName;
 
     @Column(length = 80)
+    /** 承运商（可空） */
     private String carrier;
 
     @Column(length = 200)
+    /** 物流单号（可空） */
     private String trackingNumber;
 
     @Column(length = 120)
+    /** 渠道（可空） */
     private String channel;
 
     @Column(length = 300)
+    /** 客户名称（可空） */
     private String customerName;
 
     @Column(length = 500)
+    /** 客户邮箱（可空） */
     private String customerEmail;
 
     @Column(columnDefinition = "text")
+    /** 客户备注（可空） */
     private String customerComments;
 
     @Column(nullable = false, precision = 18, scale = 6)
+    /** 订单金额 */
     private BigDecimal orderAmount;
 
     @Column(nullable = false, precision = 18, scale = 6)
+    /** 退货运费 */
     private BigDecimal returnShippingFee;
 
     @Column(nullable = false, precision = 18, scale = 6)
+    /** 重新上架费 */
     private BigDecimal restockingFee;
 
     @Column(nullable = false, precision = 18, scale = 6)
+    /** 退款总额 */
     private BigDecimal totalRefundAmount;
 
     @Column(length = 100)
+    /** 卖家订单号（可空） */
     private String sellerOrderNo;
 
     @Column(length = 100)
+    /** 退款方式（可空） */
     private String refundMode;
 
     @Column(length = 120)
+    /** 退款承担方（可空） */
     private String refundCoveredBy;
 
     @Column(length = 100)
+    /** 物流状态（可空） */
     private String trackingStatus;
 
     @Column(length = 100)
+    /** 退款状态（可空） */
     private String refundStatus;
 
     @Column(nullable = false)
+    /** 是否换货（1是/0否） */
     private boolean replacement;
 
     @Column(length = 80)
+    /** 平台类型（可空） */
     private String platformType;
 
     @Column(length = 120)
+    /** 退货发出地（可空） */
     private String returnShipFrom;
 
     @Column(length = 120)
+    /** 退货接收地（可空） */
     private String returnShipTo;
 
     @Column(nullable = false, columnDefinition = "json")
+    /** 原始报文（JSON） */
     private String rawPayload;
 
     @Column(nullable = false)
+    /** 创建时间 */
     private LocalDateTime createdAt;
 
     protected ReturnOrderRecord() {

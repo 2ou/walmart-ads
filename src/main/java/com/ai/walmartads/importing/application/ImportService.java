@@ -53,17 +53,25 @@ public class ImportService {
     }
 
     public ImportRunResult scanAndImport() throws IOException {
-        return scanAndImport(EnumSet.allOf(ImportSource.class));
+        return scanAndImport(defaultDailySources());
     }
 
     public ImportRunResult scanAndImport(Set<ImportSource> requestedSources) throws IOException {
         Set<ImportSource> selectedSources = requestedSources == null || requestedSources.isEmpty()
-                ? EnumSet.allOf(ImportSource.class)
+                ? defaultDailySources()
                 : EnumSet.copyOf(requestedSources);
         List<SourceFileCandidate> candidates = scanner.scan().stream()
                 .filter(candidate -> selectedSources.stream().anyMatch(source -> source.matches(candidate)))
                 .toList();
         return runImport(candidates, null);
+    }
+
+    private static EnumSet<ImportSource> defaultDailySources() {
+        // These sources seeded historical data once; keep their imported records, but do not rescan them daily.
+        return EnumSet.complementOf(EnumSet.of(
+                ImportSource.WEEKLY_INVENTORY,
+                ImportSource.DEMAND_FORECAST
+        ));
     }
 
     public ImportRunResult replaceReturnOrders() throws IOException {
@@ -125,7 +133,8 @@ public class ImportService {
                 continue;
             }
             boolean alreadyImported = replacementType == null && (
-                    candidate.fileType() == ImportFileType.WEEKLY_INVENTORY
+                    (candidate.fileType() == ImportFileType.WEEKLY_INVENTORY
+                            || candidate.fileType() == ImportFileType.ORDER)
                             ? fileRepository.existsBySha256AndFileTypeAndReportDate(
                                     sha256,
                                     candidate.fileType(),

@@ -27,6 +27,12 @@ public final class ImportValues {
             DateTimeFormatter.ofPattern("M/d/yy", Locale.US),
             DateTimeFormatter.ofPattern("MMM d, yyyy", Locale.US)
     );
+    private static final List<DateTimeFormatter> DATE_TIME_FORMATTERS = List.of(
+            DateTimeFormatter.ISO_LOCAL_DATE_TIME,
+            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss", Locale.US),
+            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm", Locale.US),
+            DateTimeFormatter.ofPattern("M/d/yyyy H:mm", Locale.US)
+    );
 
     private ImportValues() {
     }
@@ -37,6 +43,31 @@ public final class ImportValues {
         }
         String value = FORMATTER.formatCellValue(cell);
         return blankToNull(value);
+    }
+
+    /**
+     * 读取公式单元格时优先取工作簿缓存值，避免重新计算复杂 Excel 公式。
+     */
+    public static String cachedText(Cell cell) {
+        if (cell == null) {
+            return null;
+        }
+        try {
+            if (cell.getCellType() != CellType.FORMULA) {
+                return text(cell);
+            }
+            return switch (cell.getCachedFormulaResultType()) {
+                case STRING -> blankToNull(cell.getStringCellValue());
+                case NUMERIC -> blankToNull(FORMATTER.formatRawCellContents(
+                        cell.getNumericCellValue(), cell.getCellStyle().getDataFormat(),
+                        cell.getCellStyle().getDataFormatString()));
+                case BOOLEAN -> String.valueOf(cell.getBooleanCellValue());
+                case BLANK, ERROR, _NONE -> null;
+                default -> null;
+            };
+        } catch (RuntimeException exception) {
+            return null;
+        }
     }
 
     public static String text(Map<String, String> row, String key) {
@@ -73,16 +104,24 @@ public final class ImportValues {
         if (cell.getCellType() == CellType.NUMERIC && DateUtil.isCellDateFormatted(cell)) {
             return cell.getLocalDateTimeCellValue().toLocalDate();
         }
-        return date(text(cell));
+        return date(cachedText(cell));
     }
 
     public static LocalDate date(String value) {
         if (value == null || value.isBlank()) {
             return null;
         }
+        String trimmed = value.trim();
+        for (DateTimeFormatter formatter : DATE_TIME_FORMATTERS) {
+            try {
+                return LocalDateTime.parse(trimmed, formatter).toLocalDate();
+            } catch (DateTimeParseException ignored) {
+                // A pure date is handled by the date-only formats below.
+            }
+        }
         for (DateTimeFormatter formatter : DATE_FORMATTERS) {
             try {
-                return LocalDate.parse(value.trim(), formatter);
+                return LocalDate.parse(trimmed, formatter);
             } catch (DateTimeParseException ignored) {
                 // Try the next known source format.
             }
@@ -92,6 +131,32 @@ public final class ImportValues {
 
     public static LocalDateTime fileTime(Instant instant) {
         return LocalDateTime.ofInstant(instant, ZoneId.systemDefault());
+    }
+
+    public static LocalDateTime dateTime(Cell cell) {
+        if (cell == null) {
+            return null;
+        }
+        if (cell.getCellType() == CellType.NUMERIC && DateUtil.isCellDateFormatted(cell)) {
+            return cell.getLocalDateTimeCellValue();
+        }
+        return dateTime(cachedText(cell));
+    }
+
+    public static LocalDateTime dateTime(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        String trimmed = value.trim();
+        for (DateTimeFormatter formatter : DATE_TIME_FORMATTERS) {
+            try {
+                return LocalDateTime.parse(trimmed, formatter);
+            } catch (DateTimeParseException ignored) {
+                // Try the next known source format.
+            }
+        }
+        LocalDate date = date(trimmed);
+        return date == null ? null : date.atStartOfDay();
     }
 
     public static String parentSku(String sku) {

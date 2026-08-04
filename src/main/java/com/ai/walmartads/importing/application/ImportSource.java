@@ -13,7 +13,13 @@ public enum ImportSource {
     PRODUCT,
     RETURN_ORDER,
     SKU_MAPPING,
-    HISTORY;
+    HISTORY,
+    ITEM_REPORT,
+    DEMAND_FORECAST,
+    PRODUCTION_ORDER,
+    SHIPMENT,
+    SHIPMENT_LOGISTICS,
+    DOMESTIC_INVENTORY;
 
     public boolean matches(SourceFileCandidate candidate) {
         return switch (this) {
@@ -30,6 +36,12 @@ public enum ImportSource {
             case RETURN_ORDER -> candidate.fileType() == ImportFileType.RETURN_ORDER;
             case SKU_MAPPING -> candidate.fileType() == ImportFileType.SKU_MAPPING;
             case HISTORY -> candidate.fileType() == ImportFileType.HISTORY;
+            case ITEM_REPORT -> candidate.fileType() == ImportFileType.ITEM_REPORT;
+            case DEMAND_FORECAST -> candidate.fileType() == ImportFileType.DEMAND_FORECAST;
+            case PRODUCTION_ORDER -> candidate.fileType() == ImportFileType.PRODUCTION_ORDER;
+            case SHIPMENT -> candidate.fileType() == ImportFileType.SHIPMENT;
+            case SHIPMENT_LOGISTICS -> candidate.fileType() == ImportFileType.SHIPMENT_LOGISTICS;
+            case DOMESTIC_INVENTORY -> candidate.fileType() == ImportFileType.DOMESTIC_INVENTORY;
         };
     }
 

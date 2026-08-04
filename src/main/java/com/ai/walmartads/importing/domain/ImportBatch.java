@@ -17,36 +17,47 @@ public class ImportBatch {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
+    /** 主键，自增 */
     private Long id;
 
     @Column(nullable = false)
+    /** 批次开始时间 */
     private LocalDateTime startedAt;
 
+    /** 批次完成时间（可空） */
     private LocalDateTime completedAt;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
+    /** 批次状态 */
     private ImportBatchStatus status;
 
     @Column(nullable = false, length = 1000)
+    /** 数据源根目录 */
     private String sourceRoot;
 
     @Column(length = 1000)
+    /** 归档目录（可空） */
     private String archiveDirectory;
 
     @Column(nullable = false)
+    /** 发现文件数 */
     private int discoveredFileCount;
 
     @Column(nullable = false)
+    /** 成功导入文件数 */
     private int importedFileCount;
 
     @Column(nullable = false)
+    /** 跳过文件数 */
     private int skippedFileCount;
 
     @Column(nullable = false)
+    /** 失败文件数 */
     private int failedFileCount;
 
     @Column(columnDefinition = "text")
+    /** 备注/消息（可空） */
     private String message;
 
     protected ImportBatch() {

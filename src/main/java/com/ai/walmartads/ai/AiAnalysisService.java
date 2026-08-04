@@ -12,6 +12,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.HexFormat;
 import java.util.Optional;
 
@@ -41,11 +42,28 @@ public class AiAnalysisService {
     }
 
     public AiAnalysisView analyze(int days, boolean force) {
+        return analyze(days, force, null, null);
+    }
+
+    public AiAnalysisView analyze(
+            int days,
+            boolean force,
+            LocalDate startDate,
+            LocalDate endDate
+    ) {
         if (!properties.configured()) {
             throw new IllegalArgumentException("Kie AI 未启用或 API Key 未配置");
         }
-        int safeDays = Math.max(1, Math.min(days, 30));
-        AiAnalysisContextFactory.AiContext context = contextFactory.create(safeDays);
+        if ((startDate == null) != (endDate == null)) {
+            throw new IllegalArgumentException("自定义时间范围必须同时提供开始日期和结束日期。");
+        }
+        if (startDate != null && startDate.isAfter(endDate)) {
+            throw new IllegalArgumentException("开始日期不能晚于结束日期。");
+        }
+        int safeDays = startDate == null
+                ? Math.max(1, Math.min(days, 30))
+                : Math.toIntExact(ChronoUnit.DAYS.between(startDate, endDate) + 1);
+        AiAnalysisContextFactory.AiContext context = contextFactory.create(safeDays, startDate, endDate);
         String fingerprint = fingerprint(properties.model(), context.metricsJson());
         Optional<AiAnalysis> existing = repository.findByDataFingerprint(fingerprint);
         if (!force && existing.filter(item -> item.getStatus() == AiAnalysisStatus.SUCCESS).isPresent()) {
@@ -83,6 +101,8 @@ public class AiAnalysisService {
         payload.put("promptVersion", PROMPT_VERSION);
         payload.put("model", properties.model());
         payload.put("periodDays", days);
+        payload.put("periodStart", context.startDate().toString());
+        payload.put("periodEnd", context.dataAsOf().toString());
         payload.put("dataAsOf", context.dataAsOf().toString());
         try {
             payload.set("metrics", objectMapper.readTree(context.metricsJson()));

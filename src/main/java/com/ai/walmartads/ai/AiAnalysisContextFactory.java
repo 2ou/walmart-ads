@@ -30,11 +30,27 @@ public class AiAnalysisContextFactory {
     }
 
     public AiContext create(int days) {
+        return create(days, null, null);
+    }
+
+    public AiContext create(int days, LocalDate requestedStart, LocalDate requestedEnd) {
+        if ((requestedStart == null) != (requestedEnd == null)) {
+            throw new IllegalArgumentException("自定义时间范围必须同时提供开始日期和结束日期。");
+        }
         DashboardDataService.DashboardPayload payload = dashboardDataService.load();
         LocalDate latestDate = payload.meta().latestDate();
-        LocalDate startDate = latestDate.minusDays(days - 1L);
+        LocalDate startDate = requestedStart == null ? latestDate.minusDays(days - 1L) : requestedStart;
+        LocalDate endDate = requestedEnd == null ? latestDate : requestedEnd;
+        if (startDate.isAfter(endDate)) {
+            throw new IllegalArgumentException("开始日期不能晚于结束日期。");
+        }
+        if (startDate.isBefore(payload.meta().firstDate()) || endDate.isAfter(latestDate)) {
+            throw new IllegalArgumentException(
+                    "AI 分析日期必须在 " + payload.meta().firstDate() + " 至 " + latestDate + " 之间。"
+            );
+        }
         List<DashboardDataService.DailyRow> daily = payload.daily().stream()
-                .filter(row -> !row.date().isBefore(startDate))
+                .filter(row -> !row.date().isBefore(startDate) && !row.date().isAfter(endDate))
                 .toList();
         if (daily.isEmpty() && payload.campaignDaily().isEmpty()) {
             throw new IllegalArgumentException("当前没有可供 AI 分析的广告或销量数据");
@@ -42,7 +58,8 @@ public class AiAnalysisContextFactory {
 
         DashboardDataService.Defaults defaults = payload.defaults();
         List<DashboardDataService.Recommendation> recommendations = dashboardDataService.recommendations(
-                        days,
+                        startDate,
+                        endDate,
                         defaults.targetRoas(),
                         defaults.floorRoas(),
                         defaults.minClicks(),
@@ -50,10 +67,12 @@ public class AiAnalysisContextFactory {
                 ).stream()
                 .limit(Math.max(1, properties.maxCampaigns()))
                 .toList();
-        List<Map<String, Object>> topSkus = topSkus(payload.skuDaily(), startDate);
+        List<Map<String, Object>> topSkus = topSkus(payload.skuDaily(), startDate, endDate);
 
         Map<String, Object> context = new LinkedHashMap<>();
-        context.put("dataAsOf", latestDate);
+        context.put("dataAsOf", endDate);
+        context.put("periodStart", startDate);
+        context.put("periodEnd", endDate);
         context.put("periodDays", days);
         context.put("currency", "USD");
         context.put("totals", totals(daily));
@@ -69,7 +88,7 @@ public class AiAnalysisContextFactory {
         ));
 
         try {
-            return new AiContext(latestDate, objectMapper.writeValueAsString(context));
+            return new AiContext(startDate, endDate, objectMapper.writeValueAsString(context));
         } catch (JsonProcessingException exception) {
             throw new IllegalArgumentException("无法生成 AI 分析上下文", exception);
         }
@@ -77,11 +96,12 @@ public class AiAnalysisContextFactory {
 
     private List<Map<String, Object>> topSkus(
             List<DashboardDataService.SkuDailyRow> rows,
-            LocalDate startDate
+            LocalDate startDate,
+            LocalDate endDate
     ) {
         Map<String, MutableSku> grouped = new LinkedHashMap<>();
         rows.stream()
-                .filter(row -> !row.date().isBefore(startDate))
+                .filter(row -> !row.date().isBefore(startDate) && !row.date().isAfter(endDate))
                 .forEach(row -> grouped.computeIfAbsent(row.sku(), MutableSku::new).add(row));
         return grouped.values().stream()
                 .sorted(Comparator.comparingDouble(MutableSku::revenue).reversed())
@@ -111,7 +131,7 @@ public class AiAnalysisContextFactory {
         );
     }
 
-    public record AiContext(LocalDate dataAsOf, String metricsJson) {
+    public record AiContext(LocalDate startDate, LocalDate dataAsOf, String metricsJson) {
     }
 
     private static final class MutableSku {

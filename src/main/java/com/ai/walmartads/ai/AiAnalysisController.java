@@ -8,6 +8,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.LocalDate;
+
 @RestController
 @RequestMapping("/api/ai")
 public class AiAnalysisController {
@@ -42,9 +44,11 @@ public class AiAnalysisController {
     @PostMapping("/analysis")
     public ApiResponse<AiAnalysisService.AiAnalysisView> analyze(
             @RequestParam(defaultValue = "7") int days,
-            @RequestParam(defaultValue = "false") boolean force
+            @RequestParam(defaultValue = "false") boolean force,
+            @RequestParam(required = false) LocalDate startDate,
+            @RequestParam(required = false) LocalDate endDate
     ) {
-        return ApiResponse.ok("Kie AI 分析完成", service.analyze(days, force));
+        return ApiResponse.ok("Kie AI 分析完成", service.analyze(days, force, startDate, endDate));
     }
 
     public record AiStatus(

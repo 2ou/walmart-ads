@@ -17,30 +17,39 @@ public class AiAnalysis {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
+    /** 主键，自增 */
     private Long id;
 
     @Column(nullable = false, length = 64, columnDefinition = "char(64)", unique = true)
+    /** 数据指纹（sha256），用于去重 */
     private String dataFingerprint;
 
     @Column(length = 80)
+    /** AI 服务商 */
     private String provider;
 
     @Column(length = 120)
+    /** 模型名称 */
     private String modelName;
 
     @Column(nullable = false, columnDefinition = "json")
+    /** 请求报文（JSON） */
     private String requestPayload;
 
     @Column(columnDefinition = "json")
+    /** 响应报文（JSON，可空） */
     private String responsePayload;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 30)
+    /** 状态（如 pending/success/failed） */
     private AiAnalysisStatus status;
 
     @Column(nullable = false)
+    /** 创建时间 */
     private LocalDateTime createdAt;
 
+    /** 完成时间（可空） */
     private LocalDateTime completedAt;
 
     protected AiAnalysis() {

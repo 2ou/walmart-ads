@@ -6,3 +6,21 @@ target/
 archive/
 data/
 src/main/resources/application-local.yml
+
+# --- local agent memory (never commit) ---
+.workbuddy/
+
+# --- python forecast-service virtual env / caches ---
+forecast-service/.venv/
+forecast-service/__pycache__/
+__pycache__/
+
+# --- debug dumps / build artifacts (not source) ---
+served_now.html
+inv.json
+build_log.txt
+build_out.txt
+test_compile.log
+server-8081.log
+artifacts/
+.firecrawl/

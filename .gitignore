@@ -18,6 +18,8 @@ __pycache__/
 # --- debug dumps / build artifacts (not source) ---
 served_now.html
 inv.json
+inv_tmp.json
+mvn_build.log
 build_log.txt
 build_out.txt
 test_compile.log

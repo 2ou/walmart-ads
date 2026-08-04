@@ -341,12 +341,21 @@ public class InventoryDataService {
             List<TransitInventoryService.TransitShipment> transitShipments
     ) {
         return jdbc.queryForList("""
+                with rep as (
+                  select s.snapshot_at,
+                         case when sum(case when f.file_type = 'INVENTORY' then 1 else 0 end) > 0
+                              then 'INVENTORY' else 'WEEKLY_INVENTORY' end as rep_type
+                    from wm_ads_inventory_snapshot s
+                    join wm_ads_import_file f on f.id = s.import_file_id and f.active = true
+                   group by s.snapshot_at
+                )
                 select inventory.snapshot_at,
                        sum(inventory.available_units) as available_units,
                        sum(inventory.reserved_units) as reserved_units,
                        sum(inventory.suggested_units) as system_suggested_units
                   from wm_ads_inventory_snapshot inventory
                   join wm_ads_import_file file on file.id = inventory.import_file_id and file.active = true
+                  join rep on rep.snapshot_at = inventory.snapshot_at and rep.rep_type = file.file_type
                  group by inventory.snapshot_at
                  order by inventory.snapshot_at
                 """, new MapSqlParameterSource()).stream().map(row -> new TrendRow(

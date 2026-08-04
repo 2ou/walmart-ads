@@ -104,9 +104,36 @@ public class DashboardDataService {
     ) {
         DashboardPayload payload = load();
         LocalDate start = payload.meta().latestDate().minusDays(Math.max(days, 1) - 1L);
+        return recommendations(payload, start, payload.meta().latestDate(), targetRoas, floorRoas, minClicks, minSpend);
+    }
+
+    public List<Recommendation> recommendations(
+            LocalDate startDate,
+            LocalDate endDate,
+            double targetRoas,
+            double floorRoas,
+            int minClicks,
+            double minSpend
+    ) {
+        if (startDate == null || endDate == null || startDate.isAfter(endDate)) {
+            throw new IllegalArgumentException("请选择有效的分析日期范围。");
+        }
+        DashboardPayload payload = load();
+        return recommendations(payload, startDate, endDate, targetRoas, floorRoas, minClicks, minSpend);
+    }
+
+    private List<Recommendation> recommendations(
+            DashboardPayload payload,
+            LocalDate startDate,
+            LocalDate endDate,
+            double targetRoas,
+            double floorRoas,
+            int minClicks,
+            double minSpend
+    ) {
         Map<String, MutableCampaign> groups = new LinkedHashMap<>();
         payload.campaignDaily().stream()
-                .filter(row -> !row.date().isBefore(start))
+                .filter(row -> !row.date().isBefore(startDate) && !row.date().isAfter(endDate))
                 .forEach(row -> groups.computeIfAbsent(row.campaign(), ignored -> new MutableCampaign(row))
                         .add(row));
         return groups.values().stream()

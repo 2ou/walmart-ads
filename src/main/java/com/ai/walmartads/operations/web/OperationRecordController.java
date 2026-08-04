@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -25,12 +26,22 @@ public class OperationRecordController {
     @GetMapping
     public ApiResponse<OperationRecordService.OperationPayload> list(
             @RequestParam(defaultValue = "7") int days,
+            @RequestParam(required = false) LocalDate startDate,
+            @RequestParam(required = false) LocalDate endDate,
             @RequestParam(required = false) String targetType,
             @RequestParam(required = false) String targetKey,
             @RequestParam(required = false) String query,
             @RequestParam(defaultValue = "50") int limit
     ) {
-        return ApiResponse.ok(operationRecordService.list(days, targetType, targetKey, query, limit));
+        return ApiResponse.ok(operationRecordService.list(
+                days,
+                startDate,
+                endDate,
+                targetType,
+                targetKey,
+                query,
+                limit
+        ));
     }
 
     @GetMapping("/targets")

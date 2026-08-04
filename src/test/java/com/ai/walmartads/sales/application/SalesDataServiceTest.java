@@ -7,6 +7,7 @@ import org.springframework.jdbc.datasource.embedded.EmbeddedDatabase;
 import org.springframework.jdbc.datasource.embedded.EmbeddedDatabaseBuilder;
 import org.springframework.jdbc.datasource.embedded.EmbeddedDatabaseType;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -143,6 +144,21 @@ class SalesDataServiceTest {
                 .findFirst()
                 .orElseThrow()
                 .status()).isEqualTo("NO_SALES");
+    }
+
+    @Test
+    void loadsAnExplicitDateRangeInsteadOfAnchoringToLatestDate() {
+        SalesDataService.SalesPayload payload = service.load(
+                7,
+                LocalDate.of(2026, 7, 18),
+                LocalDate.of(2026, 7, 20)
+        );
+
+        assertThat(payload.meta().currentStart()).isEqualTo("2026-07-18");
+        assertThat(payload.meta().currentEnd()).isEqualTo("2026-07-20");
+        assertThat(payload.meta().periodDays()).isEqualTo(3);
+        assertThat(payload.summary().units()).isEqualTo(8);
+        assertThat(payload.daily()).hasSize(3);
     }
 
     private void insertOrder(

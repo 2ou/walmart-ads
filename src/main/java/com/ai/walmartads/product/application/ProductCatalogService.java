@@ -1,5 +1,9 @@
 package com.ai.walmartads.product.application;
 
+import com.ai.walmartads.importing.domain.ProductRecord;
+import com.ai.walmartads.importing.repository.ProductRecordRepository;
+import com.ai.walmartads.inventory.application.ParentLifecycleService;
+import com.ai.walmartads.product.domain.ProfitAssumption;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
@@ -7,6 +11,7 @@ import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -28,6 +33,7 @@ public class ProductCatalogService {
             "1X", "XXL", "2XL", "2X", "XXXL", "3XL", "3X",
             "4XL", "4X", "5XL", "5X", "6XL", "6X", "ONE SIZE", "OS"
     );
+    private static final BigDecimal EXCHANGE_RATE = new BigDecimal("7");
     private static final TypeReference<List<String>> STRING_LIST = new TypeReference<>() {
     };
     private static final TypeReference<LinkedHashMap<String, Object>> OBJECT_MAP = new TypeReference<>() {
@@ -35,15 +41,35 @@ public class ProductCatalogService {
 
     private final NamedParameterJdbcTemplate jdbc;
     private final ObjectMapper objectMapper;
+    private final ProfitCalculator profitCalculator;
+    private final ProfitAssumptionRepository profitAssumptionRepository;
+    private final RefundRateService refundRateService;
+    private final ProductRecordRepository productRecordRepository;
+    private final ParentLifecycleService lifecycleService;
 
-    public ProductCatalogService(NamedParameterJdbcTemplate jdbc, ObjectMapper objectMapper) {
+    public ProductCatalogService(
+            NamedParameterJdbcTemplate jdbc,
+            ObjectMapper objectMapper,
+            ProfitCalculator profitCalculator,
+            ProfitAssumptionRepository profitAssumptionRepository,
+            RefundRateService refundRateService,
+            ProductRecordRepository productRecordRepository,
+            ParentLifecycleService lifecycleService
+    ) {
         this.jdbc = jdbc;
         this.objectMapper = objectMapper;
+        this.profitCalculator = profitCalculator;
+        this.profitAssumptionRepository = profitAssumptionRepository;
+        this.refundRateService = refundRateService;
+        this.productRecordRepository = productRecordRepository;
+        this.lifecycleService = lifecycleService;
     }
 
     @Transactional(readOnly = true)
     public CatalogPayload load() {
         List<SourceProduct> rows = loadRows(null);
+        Map<String, BigDecimal> historyRates = refundRateService.ratesByParent();
+        Map<String, ParentLifecycleService.LifecycleView> lifecycleByParent = lifecycleService.viewsByParent();
         Map<String, List<SourceProduct>> groups = rows.stream()
                 .collect(Collectors.groupingBy(
                         SourceProduct::parentSku,
@@ -51,14 +77,13 @@ public class ProductCatalogService {
                         Collectors.toList()
                 ));
         List<ProductSummary> products = groups.entrySet().stream()
-                .map(entry -> summary(entry.getKey(), entry.getValue()))
+                .map(entry -> summary(entry.getKey(), entry.getValue(), historyRates, profitCalculator,
+                        lifecycleByParent.getOrDefault(entry.getKey(), ParentLifecycleService.LifecycleView.defaultFor(entry.getKey()))))
                 .sorted(Comparator
                         .comparing(ProductSummary::updatedAt, Comparator.nullsLast(Comparator.reverseOrder()))
                         .thenComparing(ProductSummary::parentSku))
                 .toList();
 
-        long withMainImage = rows.stream().filter(row -> present(row.mainImageUrl())).count();
-        long completeListings = rows.stream().filter(row -> listingCompleteness(row) == 100).count();
         int sourceFiles = (int) rows.stream().map(SourceProduct::sourceFileName).filter(ProductCatalogService::present).distinct().count();
         LocalDateTime latestUpdated = rows.stream()
                 .map(SourceProduct::sourceUpdatedAt)
@@ -69,8 +94,6 @@ public class ProductCatalogService {
                 new CatalogMeta(
                         groups.size(),
                         rows.size(),
-                        withMainImage,
-                        completeListings,
                         sourceFiles,
                         latestUpdated
                 ),
@@ -88,7 +111,10 @@ public class ProductCatalogService {
         if (rows.isEmpty()) {
             throw new IllegalArgumentException("产品库中找不到父 SKU：" + safeParentSku);
         }
+        Map<String, BigDecimal> historyRates = refundRateService.ratesByParent();
+        ParentLifecycleService.LifecycleView lifecycle = lifecycleService.viewFor(safeParentSku);
         SourceProduct representative = representative(rows);
+        ProfitView representativeProfit = computeProfit(representative, historyRates, profitCalculator);
         List<String> images = distinctStrings(rows.stream()
                 .flatMap(row -> {
                     List<String> rowImages = new ArrayList<>();
@@ -100,9 +126,16 @@ public class ProductCatalogService {
                 .toList());
         List<Variant> variants = rows.stream()
                 .sorted(variantComparator())
-                .map(ProductCatalogService::variant)
+                .map(row -> toVariant(row, historyRates, profitCalculator))
                 .toList();
-        List<ColorGroup> colorGroups = colorGroups(rows);
+        List<ColorGroup> colorGroups = colorGroups(rows, historyRates, profitCalculator);
+        ProfitAssumptionView assumptionView = new ProfitAssumptionView(
+                representative.purchaseCost(),
+                representative.firstLeg(),
+                representative.salesQty(),
+                representative.adCost(),
+                representative.manualRefundRate()
+        );
         return new ProductDetail(
                 safeParentSku,
                 representative.productName(),
@@ -112,35 +145,102 @@ public class ProductCatalogService {
                 representative.keyFeatures(),
                 representative.mainImageUrl(),
                 images,
-                listingCompleteness(representative),
                 rows.size(),
                 distinctCount(rows, SourceProduct::color),
                 distinctCount(rows, SourceProduct::size),
                 representative.sourceFileName(),
                 representative.sourceUpdatedAt(),
-                attributes(representative),
+                attributes(representative, representativeProfit),
                 representative.rawPayload(),
                 colorGroups,
-                variants
+                variants,
+                assumptionView,
+                representativeProfit.refundRate(),
+                representativeProfit.refundRateSource(),
+                lifecycle.clearance(),
+                lifecycle.allSeason(),
+                lifecycle.seasonType()
         );
     }
 
-    private static List<ColorGroup> colorGroups(List<SourceProduct> rows) {
+    @Transactional
+    public void updateCuttingYield(Long id, Integer cuttingYield) {
+        validateCuttingYield(cuttingYield);
+        ProductRecord record = productRecordRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("产品记录不存在：" + id));
+        record.setCuttingYield(cuttingYield);
+        productRecordRepository.save(record);
+    }
+
+    @Transactional
+    public void updateCuttingYieldByParent(String parentSku, Integer cuttingYield) {
+        validateCuttingYield(cuttingYield);
+        String safeParentSku = parentSku == null ? "" : parentSku.trim();
+        if (safeParentSku.isEmpty()) {
+            throw new IllegalArgumentException("父 SKU 不能为空。");
+        }
+        List<ProductRecord> records = productRecordRepository.findByParentSku(safeParentSku);
+        if (records.isEmpty()) {
+            throw new IllegalArgumentException("产品库中找不到父 SKU：" + safeParentSku);
+        }
+        for (ProductRecord record : records) {
+            record.setCuttingYield(cuttingYield);
+        }
+        productRecordRepository.saveAll(records);
+    }
+
+    private static void validateCuttingYield(Integer cuttingYield) {
+        if (cuttingYield == null) {
+            return;
+        }
+        if (cuttingYield < 0) {
+            throw new IllegalArgumentException("裁床数必须是非负整数；0 表示淘汰款，不维护时请留空。");
+        }
+    }
+
+    @Transactional
+    public ProfitAssumptionView saveProfitAssumption(SaveProfitAssumptionRequest request) {
+        String parentSku = request.parentSku();
+        if (parentSku == null || parentSku.isBlank()) {
+            throw new IllegalArgumentException("父 SKU 不能为空。");
+        }
+        ProfitAssumption entity = profitAssumptionRepository.findById(parentSku.trim())
+                .orElseGet(() -> new ProfitAssumption(parentSku.trim()));
+        entity.setPurchaseCost(request.purchaseCost());
+        entity.setFirstLeg(request.firstLeg());
+        entity.setSalesQty(request.salesQty());
+        entity.setAdCost(request.adCost());
+        entity.setRefundRate(request.refundRate());
+        entity.setUpdatedAt(LocalDateTime.now());
+        if (entity.getCreatedAt() == null) {
+            entity.setCreatedAt(LocalDateTime.now());
+        }
+        profitAssumptionRepository.save(entity);
+        return new ProfitAssumptionView(
+                entity.getPurchaseCost(),
+                entity.getFirstLeg(),
+                entity.getSalesQty(),
+                entity.getAdCost(),
+                entity.getRefundRate()
+        );
+    }
+
+    private static List<ColorGroup> colorGroups(List<SourceProduct> rows, Map<String, BigDecimal> historyRates, ProfitCalculator calculator) {
         Map<String, List<SourceProduct>> grouped = new LinkedHashMap<>();
         rows.forEach(row -> grouped.computeIfAbsent(colorKey(row.color()), ignored -> new ArrayList<>()).add(row));
         return grouped.values().stream()
-                .map(ProductCatalogService::colorGroup)
+                .map(rowsForColor -> colorGroup(rowsForColor, historyRates, calculator))
                 .sorted(Comparator
                         .comparing(ColorGroup::primaryColor).reversed()
                         .thenComparing(ColorGroup::color, String.CASE_INSENSITIVE_ORDER))
                 .toList();
     }
 
-    private static ColorGroup colorGroup(List<SourceProduct> rows) {
+    private static ColorGroup colorGroup(List<SourceProduct> rows, Map<String, BigDecimal> historyRates, ProfitCalculator calculator) {
         SourceProduct representative = representative(rows);
         List<Variant> variants = rows.stream()
                 .sorted(colorVariantComparator())
-                .map(ProductCatalogService::variant)
+                .map(row -> toVariant(row, historyRates, calculator))
                 .toList();
         List<String> images = distinctStrings(rows.stream()
                 .flatMap(row -> {
@@ -170,12 +270,15 @@ public class ProductCatalogService {
         );
     }
 
-    private static Variant variant(SourceProduct row) {
+    private static Variant toVariant(SourceProduct row, Map<String, BigDecimal> historyRates, ProfitCalculator calculator) {
+        ProfitView profitView = computeProfit(row, historyRates, calculator);
         List<String> images = new ArrayList<>();
         images.add(row.mainImageUrl());
         images.addAll(row.secondaryImageUrls());
         return new Variant(
+                row.id(),
                 row.sku(),
+                row.cuttingYield(),
                 row.productId(),
                 row.productIdType(),
                 row.color(),
@@ -188,8 +291,50 @@ public class ProductCatalogService {
                 row.swatchImageUrl(),
                 distinctStrings(images),
                 row.primaryVariant(),
-                row.sourceUpdatedAt()
+                row.sourceUpdatedAt(),
+                row.itemId(),
+                row.upc(),
+                row.price(),
+                row.shippingWeightLb(),
+                row.shippingWeightUnit(),
+                row.shippingWeightKg(),
+                row.deliveryFee(),
+                profitView.profit(),
+                profitView.margin(),
+                profitView.refundRate(),
+                profitView.refundRateSource()
         );
+    }
+
+    private static ProfitView computeProfit(SourceProduct row, Map<String, BigDecimal> historyRates, ProfitCalculator calculator) {
+        BigDecimal history = historyRates.get(row.parentSku());
+        BigDecimal manual = row.manualRefundRate();
+        BigDecimal refundRate;
+        String source;
+        if (history != null) {
+            refundRate = history;
+            source = "HISTORY";
+        } else if (manual != null) {
+            refundRate = manual;
+            source = "MANUAL";
+        } else {
+            refundRate = BigDecimal.ZERO;
+            source = "DEFAULT";
+        }
+        ProfitCalculator.ProfitResult result = calculator.compute(
+                row.price(),
+                row.deliveryFee(),
+                row.purchaseCost(),
+                row.firstLeg(),
+                row.salesQty(),
+                row.adCost(),
+                refundRate,
+                EXCHANGE_RATE
+        );
+        if (result == null) {
+            return new ProfitView(null, null, refundRate, source);
+        }
+        return new ProfitView(result.profit(), result.margin(), refundRate, source);
     }
 
     private static Comparator<SourceProduct> variantComparator() {
@@ -240,7 +385,9 @@ public class ProductCatalogService {
             parameters.addValue("parentSku", parentSku);
         }
         return jdbc.queryForList("""
-                select product.sku,
+                select product.id as id,
+                       product.sku,
+                       product.cutting_yield,
                        product.parent_sku,
                        product.product_type,
                        product.product_id,
@@ -261,11 +408,34 @@ public class ProductCatalogService {
                        product.variant_group_id,
                        product.raw_payload,
                        product.source_updated_at,
-                       file.file_name as source_file_name
+                       file.file_name as source_file_name,
+                       ir.item_id,
+                       ir.upc,
+                       ir.wpid,
+                       ir.gtin,
+                       ir.price,
+                       ir.shipping_weight_lb,
+                       ir.shipping_weight_unit,
+                       ir.shipping_weight_kg,
+                       ir.billing_weight_lb,
+                       ir.base_fee,
+                       ir.apparel_surcharge,
+                       ir.low_price_surcharge,
+                       ir.delivery_fee,
+                       pa.purchase_cost,
+                       pa.first_leg,
+                       pa.sales_qty,
+                       pa.ad_cost,
+                       pa.refund_rate
                   from wm_ads_product_record product
                   join wm_ads_import_file file
                     on file.id = product.import_file_id
                    and file.active = true
+                  left join wm_ads_item_report_record ir
+                    on ir.sku = product.sku
+                   and ir.current_version = true
+                  left join wm_ads_profit_assumption pa
+                    on pa.parent_sku = product.parent_sku
                  where product.current_version = true
                 """ + whereParent + """
                  order by product.parent_sku, product.sku
@@ -279,7 +449,9 @@ public class ProductCatalogService {
             parentSku = parentSku(text(row, "sku"));
         }
         return new SourceProduct(
+                longValue(row, "id"),
                 text(row, "sku"),
+                integerValue(row, "cutting_yield"),
                 parentSku,
                 text(row, "product_type"),
                 text(row, "product_id"),
@@ -302,18 +474,42 @@ public class ProductCatalogService {
                 rawText(rawPayload, "swatchImageUrl"),
                 truthy(rawPayload.get("isPrimaryVariant")),
                 localDateTime(row.get("source_updated_at")),
-                text(row, "source_file_name")
+                text(row, "source_file_name"),
+                text(row, "item_id"),
+                text(row, "upc"),
+                text(row, "wpid"),
+                text(row, "gtin"),
+                decimal(row, "price"),
+                decimal(row, "shipping_weight_lb"),
+                text(row, "shipping_weight_unit"),
+                decimal(row, "shipping_weight_kg"),
+                decimal(row, "billing_weight_lb"),
+                decimal(row, "base_fee"),
+                decimal(row, "apparel_surcharge"),
+                decimal(row, "low_price_surcharge"),
+                decimal(row, "delivery_fee"),
+                decimal(row, "purchase_cost"),
+                decimal(row, "first_leg"),
+                decimal(row, "sales_qty"),
+                decimal(row, "ad_cost"),
+                decimal(row, "refund_rate")
         );
     }
 
-    private ProductSummary summary(String parentSku, List<SourceProduct> rows) {
+    private ProductSummary summary(
+            String parentSku,
+            List<SourceProduct> rows,
+            Map<String, BigDecimal> historyRates,
+            ProfitCalculator calculator,
+            ParentLifecycleService.LifecycleView lifecycle
+    ) {
         SourceProduct representative = representative(rows);
+        ProfitView profitView = computeProfit(representative, historyRates, calculator);
         LocalDateTime updatedAt = rows.stream()
                 .map(SourceProduct::sourceUpdatedAt)
                 .filter(value -> value != null)
                 .max(LocalDateTime::compareTo)
                 .orElse(null);
-        int completeness = rows.stream().mapToInt(ProductCatalogService::listingCompleteness).max().orElse(0);
         List<String> images = distinctStrings(rows.stream()
                 .flatMap(row -> {
                     List<String> rowImages = new ArrayList<>();
@@ -337,7 +533,13 @@ public class ProductCatalogService {
             searchTerms.add(row.patternName());
             searchTerms.add(row.materialName());
             searchTerms.add(row.variantGroupId());
+            searchTerms.add(row.itemId());
+            searchTerms.add(row.upc());
         });
+        Integer groupCuttingYield = rows.stream()
+                .map(SourceProduct::cuttingYield)
+                .filter(value -> value != null)
+                .findFirst().orElse(null);
         return new ProductSummary(
                 parentSku,
                 representative.productName(),
@@ -348,10 +550,17 @@ public class ProductCatalogService {
                 distinctCount(rows, SourceProduct::color),
                 distinctCount(rows, SourceProduct::size),
                 images.size(),
-                completeness,
                 representative.sourceFileName(),
                 updatedAt,
-                distinctStrings(searchTerms)
+                representative.price(),
+                representative.deliveryFee(),
+                profitView.profit(),
+                profitView.margin(),
+                distinctStrings(searchTerms),
+                groupCuttingYield,
+                lifecycle.clearance(),
+                lifecycle.allSeason(),
+                lifecycle.seasonType()
         );
     }
 
@@ -373,17 +582,7 @@ public class ProductCatalogService {
         return score;
     }
 
-    private static int listingCompleteness(SourceProduct row) {
-        int presentChecks = 0;
-        presentChecks += present(row.productName()) ? 1 : 0;
-        presentChecks += present(row.shortDescription()) ? 1 : 0;
-        presentChecks += row.keyFeatures().isEmpty() ? 0 : 1;
-        presentChecks += present(row.mainImageUrl()) ? 1 : 0;
-        presentChecks += row.secondaryImageUrls().isEmpty() ? 0 : 1;
-        return presentChecks * 20;
-    }
-
-    private static Map<String, String> attributes(SourceProduct row) {
+    private static Map<String, String> attributes(SourceProduct row, ProfitView profitView) {
         Map<String, String> attributes = new LinkedHashMap<>();
         put(attributes, "商品类型", row.productType());
         put(attributes, "品牌", row.brand());
@@ -391,6 +590,25 @@ public class ProductCatalogService {
         put(attributes, "材质", row.materialName());
         put(attributes, "图案", row.patternName());
         put(attributes, "尺码组", row.sizeGroup());
+        put(attributes, "Item ID", row.itemId());
+        put(attributes, "UPC", row.upc());
+        put(attributes, "配送重量(LB)", row.shippingWeightLb() == null ? null : row.shippingWeightLb().toPlainString());
+        put(attributes, "配送重量(KG)", row.shippingWeightKg() == null ? null : row.shippingWeightKg().toPlainString());
+        put(attributes, "预估配送费", row.deliveryFee() == null ? null : "$" + row.deliveryFee().toPlainString());
+        put(attributes, "采购成本(¥)", row.purchaseCost() == null ? null : row.purchaseCost().toPlainString());
+        put(attributes, "头程(¥)", row.firstLeg() == null ? null : row.firstLeg().toPlainString());
+        put(attributes, "销量", row.salesQty() == null ? null : row.salesQty().toPlainString());
+        put(attributes, "广告费(原币)", row.adCost() == null ? null : row.adCost().toPlainString());
+        put(attributes, "退款率", profitView.refundRate() == null ? null
+                : profitView.refundRate().multiply(new BigDecimal("100")).setScale(2, java.math.RoundingMode.HALF_UP) + "%");
+        put(attributes, "退款率来源", switch (profitView.refundRateSource()) {
+            case "HISTORY" -> "系统历史";
+            case "MANUAL" -> "手动";
+            default -> "默认 0";
+        });
+        put(attributes, "测试毛利(¥)", profitView.profit() == null ? null : "¥" + profitView.profit().toPlainString());
+        put(attributes, "测试毛利率", profitView.margin() == null ? null
+                : profitView.margin().multiply(new BigDecimal("100")).setScale(2, java.math.RoundingMode.HALF_UP) + "%");
         put(attributes, "年龄段", rawText(row.rawPayload(), "ageGroup"));
         put(attributes, "版型", rawText(row.rawPayload(), "clothingFit"));
         put(attributes, "服装风格", rawText(row.rawPayload(), "clothingStyle"));
@@ -495,6 +713,41 @@ public class ProductCatalogService {
         return value == null ? null : String.valueOf(value);
     }
 
+    private static BigDecimal decimal(Map<String, Object> row, String key) {
+        Object value = row.get(key);
+        return value instanceof BigDecimal decimal ? decimal : null;
+    }
+
+    private static Long longValue(Map<String, Object> row, String key) {
+        Object value = row.get(key);
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof Number number) {
+            return number.longValue();
+        }
+        try {
+            return Long.parseLong(String.valueOf(value).trim());
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
+    }
+
+    private static Integer integerValue(Map<String, Object> row, String key) {
+        Object value = row.get(key);
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof Number number) {
+            return number.intValue();
+        }
+        try {
+            return Integer.parseInt(String.valueOf(value).trim());
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
+    }
+
     private static LocalDateTime localDateTime(Object value) {
         if (value == null) {
             return null;
@@ -518,8 +771,6 @@ public class ProductCatalogService {
     public record CatalogMeta(
             int parentProductCount,
             int variantCount,
-            long variantsWithMainImage,
-            long completeListingVariants,
             int sourceFileCount,
             LocalDateTime latestUpdatedAt
     ) {
@@ -535,10 +786,17 @@ public class ProductCatalogService {
             int colorCount,
             int sizeCount,
             int imageCount,
-            int listingCompleteness,
             String sourceFileName,
             LocalDateTime updatedAt,
-            List<String> searchTerms
+            BigDecimal price,
+            BigDecimal deliveryFee,
+            BigDecimal profit,
+            BigDecimal margin,
+            List<String> searchTerms,
+            Integer cuttingYield,
+            boolean clearance,
+            boolean allSeason,
+            String seasonType
     ) {
     }
 
@@ -551,7 +809,6 @@ public class ProductCatalogService {
             List<String> keyFeatures,
             String mainImageUrl,
             List<String> images,
-            int listingCompleteness,
             int variantCount,
             int colorCount,
             int sizeCount,
@@ -560,7 +817,32 @@ public class ProductCatalogService {
             Map<String, String> attributes,
             Map<String, Object> rawFields,
             List<ColorGroup> colorGroups,
-            List<Variant> variants
+            List<Variant> variants,
+            ProfitAssumptionView profitAssumption,
+            BigDecimal refundRate,
+            String refundRateSource,
+            boolean clearance,
+            boolean allSeason,
+            String seasonType
+    ) {
+    }
+
+    public record ProfitAssumptionView(
+            BigDecimal purchaseCost,
+            BigDecimal firstLeg,
+            BigDecimal salesQty,
+            BigDecimal adCost,
+            BigDecimal manualRefundRate
+    ) {
+    }
+
+    public record SaveProfitAssumptionRequest(
+            String parentSku,
+            BigDecimal purchaseCost,
+            BigDecimal firstLeg,
+            BigDecimal salesQty,
+            BigDecimal adCost,
+            BigDecimal refundRate
     ) {
     }
 
@@ -579,7 +861,9 @@ public class ProductCatalogService {
     }
 
     public record Variant(
+            Long id,
             String sku,
+            Integer cuttingYield,
             String productId,
             String productIdType,
             String color,
@@ -592,12 +876,25 @@ public class ProductCatalogService {
             String swatchImageUrl,
             List<String> images,
             boolean primaryVariant,
-            LocalDateTime updatedAt
+            LocalDateTime updatedAt,
+            String itemId,
+            String upc,
+            BigDecimal price,
+            BigDecimal shippingWeightLb,
+            String shippingWeightUnit,
+            BigDecimal shippingWeightKg,
+            BigDecimal deliveryFee,
+            BigDecimal profit,
+            BigDecimal margin,
+            BigDecimal refundRate,
+            String refundRateSource
     ) {
     }
 
     private record SourceProduct(
+            Long id,
             String sku,
+            Integer cuttingYield,
             String parentSku,
             String productType,
             String productId,
@@ -620,8 +917,29 @@ public class ProductCatalogService {
             String swatchImageUrl,
             boolean primaryVariant,
             LocalDateTime sourceUpdatedAt,
-            String sourceFileName
+            String sourceFileName,
+            String itemId,
+            String upc,
+            String wpid,
+            String gtin,
+            BigDecimal price,
+            BigDecimal shippingWeightLb,
+            String shippingWeightUnit,
+            BigDecimal shippingWeightKg,
+            BigDecimal billingWeightLb,
+            BigDecimal baseFee,
+            BigDecimal apparelSurcharge,
+            BigDecimal lowPriceSurcharge,
+            BigDecimal deliveryFee,
+            BigDecimal purchaseCost,
+            BigDecimal firstLeg,
+            BigDecimal salesQty,
+            BigDecimal adCost,
+            BigDecimal manualRefundRate
     ) {
+    }
+
+    private record ProfitView(BigDecimal profit, BigDecimal margin, BigDecimal refundRate, String refundRateSource) {
     }
 
 }

@@ -10,6 +10,7 @@ import java.sql.Date;
 import java.sql.Timestamp;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -32,6 +33,13 @@ public class SalesDataService {
     }
 
     public SalesPayload load(int requestedDays) {
+        return load(requestedDays, null, null);
+    }
+
+    public SalesPayload load(int requestedDays, LocalDate requestedStart, LocalDate requestedEnd) {
+        if ((requestedStart == null) != (requestedEnd == null)) {
+            throw new IllegalArgumentException("自定义时间范围必须同时提供开始日期和结束日期。");
+        }
         int days = Math.max(1, Math.min(requestedDays, 365));
         Map<String, Object> bounds = jdbc.queryForMap("""
                 select min(orders.order_date) as first_date,
@@ -47,15 +55,25 @@ public class SalesDataService {
         }
 
         LocalDate currentStart = latestDate.minusDays(days - 1L);
+        LocalDate currentEnd = latestDate;
+        if (requestedStart != null) {
+            if (requestedStart.isAfter(requestedEnd)) {
+                throw new IllegalArgumentException("开始日期不能晚于结束日期。");
+            }
+            currentStart = requestedStart;
+            currentEnd = requestedEnd;
+            days = Math.toIntExact(ChronoUnit.DAYS.between(currentStart, currentEnd) + 1);
+        }
+        int analysisDays = days;
         LocalDate previousEnd = currentStart.minusDays(1);
-        LocalDate previousStart = previousEnd.minusDays(days - 1L);
+        LocalDate previousStart = previousEnd.minusDays(analysisDays - 1L);
         MapSqlParameterSource window = new MapSqlParameterSource()
                 .addValue("currentStart", currentStart)
-                .addValue("latestDate", latestDate)
+                .addValue("latestDate", currentEnd)
                 .addValue("previousStart", previousStart)
                 .addValue("previousEnd", previousEnd);
 
-        List<DailyRow> daily = loadDaily(currentStart, latestDate);
+        List<DailyRow> daily = loadDaily(currentStart, currentEnd);
         Map<String, SalesAggregate> sales = loadSkuSales(window);
         Map<String, ProductInfo> products = loadProducts();
         InventorySnapshotData inventorySnapshot = loadLatestInventory();
@@ -74,14 +92,14 @@ public class SalesDataService {
                         sales.getOrDefault(sku, SalesAggregate.empty(sku)),
                         products.get(sku),
                         inventory.get(sku),
-                        days,
+                        analysisDays,
                         totalUnits
                 ))
                 .sorted(Comparator.comparingDouble(SkuRow::units).reversed()
                         .thenComparing(Comparator.comparingDouble(SkuRow::revenue).reversed())
                         .thenComparing(SkuRow::sku))
                 .toList();
-        List<ParentRow> parentRows = buildParentRows(skuRows, days, totalUnits);
+        List<ParentRow> parentRows = buildParentRows(skuRows, analysisDays, totalUnits);
 
         int sampleDays = (int) daily.stream().filter(row -> row.units() != 0 || row.orders() != 0).count();
         int activeSkus = (int) skuRows.stream().filter(row -> row.units() > 0).count();
@@ -98,8 +116,8 @@ public class SalesDataService {
                 round(totalUnits),
                 round(totalRevenue),
                 currentOrders,
-                round(totalUnits / days),
-                round(totalRevenue / days),
+                round(totalUnits / analysisDays),
+                round(totalRevenue / analysisDays),
                 round(averagePrice),
                 round(divide(totalRevenue, currentOrders)),
                 activeSkus,
@@ -116,10 +134,10 @@ public class SalesDataService {
                 firstDate,
                 latestDate,
                 currentStart,
-                latestDate,
+                currentEnd,
                 previousStart,
                 previousEnd,
-                days,
+                analysisDays,
                 sampleDays,
                 "USD",
                 "订单表 Item Cost",

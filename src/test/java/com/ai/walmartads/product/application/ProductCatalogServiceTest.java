@@ -1,6 +1,11 @@
 package com.ai.walmartads.product.application;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.ai.walmartads.inventory.application.ParentLifecycleService;
+import com.ai.walmartads.inventory.repository.ParentLifecycleRepository;
+import com.ai.walmartads.product.application.ProfitAssumptionRepository;
+import com.ai.walmartads.product.application.ProfitCalculator;
+import com.ai.walmartads.product.application.RefundRateService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
@@ -9,6 +14,7 @@ import org.springframework.jdbc.datasource.embedded.EmbeddedDatabaseBuilder;
 import org.springframework.jdbc.datasource.embedded.EmbeddedDatabaseType;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
 
 class ProductCatalogServiceTest {
 
@@ -53,8 +59,67 @@ class ProductCatalogServiceTest {
                     material_name varchar(4000),
                     gender varchar(80),
                     variant_group_id varchar(300),
+                    cutting_yield integer,
                     raw_payload text,
                     source_updated_at timestamp
+                )
+                """);
+        jdbc.getJdbcTemplate().execute("""
+                create table wm_ads_item_report_record (
+                    id bigint primary key,
+                    import_file_id bigint not null,
+                    current_version boolean not null,
+                    sku varchar(180) not null,
+                    parent_sku varchar(80),
+                    item_id varchar(40),
+                    upc varchar(40),
+                    wpid varchar(40),
+                    gtin varchar(40),
+                    price decimal(18,6),
+                    shipping_weight_lb decimal(18,6),
+                    shipping_weight_unit varchar(10),
+                    shipping_weight_kg decimal(18,6),
+                    billing_weight_lb decimal(18,6),
+                    base_fee decimal(18,6),
+                    apparel_surcharge decimal(18,6),
+                    low_price_surcharge decimal(18,6),
+                    delivery_fee decimal(18,6),
+                    raw_payload text
+                )
+                """);
+        jdbc.getJdbcTemplate().execute("""
+                create table wm_ads_profit_assumption (
+                    parent_sku varchar(80) primary key,
+                    purchase_cost decimal(18,6),
+                    first_leg decimal(18,6),
+                    sales_qty decimal(18,6),
+                    ad_cost decimal(18,6),
+                    refund_rate decimal(10,6)
+                )
+                """);
+        jdbc.getJdbcTemplate().execute("""
+                create table wm_ads_sku_mapping (
+                    item_id varchar(40),
+                    sku varchar(180),
+                    parent_sku varchar(80),
+                    current_version boolean
+                )
+                """);
+        jdbc.getJdbcTemplate().execute("""
+                create table wm_ads_order_record (
+                    import_file_id bigint not null,
+                    sku varchar(180),
+                    quantity decimal(18,6),
+                    item_cost decimal(18,6)
+                )
+                """);
+        jdbc.getJdbcTemplate().execute("""
+                create table wm_ads_return_order (
+                    import_file_id bigint not null,
+                    parent_sku varchar(80),
+                    item_id varchar(40),
+                    current_status varchar(80),
+                    quantity decimal(18,6)
                 )
                 """);
         jdbc.getJdbcTemplate().update(
@@ -111,7 +176,15 @@ class ProductCatalogServiceTest {
                     timestamp '2026-07-24 12:00:00'
                 )
                 """);
-        service = new ProductCatalogService(jdbc, new ObjectMapper());
+        service = new ProductCatalogService(
+                jdbc,
+                new ObjectMapper(),
+                new ProfitCalculator(),
+                (ProfitAssumptionRepository) null,
+                new RefundRateService(jdbc),
+                null,
+                new ParentLifecycleService(mock(ParentLifecycleRepository.class))
+        );
     }
 
     @Test
@@ -121,7 +194,6 @@ class ProductCatalogServiceTest {
 
         assertThat(catalog.meta().parentProductCount()).isEqualTo(1);
         assertThat(catalog.meta().variantCount()).isEqualTo(3);
-        assertThat(catalog.products().getFirst().listingCompleteness()).isEqualTo(100);
         assertThat(catalog.products().getFirst().searchTerms()).contains(
                 "PNK100-Blue-M-WFS",
                 "124",
@@ -148,8 +220,14 @@ class ProductCatalogServiceTest {
                 .containsExactly("S");
         ObjectMapper responseMapper = new ObjectMapper().findAndRegisterModules();
         assertThat(responseMapper.valueToTree(catalog).toString())
-                .doesNotContain("minimumPrice", "maximumPrice", "\"price\"");
+                .doesNotContain(
+                        "minimumPrice",
+                        "maximumPrice",
+                        "listingCompleteness",
+                        "completeListingVariants",
+                        "variantsWithMainImage"
+                );
         assertThat(responseMapper.valueToTree(detail).toString())
-                .doesNotContain("minimumPrice", "maximumPrice", "\"price\"");
+                .doesNotContain("minimumPrice", "maximumPrice");
     }
 }

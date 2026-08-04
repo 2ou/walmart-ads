@@ -3,6 +3,7 @@ package com.ai.walmartads.returns.application;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -46,6 +47,27 @@ class ReturnAnalyticsServiceTest {
         assertThat(result.completedRate()).isZero();
     }
 
+    @Test
+    void calculatesWeightedParentTotalsFromCompleteImportedMonths() {
+        List<ReturnAnalyticsService.ParentMonthlyRow> trend = List.of(
+                parentMonth("PNK100", "2026-02", 10, 100),
+                parentMonth("PNK100", "2026-03", 20, 50),
+                parentMonth("PNK100", "2026-07", 30, 30),
+                parentMonth("PNK200", "2026-03", 4, 40)
+        );
+
+        Map<String, ReturnAnalyticsService.ParentTotal> result =
+                ReturnAnalyticsService.parentTotals(
+                        List.of("2026-02", "2026-03"),
+                        trend
+                );
+
+        assertThat(result.get("PNK100").completedUnits()).isEqualTo(30);
+        assertThat(result.get("PNK100").soldUnits()).isEqualTo(150);
+        assertThat(result.get("PNK100").completedRate()).isEqualTo(0.2);
+        assertThat(result.get("PNK200").completedRate()).isEqualTo(0.1);
+    }
+
     private static ReturnAnalyticsService.MonthlyRow month(
             String month,
             double requested,
@@ -66,6 +88,29 @@ class ReturnAnalyticsServiceTest {
                 refundAmount,
                 salesRevenue,
                 salesRevenue == 0 ? 0 : refundAmount / salesRevenue
+        );
+    }
+
+    private static ReturnAnalyticsService.ParentMonthlyRow parentMonth(
+            String parentSku,
+            String month,
+            double completed,
+            double sold
+    ) {
+        return new ReturnAnalyticsService.ParentMonthlyRow(
+                parentSku,
+                parentSku,
+                month,
+                completed,
+                completed,
+                0,
+                0,
+                sold,
+                sold == 0 ? 0 : completed / sold,
+                sold == 0 ? 0 : completed / sold,
+                0,
+                0,
+                0
         );
     }
 }

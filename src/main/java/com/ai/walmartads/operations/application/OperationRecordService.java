@@ -13,6 +13,7 @@ import java.sql.Date;
 import java.sql.Timestamp;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -117,7 +118,31 @@ public class OperationRecordService {
             String query,
             int limit
     ) {
-        int safeDays = Math.max(1, Math.min(days, 90));
+        return list(days, null, null, targetType, targetKey, query, limit);
+    }
+
+    @Transactional(readOnly = true)
+    public OperationPayload list(
+            int days,
+            LocalDate startDate,
+            LocalDate endDate,
+            String targetType,
+            String targetKey,
+            String query,
+            int limit
+    ) {
+        if ((startDate == null) != (endDate == null)) {
+            throw new IllegalArgumentException("自定义时间范围必须同时提供开始日期和结束日期。");
+        }
+        if (startDate != null && startDate.isAfter(endDate)) {
+            throw new IllegalArgumentException("开始日期不能晚于结束日期。");
+        }
+        int safeDays = startDate == null
+                ? Math.max(1, Math.min(days, 90))
+                : Math.max(1, Math.min(
+                        Math.toIntExact(ChronoUnit.DAYS.between(startDate, endDate) + 1),
+                        90
+                ));
         int safeLimit = Math.max(1, Math.min(limit, 100));
         String safeTargetType = blank(targetType) ? null : enumValue(targetType, TARGET_TYPES, "作用范围");
         String safeTargetKey = blank(targetKey) ? null : targetKey.trim();
@@ -126,6 +151,8 @@ public class OperationRecordService {
                 .addValue("targetType", safeTargetType)
                 .addValue("targetKey", safeTargetKey)
                 .addValue("query", safeQuery)
+                .addValue("rangeStart", startDate == null ? null : startDate.atStartOfDay())
+                .addValue("rangeEnd", endDate == null ? null : endDate.plusDays(1).atStartOfDay())
                 .addValue("limit", safeLimit);
         List<OperationRecord> records = jdbc.queryForList("""
                 select id, target_type, target_key, parent_sku, target_name,
@@ -135,6 +162,8 @@ public class OperationRecordService {
                   from wm_ads_operation_record
                  where (:targetType is null or target_type = :targetType)
                    and (:targetKey is null or target_key = :targetKey)
+                   and (:rangeStart is null or occurred_at >= :rangeStart)
+                   and (:rangeEnd is null or occurred_at < :rangeEnd)
                    and (:query is null
                         or lower(target_key) like :query
                         or lower(coalesce(parent_sku, '')) like :query
@@ -156,7 +185,7 @@ public class OperationRecordService {
                 .count();
         long ready = items.stream().filter(item -> "READY".equals(item.impact().state())).count();
         return new OperationPayload(
-                new OperationMeta(safeDays, latestDataDate, records.size(), executed, system, ready),
+                new OperationMeta(safeDays, startDate, endDate, latestDataDate, records.size(), executed, system, ready),
                 items
         );
     }
@@ -585,6 +614,8 @@ public class OperationRecordService {
 
     public record OperationMeta(
             int requestedDays,
+            LocalDate startDate,
+            LocalDate endDate,
             LocalDate latestDataDate,
             long recordCount,
             long executedCount,

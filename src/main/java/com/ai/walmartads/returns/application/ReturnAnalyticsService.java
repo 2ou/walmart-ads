@@ -88,10 +88,18 @@ public class ReturnAnalyticsService {
                 .addValue("end", end);
 
         Summary summary = loadSummary(window);
-        List<SkuRow> skuRows = loadSkuRows(window);
-        List<ParentRow> parentRows = parentRows(skuRows);
+        List<ParentMonthlyRow> parentTrend = loadParentTrend(bounds);
+        Set<String> catalogParents = new LinkedHashSet<>();
+        parentTrend.forEach(row -> catalogParents.add(row.parentSku()));
+        List<SkuRow> skuRows = loadSkuRows(window).stream()
+                .filter(row -> catalogParents.contains(row.parentSku()))
+                .toList();
+        Map<String, ParentTotal> parentTotals = parentTotals(bounds.reportMonths(), parentTrend);
+        List<ParentRow> parentRows = parentRows(skuRows, parentTotals);
         List<ParentBreakdown> parentBreakdowns = parentBreakdowns(skuRows);
-        List<DetailRow> details = loadDetails(window);
+        List<DetailRow> details = loadDetails(window).stream()
+                .filter(row -> catalogParents.contains(row.parentSku()))
+                .toList();
         List<BreakdownRow> reasons = breakdown(details, DetailRow::returnReason);
         List<BreakdownRow> statuses = breakdown(details, DetailRow::currentStatus);
         List<BreakdownRow> channels = breakdown(details, DetailRow::channel);
@@ -116,6 +124,7 @@ public class ReturnAnalyticsService {
                 summary,
                 accountSummary,
                 trend,
+                parentTrend,
                 parentRows,
                 skuRows,
                 parentBreakdowns,
@@ -308,6 +317,118 @@ public class ReturnAnalyticsService {
                 .sorted(Comparator.comparing(MonthlyAccumulator::month))
                 .map(MonthlyAccumulator::row)
                 .toList();
+    }
+
+    private List<ParentMonthlyRow> loadParentTrend(Bounds bounds) {
+        MapSqlParameterSource range = new MapSqlParameterSource()
+                .addValue("trendStart", bounds.firstMonth().atDay(1))
+                .addValue("trendEnd", bounds.latestMonth().atEndOfMonth());
+        return jdbc.queryForList(
+                RETURN_CTE + """
+                        , catalog_parents as (
+                            select product.parent_sku,
+                                   max(product.product_name) as item_name
+                              from current_products product
+                             where nullif(trim(product.parent_sku), '') is not null
+                             group by product.parent_sku
+                        ),
+                        return_by_parent_month as (
+                            select date_format(returns.request_date, '%Y-%m') as month,
+                                   catalog.parent_sku,
+                                   max(catalog.item_name) as item_name,
+                                   sum(returns.quantity) as requested_units,
+                                   sum(case when returns.current_status like 'Refunded:%'
+                                            then returns.quantity else 0 end) as completed_units,
+                                   sum(case when returns.current_status like 'Cancelled:%'
+                                            then returns.quantity else 0 end) as cancelled_units,
+                                   sum(case when returns.current_status not like 'Refunded:%'
+                                             and returns.current_status not like 'Cancelled:%'
+                                            then returns.quantity else 0 end) as pending_units,
+                                   sum(case when returns.current_status like 'Refunded:%'
+                                            then returns.total_refund_amount else 0 end) as refund_amount
+                              from return_rows returns
+                              join current_products product on product.sku = returns.resolved_sku
+                              join catalog_parents catalog on catalog.parent_sku = product.parent_sku
+                             where returns.request_date between :trendStart and :trendEnd
+                             group by date_format(returns.request_date, '%Y-%m'),
+                                      catalog.parent_sku
+                        ),
+                        sales_by_parent_month as (
+                            select date_format(orders.order_date, '%Y-%m') as month,
+                                   product.parent_sku,
+                                   sum(orders.quantity) as sold_units,
+                                   sum(orders.quantity * orders.item_cost) as sales_revenue
+                              from wm_ads_order_record orders
+                              join wm_ads_import_file file
+                                on file.id = orders.import_file_id
+                               and file.active = true
+                              join current_products product on product.sku = orders.sku
+                             where orders.order_date between :trendStart and :trendEnd
+                               and nullif(trim(product.parent_sku), '') is not null
+                             group by date_format(orders.order_date, '%Y-%m'), product.parent_sku
+                        ),
+                        data_months as (
+                            select distinct date_format(returns.request_date, '%Y-%m') as month
+                              from return_rows returns
+                             where returns.request_date between :trendStart and :trendEnd
+                            union
+                            select distinct date_format(orders.order_date, '%Y-%m') as month
+                              from wm_ads_order_record orders
+                              join wm_ads_import_file file
+                                on file.id = orders.import_file_id
+                               and file.active = true
+                             where orders.order_date between :trendStart and :trendEnd
+                        ),
+                        parent_months as (
+                            select catalog.parent_sku,
+                                   catalog.item_name,
+                                   months.month
+                              from catalog_parents catalog
+                              cross join data_months months
+                        )
+                        select series.parent_sku,
+                               coalesce(series.item_name, series.parent_sku) as item_name,
+                               series.month,
+                               coalesce(max(returned.requested_units), 0) as requested_units,
+                               coalesce(max(returned.completed_units), 0) as completed_units,
+                               coalesce(max(returned.cancelled_units), 0) as cancelled_units,
+                               coalesce(max(returned.pending_units), 0) as pending_units,
+                               coalesce(max(sales.sold_units), 0) as sold_units,
+                               coalesce(max(returned.refund_amount), 0) as refund_amount,
+                               coalesce(max(sales.sales_revenue), 0) as sales_revenue
+                          from parent_months series
+                          left join return_by_parent_month returned
+                            on returned.parent_sku = series.parent_sku
+                           and returned.month = series.month
+                          left join sales_by_parent_month sales
+                            on sales.parent_sku = series.parent_sku
+                           and sales.month = series.month
+                         group by series.parent_sku, series.item_name, series.month
+                         order by series.parent_sku, series.month
+                        """,
+                range
+        ).stream().map(row -> {
+            double requested = number(row, "requested_units");
+            double completed = number(row, "completed_units");
+            double sold = number(row, "sold_units");
+            double refundAmount = number(row, "refund_amount");
+            double salesRevenue = number(row, "sales_revenue");
+            return new ParentMonthlyRow(
+                    text(row, "parent_sku"),
+                    text(row, "item_name"),
+                    text(row, "month"),
+                    round(requested),
+                    round(completed),
+                    round(number(row, "cancelled_units")),
+                    round(number(row, "pending_units")),
+                    round(sold),
+                    ratio(requested, sold),
+                    ratio(completed, sold),
+                    round(refundAmount),
+                    round(salesRevenue),
+                    ratio(refundAmount, salesRevenue)
+            );
+        }).toList();
     }
 
     private List<SkuRow> loadSkuRows(MapSqlParameterSource window) {
@@ -510,14 +631,34 @@ public class ReturnAnalyticsService {
         return result;
     }
 
-    private static List<ParentRow> parentRows(List<SkuRow> rows) {
+    static Map<String, ParentTotal> parentTotals(
+            List<String> reportMonths,
+            List<ParentMonthlyRow> trend
+    ) {
+        Set<String> included = new LinkedHashSet<>(reportMonths);
+        Map<String, ParentTotalAccumulator> totals = new LinkedHashMap<>();
+        trend.stream()
+                .filter(row -> included.contains(row.month()))
+                .forEach(row -> totals.computeIfAbsent(
+                        row.parentSku(),
+                        ignored -> new ParentTotalAccumulator(row.parentSku())
+                ).add(row));
+        Map<String, ParentTotal> result = new LinkedHashMap<>();
+        totals.forEach((parentSku, total) -> result.put(parentSku, total.row()));
+        return result;
+    }
+
+    private static List<ParentRow> parentRows(
+            List<SkuRow> rows,
+            Map<String, ParentTotal> totals
+    ) {
         Map<String, ParentAccumulator> groups = new LinkedHashMap<>();
         rows.forEach(row -> {
             String key = firstText(row.parentSku(), row.sku(), row.itemId(), "未映射");
             groups.computeIfAbsent(key, ParentAccumulator::new).add(row);
         });
         return groups.values().stream()
-                .map(ParentAccumulator::row)
+                .map(item -> item.row(totals.get(item.parentSku)))
                 .sorted(Comparator.comparingDouble(ParentRow::requestedUnits).reversed()
                         .thenComparing(ParentRow::parentSku))
                 .toList();
@@ -600,7 +741,7 @@ public class ReturnAnalyticsService {
                 new Summary(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
                 new AccountSummary(null, null, 0, 0, 0, 0, 0, 0, 0, 0, 0),
                 List.of(), List.of(), List.of(), List.of(), List.of(),
-                List.of(), List.of(), List.of(), List.of(), List.of()
+                List.of(), List.of(), List.of(), List.of(), List.of(), List.of()
         );
     }
 
@@ -686,6 +827,7 @@ public class ReturnAnalyticsService {
             Summary summary,
             AccountSummary accountSummary,
             List<MonthlyRow> trend,
+            List<ParentMonthlyRow> parentTrend,
             List<ParentRow> parentRows,
             List<SkuRow> skuRows,
             List<ParentBreakdown> parentBreakdowns,
@@ -763,6 +905,31 @@ public class ReturnAnalyticsService {
     ) {
     }
 
+    public record ParentMonthlyRow(
+            String parentSku,
+            String itemName,
+            String month,
+            double requestedUnits,
+            double completedUnits,
+            double cancelledUnits,
+            double pendingUnits,
+            double soldUnits,
+            double requestRate,
+            double completedRate,
+            double refundAmount,
+            double salesRevenue,
+            double refundAmountRate
+    ) {
+    }
+
+    public record ParentTotal(
+            String parentSku,
+            double completedUnits,
+            double soldUnits,
+            double completedRate
+    ) {
+    }
+
     public record SkuRow(
             String groupKey,
             String sku,
@@ -804,6 +971,9 @@ public class ReturnAnalyticsService {
             double refundAmount,
             double salesRevenue,
             double refundAmountRate,
+            double totalCompletedUnits,
+            double totalSoldUnits,
+            double totalCompletedRate,
             String risk
     ) {
     }
@@ -987,7 +1157,7 @@ public class ReturnAnalyticsService {
             salesRevenue += row.salesRevenue();
         }
 
-        private ParentRow row() {
+        private ParentRow row(ParentTotal total) {
             double requestRate = ratio(requested, sold);
             return new ParentRow(
                     parentSku,
@@ -1006,9 +1176,36 @@ public class ReturnAnalyticsService {
                     round(refundAmount),
                     round(salesRevenue),
                     ratio(refundAmount, salesRevenue),
+                    total == null ? 0 : total.completedUnits(),
+                    total == null ? 0 : total.soldUnits(),
+                    total == null ? 0 : total.completedRate(),
                     sold <= 0 ? "NO_SALES_DENOMINATOR"
                             : requestRate >= 0.15 ? "HIGH"
                             : requestRate >= 0.08 ? "WATCH" : "NORMAL"
+            );
+        }
+    }
+
+    private static final class ParentTotalAccumulator {
+        private final String parentSku;
+        private double completed;
+        private double sold;
+
+        private ParentTotalAccumulator(String parentSku) {
+            this.parentSku = parentSku;
+        }
+
+        private void add(ParentMonthlyRow row) {
+            completed += row.completedUnits();
+            sold += row.soldUnits();
+        }
+
+        private ParentTotal row() {
+            return new ParentTotal(
+                    parentSku,
+                    round(completed),
+                    round(sold),
+                    ratio(completed, sold)
             );
         }
     }

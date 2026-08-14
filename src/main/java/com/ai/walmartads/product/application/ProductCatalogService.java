@@ -13,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.sql.Timestamp;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -196,6 +197,42 @@ public class ProductCatalogService {
         if (cuttingYield < 0) {
             throw new IllegalArgumentException("裁床数必须是非负整数；0 表示淘汰款，不维护时请留空。");
         }
+    }
+
+    /**
+     * 回填开售时间：按父款取订单表（仅 active 导入文件）最早成交日，写入该父款下所有产品记录。
+     * 无订单的父款保持 launch_date 为 null（新品）。
+     */
+    @Transactional
+    public int backfillLaunchDates() {
+        List<Map<String, Object>> firstSales = jdbc.queryForList("""
+                select o.parent_sku as parent_sku,
+                       min(coalesce(o.order_date, o.report_date)) as first_sale
+                  from wm_ads_order_record o
+                  join wm_ads_import_file f
+                    on f.id = o.import_file_id
+                   and f.active = true
+                 where o.parent_sku is not null
+                 group by o.parent_sku
+                """, new MapSqlParameterSource());
+        int updated = 0;
+        for (Map<String, Object> row : firstSales) {
+            String parentSku = (String) row.get("parent_sku");
+            LocalDate firstSale = localDate(row.get("first_sale"));
+            if (parentSku == null || firstSale == null) {
+                continue;
+            }
+            List<ProductRecord> records = productRecordRepository.findByParentSku(parentSku);
+            if (records.isEmpty()) {
+                continue;
+            }
+            for (ProductRecord record : records) {
+                record.setLaunchDate(firstSale);
+            }
+            productRecordRepository.saveAll(records);
+            updated += records.size();
+        }
+        return updated;
     }
 
     @Transactional
@@ -388,6 +425,7 @@ public class ProductCatalogService {
                 select product.id as id,
                        product.sku,
                        product.cutting_yield,
+                       product.launch_date,
                        product.parent_sku,
                        product.product_type,
                        product.product_id,
@@ -492,7 +530,8 @@ public class ProductCatalogService {
                 decimal(row, "first_leg"),
                 decimal(row, "sales_qty"),
                 decimal(row, "ad_cost"),
-                decimal(row, "refund_rate")
+                decimal(row, "refund_rate"),
+                localDate(row.get("launch_date"))
         );
     }
 
@@ -560,7 +599,12 @@ public class ProductCatalogService {
                 groupCuttingYield,
                 lifecycle.clearance(),
                 lifecycle.allSeason(),
-                lifecycle.seasonType()
+                lifecycle.seasonType(),
+                rows.stream()
+                        .map(SourceProduct::launchDate)
+                        .filter(date -> date != null)
+                        .min(LocalDate::compareTo)
+                        .orElse(null)
         );
     }
 
@@ -761,6 +805,22 @@ public class ProductCatalogService {
         return LocalDateTime.parse(String.valueOf(value).replace(" ", "T"));
     }
 
+    private static LocalDate localDate(Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof LocalDate localDate) {
+            return localDate;
+        }
+        if (value instanceof Timestamp timestamp) {
+            return timestamp.toLocalDateTime().toLocalDate();
+        }
+        if (value instanceof java.sql.Date sqlDate) {
+            return sqlDate.toLocalDate();
+        }
+        return LocalDate.parse(String.valueOf(value).trim());
+    }
+
     private static boolean present(String value) {
         return value != null && !value.isBlank();
     }
@@ -796,7 +856,8 @@ public class ProductCatalogService {
             Integer cuttingYield,
             boolean clearance,
             boolean allSeason,
-            String seasonType
+            String seasonType,
+            LocalDate launchDate
     ) {
     }
 
@@ -935,7 +996,8 @@ public class ProductCatalogService {
             BigDecimal firstLeg,
             BigDecimal salesQty,
             BigDecimal adCost,
-            BigDecimal manualRefundRate
+            BigDecimal manualRefundRate,
+            LocalDate launchDate
     ) {
     }
 

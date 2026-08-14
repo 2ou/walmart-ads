@@ -18,8 +18,4 @@ public record KieAiProperties(
     public boolean configured() {
         return enabled && StringUtils.hasText(apiKey);
     }
-
-    public String chatCompletionsPath() {
-        return "/" + model + "/v1/chat/completions";
-    }
 }

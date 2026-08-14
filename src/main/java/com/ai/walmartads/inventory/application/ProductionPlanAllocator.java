@@ -15,6 +15,7 @@ import java.util.Set;
 public final class ProductionPlanAllocator {
 
     private static final int MINIMUM_SKU_QUANTITY = 5;
+    private static final double PARTIAL_BED_THRESHOLD = 0.5;
 
     private ProductionPlanAllocator() {
     }
@@ -38,8 +39,16 @@ public final class ProductionPlanAllocator {
         }
 
         double rawTotal = positive.stream().mapToDouble(Requirement::rawSuggestedUnits).sum();
-        int bedCount = Math.max(1, (int) Math.ceil(rawTotal / cuttingYield));
-        int colorTotal = Math.multiplyExact(bedCount, cuttingYield);
+        // Whole beds are produced as before.  A cutting table only yields a full bed, so a
+        // remainder that is too small to justify setting one up (below the threshold) is
+        // deferred to a later cycle.  Once the remainder crosses the threshold it is worth
+        // cutting, so a whole extra bed is added instead of forcing a half-cut bed.
+        int fullBeds = (int) Math.floor(rawTotal / cuttingYield);
+        double remainder = rawTotal - (double) fullBeds * cuttingYield;
+        int partialUnits = remainder >= PARTIAL_BED_THRESHOLD * cuttingYield
+                ? cuttingYield
+                : 0;
+        int colorTotal = fullBeds * cuttingYield + partialUnits;
         Map<String, Integer> unitsByKey = new LinkedHashMap<>();
         positive.forEach(item -> unitsByKey.put(item.key(), 0));
         int remaining = colorTotal;
@@ -50,8 +59,9 @@ public final class ProductionPlanAllocator {
             if (remaining < MINIMUM_SKU_QUANTITY) {
                 break;
             }
-            unitsByKey.put(item.key(), MINIMUM_SKU_QUANTITY);
-            remaining -= MINIMUM_SKU_QUANTITY;
+            int minimum = Math.min(MINIMUM_SKU_QUANTITY, remaining);
+            unitsByKey.put(item.key(), minimum);
+            remaining -= minimum;
         }
 
         // Before treating a bed's remainder as surplus, close every SKU's raw

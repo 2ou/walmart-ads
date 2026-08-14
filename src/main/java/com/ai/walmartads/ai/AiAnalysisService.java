@@ -1,6 +1,5 @@
 package com.ai.walmartads.ai;
 
-import com.ai.walmartads.config.KieAiProperties;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -24,20 +23,20 @@ public class AiAnalysisService {
     private final AiAnalysisProvider provider;
     private final AiAnalysisRepository repository;
     private final AiAnalysisContextFactory contextFactory;
-    private final KieAiProperties properties;
+    private final AiRuntimeConfig config;
     private final ObjectMapper objectMapper;
 
     public AiAnalysisService(
             AiAnalysisProvider provider,
             AiAnalysisRepository repository,
             AiAnalysisContextFactory contextFactory,
-            KieAiProperties properties,
+            AiRuntimeConfig config,
             ObjectMapper objectMapper
     ) {
         this.provider = provider;
         this.repository = repository;
         this.contextFactory = contextFactory;
-        this.properties = properties;
+        this.config = config;
         this.objectMapper = objectMapper;
     }
 
@@ -51,7 +50,7 @@ public class AiAnalysisService {
             LocalDate startDate,
             LocalDate endDate
     ) {
-        if (!properties.configured()) {
+        if (!config.isConfigured()) {
             throw new IllegalArgumentException("Kie AI 未启用或 API Key 未配置");
         }
         if ((startDate == null) != (endDate == null)) {
@@ -64,7 +63,7 @@ public class AiAnalysisService {
                 ? Math.max(1, Math.min(days, 30))
                 : Math.toIntExact(ChronoUnit.DAYS.between(startDate, endDate) + 1);
         AiAnalysisContextFactory.AiContext context = contextFactory.create(safeDays, startDate, endDate);
-        String fingerprint = fingerprint(properties.model(), context.metricsJson());
+        String fingerprint = fingerprint(config.getModel(), context.metricsJson());
         Optional<AiAnalysis> existing = repository.findByDataFingerprint(fingerprint);
         if (!force && existing.filter(item -> item.getStatus() == AiAnalysisStatus.SUCCESS).isPresent()) {
             return view(existing.orElseThrow(), true);
@@ -72,9 +71,9 @@ public class AiAnalysisService {
 
         String requestPayload = requestPayload(safeDays, context);
         AiAnalysis record = existing.orElseGet(() ->
-                new AiAnalysis(fingerprint, "kie", properties.model(), requestPayload));
+                new AiAnalysis(fingerprint, "kie", config.getModel(), requestPayload));
         if (existing.isPresent()) {
-            record.restart("kie", properties.model(), requestPayload);
+            record.restart("kie", config.getModel(), requestPayload);
         }
         repository.saveAndFlush(record);
 
@@ -99,7 +98,7 @@ public class AiAnalysisService {
     private String requestPayload(int days, AiAnalysisContextFactory.AiContext context) {
         ObjectNode payload = objectMapper.createObjectNode();
         payload.put("promptVersion", PROMPT_VERSION);
-        payload.put("model", properties.model());
+        payload.put("model", config.getModel());
         payload.put("periodDays", days);
         payload.put("periodStart", context.startDate().toString());
         payload.put("periodEnd", context.dataAsOf().toString());
@@ -118,6 +117,7 @@ public class AiAnalysisService {
         payload.put("promptTokens", result.promptTokens());
         payload.put("completionTokens", result.completionTokens());
         payload.put("totalTokens", result.totalTokens());
+        payload.put("credits", result.creditsConsumed());
         try {
             payload.set("analysis", objectMapper.readTree(result.analysisJson()));
             return objectMapper.writeValueAsString(payload);
@@ -139,6 +139,10 @@ public class AiAnalysisService {
     private AiAnalysisView view(AiAnalysis item, boolean cached) {
         try {
             JsonNode payload = objectMapper.readTree(item.getResponsePayload());
+            int credits = payload.path("credits").asInt(0);
+            // KIE 真实响应自带 credits_consumed；旧缓存记录无此字段则为 0（前端显示「—」）。
+            // 汇率：1 积分 = 0.036 元（见 https://kie.ai/pricing）。
+            double costRmb = credits > 0 ? Math.round(credits * 0.036 * 100.0) / 100.0 : 0.0;
             return new AiAnalysisView(
                     item.getId(),
                     item.getDataFingerprint(),
@@ -150,6 +154,8 @@ public class AiAnalysisService {
                     payload.path("promptTokens").asInt(0),
                     payload.path("completionTokens").asInt(0),
                     payload.path("totalTokens").asInt(0),
+                    credits,
+                    costRmb,
                     payload.path("analysis")
             );
         } catch (JsonProcessingException exception) {
@@ -187,6 +193,8 @@ public class AiAnalysisService {
             int promptTokens,
             int completionTokens,
             int totalTokens,
+            int costCredits,
+            double costRmb,
             JsonNode analysis
     ) {
     }

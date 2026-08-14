@@ -95,6 +95,13 @@ public class DashboardDataService {
         return new DashboardPayload(meta, defaults, dailyRows, skuRows, campaignRows);
     }
 
+    /**
+     * 暴露原始广告活动日行（每天 × 活动 × 广告类型一条），供决策服务在窗口内二次聚合。
+     */
+    public List<CampaignDailyRow> campaignDaily() {
+        return loadCampaignDaily();
+    }
+
     public List<Recommendation> recommendations(
             int days,
             double targetRoas,

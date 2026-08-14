@@ -74,6 +74,10 @@ public class SalesDataService {
                 .addValue("previousEnd", previousEnd);
 
         List<DailyRow> daily = loadDaily(currentStart, currentEnd);
+        // 折线图最少展示 7 天：以选中周期结束日为终点，向前取 max(7, 选中跨度) 天；与 daily 解耦，不污染 KPI
+        int trendDays = Math.max(7, days);
+        LocalDate trendStart = currentEnd.minusDays(trendDays - 1L);
+        List<DailyRow> trendDaily = loadDaily(trendStart, currentEnd);
         Map<String, SalesAggregate> sales = loadSkuSales(window);
         Map<String, ProductInfo> products = loadProducts();
         InventorySnapshotData inventorySnapshot = loadLatestInventory();
@@ -148,6 +152,7 @@ public class SalesDataService {
                 meta,
                 summary,
                 daily,
+                trendDaily,
                 parentRows,
                 skuRows,
                 buildDimensions(skuRows, true, totalUnits),
@@ -477,6 +482,7 @@ public class SalesDataService {
             Meta meta,
             Summary summary,
             List<DailyRow> daily,
+            List<DailyRow> trendDaily,
             List<ParentRow> parentRows,
             List<SkuRow> skuRows,
             List<DimensionRow> colors,

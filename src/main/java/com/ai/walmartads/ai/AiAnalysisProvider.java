@@ -16,7 +16,8 @@ public interface AiAnalysisProvider {
             String analysisJson,
             int promptTokens,
             int completionTokens,
-            int totalTokens
+            int totalTokens,
+            int creditsConsumed
     ) {
     }
 }

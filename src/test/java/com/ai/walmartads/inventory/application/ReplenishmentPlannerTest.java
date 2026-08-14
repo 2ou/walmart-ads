@@ -30,7 +30,7 @@ class ReplenishmentPlannerTest {
     }
 
     @Test
-    void requiresManualReviewWhenNewProductionCannotReachTheStockoutDate() {
+    void plansLateProductionWhenNewProductionArrivesAfterStockout() {
         ReplenishmentPlanner.ParentPlan result = ReplenishmentPlanner.plan(new ReplenishmentPlanner.ParentInput(
                 "PNK366066",
                 LocalDate.of(2026, 8, 3),
@@ -45,12 +45,14 @@ class ReplenishmentPlannerTest {
         assertThat(plan.expectedStockoutDate()).isEqualTo(LocalDate.of(2026, 8, 8));
         assertThat(plan.domesticShipmentUnits()).isEqualTo(30d);
         assertThat(plan.rawProductionUnits()).isEqualTo(80d);
-        assertThat(plan.productionUnits()).isZero();
-        assertThat(plan.status()).isEqualTo(ReplenishmentPlanner.Status.MANUAL_REVIEW);
+        // A new factory order cannot reach the shelf before the stockout, but replenishing is
+        // still better than going fully out of stock: the order is planned and flagged late.
+        assertThat(plan.productionUnits()).isEqualTo(100d);
+        assertThat(plan.status()).isEqualTo(ReplenishmentPlanner.Status.PLANNED_LATE);
     }
 
     @Test
-    void requiresManualReviewWhenAWholeBedWouldMoreThanDoubleTheRawShortage() {
+    void doesNotForceAFullBedForAShortageSmallerThanHalfABed() {
         List<Double> demand = new java.util.ArrayList<>(Collections.nCopies(59, 0d));
         demand.add(10d);
         ReplenishmentPlanner.ParentPlan result = ReplenishmentPlanner.plan(new ReplenishmentPlanner.ParentInput(
@@ -61,8 +63,10 @@ class ReplenishmentPlannerTest {
 
         ReplenishmentPlanner.VariantPlan plan = result.variants().getFirst();
         assertThat(plan.rawProductionUnits()).isEqualTo(10d);
+        // The 10-unit shortage is far below half a bed (25), so no whole bed is set up and the
+        // SKU is flagged for a manual bed decision instead of being silently auto-produced.
         assertThat(plan.productionUnits()).isZero();
-        assertThat(plan.status()).isEqualTo(ReplenishmentPlanner.Status.MANUAL_REVIEW);
+        assertThat(plan.status()).isEqualTo(ReplenishmentPlanner.Status.BED_NOT_COVERED);
     }
 
     @Test

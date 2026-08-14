@@ -6,12 +6,24 @@ from datetime import date, timedelta
 from math import sqrt
 from typing import Optional
 
+import logging
 import numpy as np
 import pandas as pd
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 from statsforecast import StatsForecast
 from statsforecast.models import AutoETS
+
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+logger = logging.getLogger("forecast")
+
+# AutoETS replaces the simple 28-day mean baseline only when its holdout WMAPE
+# is no worse than the baseline. Intermittent demand (many zero days) makes the
+# ETS fit a near-constant that is marginally worse than the mean in backtest yet
+# still captures trend/seasonality for forward projection, so we accept it within
+# this tolerance band instead of rejecting every close call.
+ETS_SELECTION_TOLERANCE = 0.05
 
 
 app = FastAPI(title="Local replenishment forecast service", version="1.0.0")
@@ -90,7 +102,19 @@ def _forecast_one(request: SeriesRequest, horizon: int) -> ForecastResult:
         backtest_p50, _ = _statsforecast_daily(train, holdout)
         model_wmape = _wmape(actual, backtest_p50[: len(actual)])
         baseline_wmape = _wmape(actual, _baseline_daily(train, len(actual)))
-        selected = model_wmape is not None and (baseline_wmape is None or model_wmape < baseline_wmape)
+        # Relax the strict "<" to a tolerance band so near-tie ETS fits are
+        # used instead of always falling back to the flat 28-day mean.
+        selected = model_wmape is not None and (
+            baseline_wmape is None or model_wmape <= baseline_wmape * (1 + ETS_SELECTION_TOLERANCE)
+        )
+        logger.info(
+            "forecast %s | model_wmape=%.4f baseline_wmape=%.4f tolerance=%.0f%% selected=%s",
+            request.unique_id,
+            model_wmape if model_wmape is not None else float("nan"),
+            baseline_wmape if baseline_wmape is not None else float("nan"),
+            ETS_SELECTION_TOLERANCE * 100,
+            selected,
+        )
         if selected:
             return ForecastResult(
                 unique_id=request.unique_id,
@@ -136,17 +160,30 @@ def _model_frame(history: list[Observation]) -> pd.DataFrame:
     start = history[0].ds
     end = history[-1].ds
     supplied = {item.ds: item.y for item in history}
+    # Anchor the 7-day seasonal cycle to a Saturday->Friday week. US promotion
+    # weeks run Saturday through Friday, so the weekly seasonality must be
+    # phase-aligned to that cadence instead of to whichever weekday the first
+    # real observation happens to fall on. Prepend up to 6 leading days so the
+    # first row lands on a Saturday.
+    lead = (start.weekday() - 5) % 7  # Monday=0 ... Saturday=5 -> 0 when start is Sat
+    first_real = next((item.y for item in history if item.y is not None), 0.0)
+    lead_value = max(0.0, first_real)
     rows: list[dict[str, object]] = []
-    cursor = start
-    last_observed = 0.0
+    cursor = start - timedelta(days=lead)
+    last_observed = lead_value
     while cursor <= end:
-        value = supplied.get(cursor)
-        if value is None:
-            # Stockout-censored days are missing demand, not zero demand.  A local
-            # carry-forward avoids fabricating a zero while preserving daily cadence.
-            value = last_observed
+        if cursor < start:
+            # Padded lead days carry the first real value backward in time so the
+            # seasonal phase is anchored to Saturday without fabricating a zero dip.
+            value = lead_value
         else:
-            last_observed = max(0.0, value)
+            value = supplied.get(cursor)
+            if value is None:
+                # Stockout-censored days are missing demand, not zero demand.  A local
+                # carry-forward avoids fabricating a zero while preserving daily cadence.
+                value = last_observed
+            else:
+                last_observed = max(0.0, value)
         rows.append({"unique_id": "series", "ds": pd.Timestamp(cursor), "y": max(0.0, value)})
         cursor += timedelta(days=1)
     return pd.DataFrame(rows)

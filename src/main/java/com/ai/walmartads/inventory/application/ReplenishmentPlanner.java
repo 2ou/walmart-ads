@@ -177,19 +177,22 @@ public final class ReplenishmentPlanner {
             );
             boolean excessiveCuttingSurplus = rawProduction > 0
                     && cuttingSurplus > rawProduction * MAX_AUTO_CUTTING_SURPLUS_RATIO;
-            if (stockoutBeforeNewProductionCanSell || excessiveCuttingSurplus) {
-                // A new factory order cannot solve a stockout that happens before it can be sold.
-                // Likewise, do not silently turn a small shortage into a disproportionately large bed.
+            if (excessiveCuttingSurplus) {
+                // Do not silently turn a small shortage into a disproportionately large bed.
                 colorPlans.forEach(plan -> plan.status = Status.MANUAL_REVIEW);
                 return;
             }
+            // A new factory order may arrive after the style would stock out, but replenishing is
+            // still better than letting it go fully out of stock. Keep the order and flag it as late
+            // so planners see the expected gap instead of an empty workbench.
+            boolean lateArrival = stockoutBeforeNewProductionCanSell;
             colorPlans.forEach(plan -> {
                 plan.colorProduction = allocation.colorTotalUnits();
                 plan.production = allocation.unitsByKey().getOrDefault(plan.input.sku(), 0d);
                 plan.status = allocation.uncoveredKeys().contains(plan.input.sku())
                         ? Status.BED_NOT_COVERED
                         : switch (allocation.status()) {
-                            case ALLOCATED -> Status.PLANNED;
+                            case ALLOCATED -> lateArrival ? Status.PLANNED_LATE : Status.PLANNED;
                             case PARTIALLY_COVERED -> Status.PARTIALLY_COVERED;
                             case MISSING_CUTTING_YIELD -> Status.MISSING_CUTTING_YIELD;
                             default -> Status.NOT_NEEDED;
@@ -306,6 +309,7 @@ public final class ReplenishmentPlanner {
 
     public enum Status {
         PLANNED,
+        PLANNED_LATE,
         PARTIALLY_COVERED,
         BED_NOT_COVERED,
         MANUAL_REVIEW,

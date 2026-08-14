@@ -60,6 +60,7 @@ class ProductCatalogServiceTest {
                     gender varchar(80),
                     variant_group_id varchar(300),
                     cutting_yield integer,
+                    launch_date date,
                     raw_payload text,
                     source_updated_at timestamp
                 )

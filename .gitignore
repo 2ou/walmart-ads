@@ -10,6 +10,13 @@ src/main/resources/application-local.yml
 # --- local agent memory (never commit) ---
 .workbuddy/
 
+# --- local secrets override (external application.yml, keep key out of git) ---
+config/
+
+# --- AI config encryption key (generated at first boot, keep secret) ---
+.ai_enc_key
+.walmart-ads/
+
 # --- python forecast-service virtual env / caches ---
 forecast-service/.venv/
 forecast-service/__pycache__/

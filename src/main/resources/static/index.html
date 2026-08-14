@@ -12,8 +12,8 @@
       --navy-panel: #0d182b; /* 深海面板（#0d182b）· 主卡片背景，保持层级清晰。 */
       --navy-raised: #13223a; /* 抬升蓝（#13223a）· 悬停与二级区块。 */
       --frost-ink: #edf4ff; /* 冷霜白（#edf4ff）· 主文本，不使用纯白。 */
-      --steel-copy: #91a0b9; /* 钢蓝灰（#91a0b9）· 次要说明文字。 */
-      --slate-dim: #5d6d88; /* 石板灰（#5d6d88）· 辅助标签与弱提示。 */
+      --steel-copy: #9fafc8; /* 钢蓝灰（#9fafc8）· 次要说明文字，对比度~7.5:1 达 AA。 */
+      --slate-dim: #8392ac; /* 石板灰（#8392ac）· 辅助标签与弱提示，对比度~5.3:1 达 AA。 */
       --walmart-blue: #2f90ff; /* 沃尔玛蓝（#2f90ff）· 唯一主交互强调色。 */
       --spark-yellow: #ffc220; /* 星火黄（#ffc220）· 品牌辅助与成本提醒，仅作小面积使用。 */
       --production-color: #29d3a2; /* 做货绿（#29d3a2）· 生产订单做货库存。 */
@@ -521,9 +521,11 @@
     .dashboard-grid { display: grid; grid-template-columns: minmax(0, 1.75fr) minmax(280px, .8fr); gap: 14px; margin-bottom: 14px; }
     .panel { border-radius: var(--radius-lg); overflow: hidden; }
     .panel-header { min-height: 58px; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 13px 17px; border-bottom: 1px solid var(--line-soft); }
+    .panel-header > div:first-child { flex-shrink: 0; }
     .panel-title { margin: 0; font-size: 14px; letter-spacing: -.012em; }
     .panel-subtitle { margin: 3px 0 0; color: var(--steel-copy); font-size: 11px; }
-    .legend { display: flex; align-items: center; gap: 14px; color: var(--steel-copy); font-size: 11px; }
+    .panel-source-note { margin: 4px 0 0; color: var(--steel-copy); font-size: 10.5px; font-style: italic; }
+    .legend { display: flex; align-items: center; gap: 10px 14px; flex: 1 1 0; min-width: 0; flex-wrap: wrap; justify-content: flex-end; color: var(--steel-copy); font-size: 11px; }
     .legend-item { display: flex; align-items: center; gap: 6px; }
     .legend-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--walmart-blue); }
     .legend-dot.yellow { background: var(--spark-yellow); }
@@ -572,6 +574,8 @@
       color: var(--frost-ink);
     }
     .search-input::placeholder { color: var(--slate-dim); }
+    .search-count { font-size: 11px; color: var(--spark-yellow, #ffcf4d); font-weight: 600; white-space: nowrap; }
+    .search-count:empty { display: none; }
     .table-scroll { overflow-x: auto; }
     table { width: 100%; border-collapse: collapse; }
     th, td { padding: 11px 13px; border-bottom: 1px solid var(--line-soft); white-space: nowrap; }
@@ -590,6 +594,16 @@
     .status-badge.reduce { color: var(--signal-red); background: var(--red-soft); }
     .status-badge.optimize { color: var(--signal-orange); background: var(--orange-soft); }
     .status-badge.collect { color: var(--steel-copy); background: rgba(145, 160, 185, .09); }
+    /* 库存风险：每个状态独立配色，便于一眼区分 */
+    .status-badge.risk-outofstock { color: var(--signal-red); background: var(--red-soft); }
+    .status-badge.risk-urgent { color: #f0568f; background: rgba(240, 86, 143, .13); }
+    .status-badge.risk-low { color: var(--signal-orange); background: var(--orange-soft); }
+    .status-badge.risk-watch { color: #f5a623; background: rgba(245, 166, 35, .14); }
+    .status-badge.risk-replenish { color: var(--walmart-blue); background: rgba(47, 144, 255, .13); }
+    .status-badge.risk-overstock { color: #9b6bf2; background: rgba(155, 107, 242, .14); }
+    .status-badge.risk-nodemand { color: var(--steel-copy); background: rgba(159, 175, 200, .13); }
+    .status-badge.risk-healthy { color: var(--signal-green); background: var(--green-soft); }
+    .status-badge.risk-new { color: #18b6c9; background: rgba(24, 182, 201, .13); }
     .rank-bar { width: 74px; height: 5px; margin-left: auto; border-radius: 999px; background: rgba(145, 160, 185, .12); overflow: hidden; }
     .rank-bar span { display: block; height: 100%; border-radius: inherit; background: var(--walmart-blue); }
 
@@ -628,11 +642,11 @@
     .diagnosis-day-step { box-sizing: border-box; width: 38px; height: 40px; border: 0; color: var(--steel-copy); background: transparent; cursor: pointer; font-size: 18px; line-height: 40px; }
     .diagnosis-day-step:hover:not(:disabled) { color: var(--frost-ink); background: rgba(47, 144, 255, .12); }
     .diagnosis-day-step:disabled { opacity: .32; cursor: not-allowed; }
-    .diagnosis-single-date { display: grid; gap: 3px; padding: 6px 9px; border-inline: 1px solid var(--line-soft); color: var(--slate-dim); font-size: 8px; font-weight: 750; }
+    .diagnosis-single-date { display: grid; gap: 3px; padding: 6px 9px; border-inline: 1px solid var(--line-soft); color: var(--slate-dim); font-size: 9px; font-weight: 750; }
     .diagnosis-single-date input, .diagnosis-date-field input { width: 100%; min-height: 22px; padding: 0; border: 0; outline: 0; color: var(--frost-ink); background: transparent; color-scheme: dark; font: 700 11px "Cascadia Mono", monospace; }
     .diagnosis-single-date:focus-within, .diagnosis-date-field:focus-within { box-shadow: inset 0 0 0 1px rgba(47, 144, 255, .74); }
     .diagnosis-custom-fields { display: flex; flex-wrap: wrap; align-items: end; gap: 7px; }
-    .diagnosis-date-field { box-sizing: border-box; display: grid; width: 142px; min-width: 142px; min-height: 40px; gap: 3px; padding: 5px 9px; border: 1px solid var(--line-soft); border-radius: 8px; color: var(--slate-dim); background: rgba(19, 34, 58, .64); font-size: 8px; font-weight: 750; }
+    .diagnosis-date-field { box-sizing: border-box; display: grid; width: 142px; min-width: 142px; min-height: 40px; gap: 3px; padding: 5px 9px; border: 1px solid var(--line-soft); border-radius: 8px; color: var(--slate-dim); background: rgba(19, 34, 58, .64); font-size: 9px; font-weight: 750; }
     .diagnosis-date-divider { padding-bottom: 9px; color: var(--slate-dim); font-size: 10px; }
     .diagnosis-apply-button { min-height: 36px; padding: 0 12px; font-size: 10px; }
     .diagnosis-data-coverage { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; margin: 0 0 14px; padding: 10px 13px; border: 1px solid rgba(41, 211, 162, .24); border-radius: var(--radius-sm); color: var(--steel-copy); background: rgba(19, 34, 58, .52); font-size: 10px; line-height: 1.55; }
@@ -754,11 +768,18 @@
     .pipeline-step p { margin: 0; color: var(--steel-copy); font-size: 11px; text-wrap: pretty; }
     .agent-layout { display: grid; grid-template-columns: minmax(320px, .7fr) minmax(0, 1.3fr); gap: 14px; }
     .policy-form { padding: 16px; }
+    .policy-type-switch { display: flex; gap: 8px; margin-bottom: 14px; }
     .form-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 13px; }
     .field label { display: block; margin-bottom: 7px; color: var(--steel-copy); font-size: 11px; font-weight: 700; }
     .input-wrap { position: relative; }
     .input-wrap input { width: 100%; height: 44px; padding: 0 38px 0 11px; border: 1px solid var(--line-soft); border-radius: 9px; color: var(--frost-ink); background: rgba(7, 16, 31, .68); }
     .input-suffix { position: absolute; right: 11px; top: 50%; color: var(--slate-dim); transform: translateY(-50%); font-size: 11px; }
+    .ai-config { padding: 12px 16px; border-top: 1px solid var(--line-soft); }
+    .ai-config-head { display: flex; align-items: center; gap: 10px; }
+    .ai-config-hint { color: var(--slate-dim); font-size: 11px; }
+    .ai-config-form { margin-top: 12px; }
+    .ai-config-actions { display: flex; align-items: center; gap: 12px; margin-top: 12px; }
+    .ai-config-msg { color: var(--slate-dim); font-size: 11px; }
     .form-note { margin: 14px 0 0; padding: 11px 12px; border-radius: 9px; color: var(--steel-copy); background: rgba(145, 160, 185, .06); font-size: 11px; }
     .run-summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--line-soft); }
     .run-stat { padding: 16px; background: var(--navy-panel); }
@@ -774,7 +795,8 @@
     .ai-status { display: flex; align-items: center; gap: 9px; color: var(--steel-copy); font-size: 11px; }
     .ai-body { padding: 18px; }
     .ai-summary { padding: 15px 16px; border: 1px solid rgba(0, 113, 206, .24); border-radius: 10px; color: var(--frost-ink); background: rgba(0, 113, 206, .08); line-height: 1.7; }
-    .ai-meta { margin-top: 8px; color: var(--slate-dim); font: 10px "Cascadia Mono", monospace; }
+    .ai-meta { margin-top: 10px; color: var(--frost-ink); font: 600 12px "Cascadia Mono", monospace; letter-spacing: .2px; line-height: 1.6; }
+    .ai-cost { color: var(--spark-yellow); border: 1px solid rgba(255, 196, 0, .42); background: rgba(255, 196, 0, .08); border-radius: 6px; padding: 1px 7px; margin-left: 4px; font-weight: 700; white-space: nowrap; }
     .ai-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 14px; }
     .ai-column { padding: 14px; border: 1px solid var(--line-soft); border-radius: 10px; background: rgba(7, 16, 31, .36); }
     .ai-column h3 { margin: 0 0 10px; font-size: 12px; }
@@ -958,6 +980,13 @@
     .transit-countdown.cd-arrived { color: var(--signal-green); font-weight: 700; }
     .transit-cell-clickable { cursor: pointer; color: var(--walmart-blue); text-decoration: underline; text-underline-offset: 2px; }
     .transit-cell-clickable:hover { color: #8fb6ff; }
+    .fc-suggest-jump { cursor: pointer; color: var(--spark-yellow, #ffd166); font-weight: 600; }
+    .fc-suggest-jump:hover { text-decoration: underline; text-underline-offset: 2px; }
+    .flash-highlight { animation: flashRow 1.6s ease-out; }
+    @keyframes flashRow {
+      0%, 25% { box-shadow: 0 0 0 3px rgba(255, 209, 102, 0.9); background-color: rgba(255, 209, 102, 0.18); }
+      100% { box-shadow: 0 0 0 3px rgba(255, 209, 102, 0); background-color: transparent; }
+    }
     .inventory-layout { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(330px, .8fr); gap: 14px; margin-bottom: 14px; }
     .inventory-forecast-body { display: grid; grid-template-columns: 1fr; gap: 1px; background: var(--line-soft); }
     .forecast-side { min-height: 154px; padding: 18px; background: var(--navy-panel); }
@@ -1151,20 +1180,24 @@
     .product-metric span { display: block; color: var(--steel-copy); font-size: 11px; }
     .product-metric strong { display: block; margin-top: 14px; color: var(--frost-ink); font: 750 24px/1 "Cascadia Mono", monospace; letter-spacing: -.045em; }
     .product-metric small { display: block; margin-top: 10px; color: var(--slate-dim); font-size: 10px; }
-    .product-catalog-table { width: 100%; min-width: 940px; table-layout: fixed; }
-    .product-catalog-table th, .product-catalog-table td { overflow: hidden; padding-right: 9px; padding-left: 9px; text-overflow: ellipsis; vertical-align: middle; }
-    .product-catalog-table th, .product-catalog-table td { text-align: center; }
-    .product-catalog-table th:nth-child(1), .product-catalog-table td:nth-child(1) { text-align: left; }
-    .product-catalog-table .table-actions { justify-content: center; }
-    .product-catalog-table th:nth-child(1) { width: 26%; }
-    .product-catalog-table th:nth-child(n+2):nth-child(-n+4) { width: 6%; }
-    .product-catalog-table th:nth-child(5) { width: 7%; }
-    .product-catalog-table th:nth-child(6) { width: 8%; }
-    .product-catalog-table th:nth-child(7) { width: 12%; }
-    .product-catalog-table th:nth-child(8) { width: 8%; }
-    .product-catalog-table th:nth-child(9) { width: 11%; }
-    .product-catalog-table th:nth-child(10) { width: 10%; }
-    .product-cell { display: grid; grid-template-columns: 52px minmax(0, 1fr); gap: 12px; align-items: center; }
+    .product-card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(290px, 100%), 1fr)); gap: 14px; align-items: start; }
+    .product-card { display: flex; flex-direction: column; gap: 12px; padding: 14px 15px 13px; border: 1px solid var(--line-soft); border-radius: 16px; background: rgba(237, 244, 255, .025); transition: transform .28s cubic-bezier(.16,1,.3,1), border-color .28s, box-shadow .28s, background .28s; }
+    .product-card:hover { transform: translateY(-3px); border-color: rgba(47,144,255,.35); background: rgba(237,244,255,.05); box-shadow: 0 16px 36px -20px rgba(20,40,80,.6); }
+    .product-card-head { display: grid; grid-template-columns: 56px minmax(0, 1fr); gap: 12px; align-items: center; min-width: 0; }
+    .product-card-head .product-thumb { width: 56px; height: 70px; border-radius: 10px; cursor: zoom-in; }
+    .product-card-id { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+    .product-card-head .product-parent-sku { font-size: 11px; }
+    .product-card-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 12px; margin: 0; padding-top: 11px; border-top: 1px solid var(--line-soft); }
+    .pc-metric { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+    .pc-metric dt { margin: 0; color: var(--slate-dim); font-size: 9px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .pc-metric dd { margin: 0; color: var(--frost-ink); font: 600 13px "Cascadia Mono", monospace; line-height: 1.1; }
+    .pc-metric-wide { grid-column: 1 / -1; }
+    .pc-metric-wide dd { font: 600 11px Inter, "Microsoft YaHei", sans-serif; color: var(--steel-copy); }
+    .product-card-actions { display: flex; flex-wrap: wrap; gap: 7px; padding-top: 11px; border-top: 1px solid var(--line-soft); }
+    .product-card-actions .table-link { flex: 1 1 auto; justify-content: center; min-width: 92px; }
+    .empty-grid-state { grid-column: 1 / -1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 46px 20px; color: var(--steel-copy); text-align: center; }
+    .empty-grid-state strong { color: var(--frost-ink); font-size: 14px; }
+    .empty-grid-state span { font-size: 12px; }
     .product-thumb { width: 52px; height: 64px; border: 1px solid var(--line-soft); border-radius: 9px; object-fit: cover; background: rgba(237, 244, 255, .04); }
     .product-parent-sku { display: flex; align-items: center; gap: 7px; color: var(--walmart-blue); font: 700 10px "Cascadia Mono", monospace; }
     .product-group-label { display: inline-flex; min-height: 19px; align-items: center; padding: 0 6px; border: 1px solid rgba(47, 144, 255, .2); border-radius: 5px; color: var(--frost-ink); background: var(--blue-soft); font: 750 9px/1 Inter, "Microsoft YaHei", sans-serif; }
@@ -1282,8 +1315,9 @@
     .forecast-workbench-table th:nth-child(7), .forecast-workbench-table td:nth-child(7) { width: 8%; }
     .forecast-workbench-table th:nth-child(8), .forecast-workbench-table td:nth-child(8) { width: 10%; }
     .forecast-workbench-table th:nth-child(9), .forecast-workbench-table td:nth-child(9) { width: 9%; }
-    .forecast-workbench-table th:nth-child(10), .forecast-workbench-table td:nth-child(10) { width: 10%; }
-    .forecast-workbench-table th:nth-child(11), .forecast-workbench-table td:nth-child(11) { width: 8.5%; }
+    .forecast-workbench-table th:nth-child(10), .forecast-workbench-table td:nth-child(10) { width: 9%; }
+    .forecast-workbench-table th:nth-child(11), .forecast-workbench-table td:nth-child(11) { width: 10%; }
+    .forecast-workbench-table th:nth-child(12), .forecast-workbench-table td:nth-child(12) { width: 8.5%; }
     .forecast-style-row { cursor: pointer; }
     .forecast-style-row > td { height: 82px; vertical-align: middle; }
     .forecast-style-row.open { background: rgba(47, 144, 255, .045); }
@@ -1298,11 +1332,25 @@
     .forecast-mini-badge.critical { color: var(--signal-red); background: var(--red-soft); border-color: rgba(255, 107, 115, .18); }
     .forecast-mini-badge.warning { color: var(--signal-orange); background: var(--orange-soft); border-color: rgba(255, 157, 85, .18); }
     .forecast-mini-badge.confirmed { color: var(--signal-green); background: var(--green-soft); border-color: rgba(41, 211, 162, .18); }
-    .forecast-cell-stack { display: grid; justify-items: end; gap: 4px; }
+    .forecast-cell-stack { display: grid; justify-items: end; gap: 4px; font-variant-numeric: tabular-nums; }
     .forecast-cell-stack strong { color: var(--frost-ink); font: 720 12px "Cascadia Mono", monospace; }
-    .forecast-cell-stack span { color: var(--slate-dim); font-size: 9px; white-space: nowrap; }
-    .forecast-cell-stack .danger { color: var(--signal-red); }
+    .forecast-cell-stack strong.prod-figure { color: var(--signal-green); font: 800 14px "Cascadia Mono", monospace; }
+    .forecast-cell-stack strong.prod-figure .unit { font-size: 10px; font-weight: 600; opacity: .85; margin-left: 2px; }
+    .forecast-cell-stack span { color: #94a4c0; font-size: 11px; white-space: nowrap; }
+    .forecast-cell-stack .danger { color: var(--signal-red); font-size: 11px; font-weight: 600; }
     .forecast-cell-stack .positive { color: var(--signal-green); }
+    .fc-figure { color: var(--spark-yellow); font: 720 13px "Cascadia Mono", monospace; font-variant-numeric: tabular-nums; }
+    /* 系统判断 / 人工最终决策：标签—值两端对齐（专属 .sys-judgment，不动通用 .forecast-cell-stack / .forecast-mini-badge） */
+    .sys-judgment { display: grid; gap: 3px; justify-items: stretch; font-variant-numeric: tabular-nums; }
+    .sys-judgment .sj-row { display: flex; align-items: baseline; justify-content: space-between; gap: 14px; min-width: 0; }
+    .sys-judgment .sj-label { color: var(--slate-dim); font-size: 11px; font-weight: 600; white-space: nowrap; }
+    .sys-judgment .sj-value { font: 720 12px "Cascadia Mono", monospace; font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--frost-ink); text-align: right; }
+    .sys-judgment .sj-value.prod-figure { color: var(--signal-green); font: 800 14px "Cascadia Mono", monospace; }
+    .sys-judgment .sj-value.prod-figure .unit { font-size: 10px; font-weight: 600; opacity: .85; margin-left: 2px; }
+    .sys-judgment .sj-value.empty { color: var(--slate-dim); font-size: 11px; }
+    .sys-judgment .sj-model { font-size: 10.5px; color: var(--steel-copy); }
+    .sys-judgment .sj-alert .sj-label { color: var(--signal-red); }
+    .sys-judgment .sj-alert .sj-value { color: var(--signal-red); font-weight: 600; }
     .forecast-history-cell { display: grid; grid-template-columns: minmax(0, 1fr) 68px; align-items: center; gap: 8px; }
     .forecast-sparkline { width: 68px; height: 30px; overflow: visible; }
     .forecast-sparkline-line { fill: none; stroke: var(--walmart-blue); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
@@ -1713,6 +1761,62 @@
     @media (prefers-reduced-motion: reduce) {
       *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: .01ms !important; }
     }
+    .recent-toolbar { display: flex; gap: 12px; margin: 2px 0 10px; flex-wrap: wrap; align-items: center; }
+    .recent-toolbar .diagnosis-mode-switch { gap: 8px; }
+
+    /* 各款销量透视表（对齐原始「每日各品名销量」） */
+    .pivot-scroll { overflow-x: auto; }
+    .pivot-table { border-collapse: separate; border-spacing: 0; width: 100%; table-layout: fixed; }
+    .pivot-table th, .pivot-table td { padding: 7px 6px; border-bottom: 1px solid var(--hairline); white-space: nowrap; font-variant-numeric: tabular-nums; vertical-align: middle; }
+    .pivot-table thead th { position: sticky; top: 0; background: var(--panel-2); z-index: 2; }
+    .pivot-col-head { display: table-cell; min-width: 56px; }
+    .pivot-col-inner { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; white-space: nowrap; }
+    .pivot-col-inner span { font-size: 9px; color: var(--steel-copy); font-family: var(--mono, ui-monospace, monospace); }
+    .pivot-thumb { width: 30px; height: 30px; object-fit: cover; border-radius: 6px; background: var(--hairline); border: 1px solid var(--hairline); flex: none; }
+    .pivot-corner, .pivot-row-head { position: sticky; left: 0; background: var(--panel-2); z-index: 3; text-align: left; font-weight: 600; }
+    .pivot-row-head { z-index: 1; }
+    .pivot-total, .pivot-total-head { font-weight: 700; color: var(--frost-ink); background: color-mix(in srgb, var(--walmart-blue) 8%, transparent); }
+    .pivot-table tfoot td { position: sticky; left: 0; border-top: 2px solid var(--walmart-blue); background: var(--panel-2); font-weight: 700; }
+
+    /* 缩略图（款号排行 / 广告产品） */
+    .rank-thumb { width: 30px; height: 30px; object-fit: cover; border-radius: 7px; background: var(--hairline); border: 1px solid var(--hairline); flex: none; }
+    .rank-head { display: flex; align-items: center; gap: 9px; }
+    .ad-product-cell { display: flex; align-items: center; gap: 9px; }
+    .ad-thumb { width: 34px; height: 34px; object-fit: cover; border-radius: 8px; background: var(--hairline); border: 1px solid var(--hairline); flex: none; }
+    /* 每日销售数量统计：字段数据居中（日期 / 产品名列保持左对齐） */
+    .recent-table th, .recent-table td { text-align: center; }
+    .pivot-table thead th, .pivot-table tbody td, .pivot-table tfoot td { text-align: center; }
+    .pivot-table .pivot-corner, .pivot-table .pivot-row-head, .pivot-table .pivot-total-head { text-align: left; }
+    .ad-table thead th, .ad-table tbody td { text-align: center; }
+    .ad-table thead th:first-child { text-align: left; }
+    .ad-table .ad-product-cell { text-align: left; justify-content: flex-start; }
+    .ad-style { font-weight: 600; }
+    /* 表格行可读性：hover 高亮 + 斑马纹 + 行高（三张表统一） */
+    .recent-table tbody td, .pivot-table tbody td, .ad-table tbody td { vertical-align: middle; padding-top: 9px; padding-bottom: 9px; }
+    .recent-table tbody tr, .pivot-table tbody tr, .ad-table tbody tr { transition: background-color .15s var(--ease); outline: none; }
+    .recent-table tbody tr:nth-child(even) td,
+    .pivot-table tbody tr:nth-child(even) td,
+    .ad-table tbody tr:nth-child(even) td { background: color-mix(in srgb, var(--panel-2) 55%, var(--panel)); }
+    .recent-table tbody tr:hover td,
+    .pivot-table tbody tr:hover td,
+    .ad-table tbody tr:hover td { background: color-mix(in srgb, var(--walmart-blue) 13%, var(--panel)); }
+    /* 透视表 hover / 斑马纹 跨 sticky 日期列与合计列 */
+    .pivot-table tbody tr:nth-child(even) .pivot-row-head,
+    .pivot-table tbody tr:nth-child(even) .pivot-total { background: var(--panel-2); }
+    .pivot-table tbody tr:hover .pivot-row-head,
+    .pivot-table tbody tr:hover .pivot-total { background: color-mix(in srgb, var(--walmart-blue) 13%, var(--panel-2)); }
+    .block-title { font-size: 1.02rem; font-weight: 650; margin: 26px 0 12px; padding-left: 11px; border-left: 3px solid var(--walmart-blue); color: var(--frost-ink); letter-spacing: .02em; }
+    .block-title:first-of-type { margin-top: 16px; }
+    .rank-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(172px, 1fr)); gap: 12px; padding: 4px 2px; }
+    .rank-row { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border: 1px solid var(--hairline); border-radius: 12px; background: var(--panel-2); transition: transform .2s var(--ease), border-color .2s var(--ease); }
+    .rank-row:hover { transform: translateY(-2px); border-color: color-mix(in srgb, var(--walmart-blue) 40%, var(--hairline)); }
+    .rank-head { display: flex; align-items: center; gap: 9px; }
+    .rank-name { font-weight: 600; color: var(--frost-ink); font-size: 13px; font-family: var(--mono, ui-monospace, monospace); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .rank-meta { font-size: 11px; color: var(--steel-copy); white-space: nowrap; }
+    .rank-bar-track { height: 8px; border-radius: 999px; background: var(--navy-raised); overflow: hidden; margin-top: 2px; }
+    .rank-bar-fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--walmart-blue), #4f9bff); transition: width .5s cubic-bezier(.16, 1, .3, 1); }
+    .rank-bar-fill.sales { background: linear-gradient(90deg, var(--spark-yellow), #ffd166); }
+    #stylesTrendChart svg, #adsScatterChart svg { width: 100%; height: auto; display: block; }
   </style>
 </head>
 <body>
@@ -1767,6 +1871,10 @@
         <button class="nav-button" type="button" data-view="operations">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M6 3h12v18H6z"/><path d="M9 7h6M9 11h6M9 15h3"/><path d="m14 16 1.5 1.5L19 14"/></svg>
           <span>运营记录</span>
+        </button>
+        <button class="nav-button" type="button" data-view="recent">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 6h16v14H4z"/><path d="M4 10h16M8 3v4M16 3v4M8 14h3M8 17h6"/></svg>
+          <span>每日销售数量统计</span>
         </button>
         <button class="nav-group-toggle" type="button" aria-expanded="false" data-nav-group="tools">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M14 7l-5 5 5 5"/><rect x="3" y="4" width="18" height="16" rx="2"/></svg>
@@ -2086,8 +2194,8 @@
           </section>
           <section class="panel table-panel" aria-labelledby="inventoryByStyleTitle">
             <div class="panel-header">
-              <div><h2 class="panel-title" id="inventoryByStyleTitle">按款号汇总（总维度）</h2><p class="panel-subtitle">每个款号（Parent SKU）下全部 SKU 合计；点击款号展开该款 SKU 明细</p></div>
-              <div class="table-tools"><label class="sr-only" for="inventorySearch">模糊搜索 SKU、款号、商品或 Item ID</label><input class="search-input" id="inventorySearch" type="search" placeholder="搜索 SKU / 款号，展开后筛选该款明细，如 6066"></div>
+              <div><h2 class="panel-title" id="inventoryByStyleTitle">按款号汇总（总维度）</h2><p class="panel-subtitle">每个款号（Parent SKU）下全部 SKU 合计；点击款号展开该款 SKU 明细</p><p class="panel-source-note">补货 / 做货列数值来自「需求分析 60 天计划」（未覆盖款号回落本地快捷算法 InventoryForecastCalculator）</p></div>
+              <div class="table-tools"><label class="sr-only" for="inventorySearch">模糊搜索款号、SKU、商品或 Item ID</label><input class="search-input" id="inventorySearch" type="search" placeholder="搜索款号 / SKU / 商品，如 6066" autocomplete="off"><span id="inventorySearchCount" class="search-count" aria-live="polite"></span></div>
             </div>
             <div class="panel-header">
               <div class="inventory-table-tools">
@@ -2098,6 +2206,7 @@
                   <button class="filter-button" type="button" data-inventory-risk="WATCH,REPLENISH">待补货</button>
                   <button class="filter-button" type="button" data-inventory-risk="OVERSTOCK,NO_DEMAND">积压与无动销</button>
                   <button class="filter-button" type="button" data-inventory-risk="HEALTHY">健康</button>
+                  <button class="filter-button" type="button" data-inventory-risk="NOT_LAUNCHED">新品待开售</button>
                 </div>
               </div>
             </div>
@@ -2111,9 +2220,9 @@
                   <th class="num bystyle-sortable" data-sort="totalStock">总库存<span class="bystyle-sort-ind"></span></th>
                   <th class="num bystyle-sortable" data-sort="totalRecent">总近期销量<span class="bystyle-sort-ind"></span></th>
                   <th class="num bystyle-sortable" data-sort="totalForecastDays">预测可售天数<span class="bystyle-sort-ind"></span></th>
-                  <th class="num bystyle-sortable" data-sort="fcSuggest">预测建议补货<span class="bystyle-sort-ind"></span></th>
-                  <th class="num bystyle-sortable" data-sort="productionSuggest">裁床建议做货<span class="bystyle-sort-ind"></span></th>
-                  <th class="num bystyle-sortable" data-sort="production">做货<span class="bystyle-sort-ind"></span></th>
+                  <th class="num bystyle-sortable" data-sort="fcSuggest" title="数值由「需求分析 60 天计划」回写覆盖；未覆盖款号回落本地快捷算法">预测建议补货<span class="bystyle-sort-ind"></span></th>
+                  <th class="num bystyle-sortable" data-sort="productionSuggest" title="数值由「需求分析 60 天计划」回写覆盖（裁床取整后）；未覆盖款号回落本地快捷算法">裁床建议做货<span class="bystyle-sort-ind"></span></th>
+                  <th class="num bystyle-sortable" data-sort="production" title="数值由「需求分析 60 天计划」回写覆盖（裁床取整后做货量）；未覆盖款号回落本地快捷算法">做货<span class="bystyle-sort-ind"></span></th>
                   <th>操作</th>
                 </tr></thead>
                 <tbody id="inventoryByStyleBody"></tbody>
@@ -2133,7 +2242,7 @@
             <div class="forecast-coverage-control">
               <div class="forecast-coverage-field">
                 <label for="forecastTargetDays">目标库存覆盖天数</label>
-                <input id="forecastTargetDays" type="number" min="60" max="60" step="1" value="60" inputmode="numeric" readonly>
+                <input id="forecastTargetDays" type="number" min="7" max="180" step="1" value="60" inputmode="numeric">
               </div>
               <button class="primary-button" id="recalculateForecast" type="button">重新计算建议</button>
             </div>
@@ -2177,6 +2286,7 @@
                   <th class="num">做货库存</th>
                   <th class="num">供应中</th>
                   <th class="num">覆盖与风险</th>
+                  <th class="num" title="与库存总览「预测建议补货」同源：原始缺口（p90 需求减现有库存/国内仓/在途后），未经裁床取整">预测建议补货</th>
                   <th class="num">系统判断</th>
                   <th class="num">人工最终决策</th>
                 </tr></thead>
@@ -2207,12 +2317,7 @@
               <div><h2 class="panel-title" id="productCatalogTitle">服装产品组目录</h2><p class="panel-subtitle">父 SKU 标记主体；详情按颜色切换图片，并在颜色组内核对尺码 SKU</p></div>
               <div class="product-catalog-toolbar"><div class="table-tools"><label class="sr-only" for="productSearch">模糊搜索款号、变体 SKU、产品 ID、颜色、尺码或标题</label><input class="search-input" id="productSearch" type="search" placeholder="模糊搜索款号、变体或颜色，如 6066"></div><div class="product-tag-filter-group" id="productTagFilters" role="group" aria-label="产品经营标签筛选"><button class="filter-button active" type="button" data-product-tag-filter="all">全部</button><button class="filter-button" type="button" data-product-tag-filter="clearance">清货款</button><button class="filter-button" type="button" data-product-tag-filter="spring-summer">春夏款</button><button class="filter-button" type="button" data-product-tag-filter="autumn-winter">秋冬款</button><button class="filter-button" type="button" data-product-tag-filter="all-season">四季款</button><button class="filter-button" type="button" data-product-tag-filter="seasonal">待标季节</button></div></div>
             </div>
-            <div class="table-scroll">
-              <table class="product-catalog-table">
-                <thead><tr><th>产品组主体与 Listing</th><th class="num">SKU 变体</th><th class="num">颜色组</th><th class="num">尺码</th><th class="num">价格</th><th class="num">预估配送费</th><th class="num">测试毛利/毛利率</th><th class="num">裁床数/布色</th><th>更新时间</th><th>操作</th></tr></thead>
-                <tbody id="productCatalogBody"></tbody>
-              </table>
-            </div>
+            <div class="product-card-grid" id="productCatalogBody" aria-live="polite"></div>
             <div class="table-footer"><span id="productTableCount">0 条结果</span><div class="pagination"><button id="productPrevPage" type="button">上一页</button><span id="productPageText" class="mono">1 / 1</span><button id="productNextPage" type="button">下一页</button></div></div>
           </section>
         </section>
@@ -2310,6 +2415,89 @@
           </div>
         </section>
 
+        <section class="view" id="view-recent" aria-labelledby="pageTitle">
+          <div class="status-banner" id="recentStatusBanner">
+            <div class="status-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 6h16v14H4z"/><path d="M4 10h16M8 3v4M16 3v4"/></svg></div>
+            <div class="status-copy"><strong id="recentStatusHeadline">正在读取每日销售数量统计</strong><span id="recentStatusDetail">请稍候。</span></div>
+            <div class="status-range mono" id="recentStatusRange"></div>
+          </div>
+          <div class="recent-toolbar">
+            <div class="diagnosis-mode-switch" role="group" aria-label="时间窗口">
+              <button class="diagnosis-mode-button active" type="button" data-days="7">近 7 天</button>
+              <button class="diagnosis-mode-button" type="button" data-days="14">近 14 天</button>
+              <button class="diagnosis-mode-button" type="button" data-days="30">近 30 天</button>
+              <button class="diagnosis-mode-button" type="button" data-days="90">近 90 天</button>
+            </div>
+          </div>
+
+          <h2 class="block-title">经营概览</h2>
+          <div class="metric-grid" id="recentMetricGrid"></div>
+          <div class="dashboard-grid">
+            <section class="panel" aria-labelledby="recentTrendTitle">
+              <div class="panel-header">
+                <div><h2 class="panel-title" id="recentTrendTitle">近期趋势</h2><p class="panel-subtitle">每日销售额、广告投入与订单量，三轴独立缩放</p></div>
+                <div class="legend"><span class="legend-item"><span class="legend-dot"></span>销售额</span><span class="legend-item"><span class="legend-dot yellow"></span>广告投入</span><span class="legend-item"><span class="legend-dot green"></span>订单</span></div>
+              </div>
+              <div class="chart-wrap" id="recentTrendChart"></div>
+            </section>
+            <section class="panel" aria-labelledby="recentMixTitle">
+              <div class="panel-header"><div><h2 class="panel-title" id="recentMixTitle">订单结构</h2><p class="panel-subtitle">自动广告归因与自然订单</p></div></div>
+              <div class="mix-body" id="recentOrderMix"></div>
+            </section>
+          </div>
+          <section class="panel table-panel" aria-labelledby="recentDetailTitle">
+            <div class="panel-header"><div><h2 class="panel-title" id="recentDetailTitle">每日明细</h2><p class="panel-subtitle">订单与自动广告按天汇总，最新在前</p></div></div>
+            <div class="table-scroll"><table class="recent-table"><thead><tr>
+              <th>星期</th><th>日期</th>
+              <th class="num">总订单(销售件数)</th><th class="num">总的销售额(USD)</th><th class="num">客单价</th>
+              <th class="num">曝光量</th><th class="num">点击量</th><th class="num">广告费(USD)</th><th class="num">广告订单</th>
+              <th class="num">点击率(CTR)</th><th class="num">单次点击费用(CPC)(USD)</th><th class="num">转化率</th><th class="num">广告订单占比</th>
+              <th class="num">广告费/总订单</th><th class="num">广告费/广告订单</th><th class="num">自然订单</th>
+            </tr></thead><tbody id="recentTableBody">            </tbody></table></div>
+          </section>
+
+          <h2 class="block-title">各款销量</h2>
+          <div class="metric-grid" id="stylesMetricGrid"></div>
+          <section class="panel table-panel" aria-labelledby="stylesPivotTitle">
+            <div class="panel-header"><div><h2 class="panel-title" id="stylesPivotTitle">各款每日销量明细</h2><p class="panel-subtitle">行=日期，列=款号（按原始报表列序），含合计；自适应宽度</p></div></div>
+            <div class="table-scroll pivot-scroll"><table class="pivot-table"><thead><tr id="stylesPivotHead"></tr></thead><tbody id="stylesPivotBody"></tbody><tfoot><tr id="stylesPivotFoot"></tr></tfoot></table></div>
+          </section>
+          <div class="dashboard-grid">
+            <section class="panel" aria-labelledby="stylesTrendTitle">
+              <div class="panel-header">
+                <div><h2 class="panel-title" id="stylesTrendTitle">各款每日销量</h2><p class="panel-subtitle">Top 款号每日销量堆叠，展示总量与结构</p></div>
+                <div class="legend" id="stylesTrendLegend"></div>
+              </div>
+              <div class="chart-wrap" id="stylesTrendChart"></div>
+            </section>
+            <section class="panel" aria-labelledby="stylesRankTitle">
+              <div class="panel-header"><div><h2 class="panel-title" id="stylesRankTitle">款号销量排行</h2><p class="panel-subtitle">窗口内累计销量与占比</p></div></div>
+              <div class="rank-list" id="stylesRankList"></div>
+            </section>
+          </div>
+
+          <h2 class="block-title">广告表现</h2>
+          <div class="metric-grid" id="adsMetricGrid"></div>
+          <div class="dashboard-grid">
+            <section class="panel" aria-labelledby="adsBarTitle">
+              <div class="panel-header"><div><h2 class="panel-title" id="adsBarTitle">产品归因销售排行</h2><p class="panel-subtitle">按父 SKU 累计归因销售额，条上标注 RoAS</p></div></div>
+              <div class="rank-list" id="adsBarList"></div>
+            </section>
+            <section class="panel" aria-labelledby="adsScatterTitle">
+              <div class="panel-header"><div><h2 class="panel-title" id="adsScatterTitle">花费 vs 归因销售</h2><p class="panel-subtitle">每个点为一款，气泡大小=广告订单</p></div></div>
+              <div class="chart-wrap" id="adsScatterChart"></div>
+            </section>
+          </div>
+          <section class="panel table-panel" aria-labelledby="adsDetailTitle">
+            <div class="panel-header"><div><h2 class="panel-title" id="adsDetailTitle">广告产品明细</h2><p class="panel-subtitle" id="adsDetailSubtitle">按广告费降序，父 SKU 级聚合</p></div></div>
+            <div class="table-scroll"><table class="ad-table"><thead><tr>
+              <th>产品</th><th class="num">广告支出</th><th class="num">归因销售总额</th><th class="num">投资回报率RoAS</th>
+              <th class="num">ACOS</th><th class="num">订单</th><th class="num">点击次数</th><th class="num">展示次数</th>
+              <th class="num">点击率</th><th class="num">平均每次点击费用</th><th class="num">转化率（基于订单）</th>
+            </tr></thead><tbody id="adsTableBody"></tbody></table></div>
+          </section>
+        </section>
+
         <section class="view" id="view-agent" aria-labelledby="pageTitle">
           <section class="agent-hero">
             <div><span class="agent-kicker">分析引擎已运行</span><h2>先把建议做对，再接入广告执行</h2><p>当前版本完成数据读取、口径校验、诊断与提案。预算与出价变更保持锁定，直到规则回测、审批流和回滚机制都通过验证。</p></div>
@@ -2322,7 +2510,7 @@
             <div class="pipeline-step"><span class="step-number">STEP 4</span><span class="step-state locked">待接入</span><h3>审批后执行</h3><p>未来通过 API 执行，并保留审批、限额、回滚和操作日志。</p></div>
           </section>
           <div class="agent-layout">
-            <section class="panel" aria-labelledby="policyTitle"><div class="panel-header"><div><h2 class="panel-title" id="policyTitle">策略规则</h2><p class="panel-subtitle">原型阈值，可调整并实时重算</p></div></div><form class="policy-form" id="policyForm"><div class="form-grid"><div class="field"><label for="targetRoas">放量 ROAS</label><div class="input-wrap"><input id="targetRoas" type="number" min="1" max="20" step="0.1"><span class="input-suffix">x</span></div></div><div class="field"><label for="floorRoas">降耗 ROAS</label><div class="input-wrap"><input id="floorRoas" type="number" min="0" max="20" step="0.1"><span class="input-suffix">x</span></div></div><div class="field"><label for="minClicks">最低点击量</label><div class="input-wrap"><input id="minClicks" type="number" min="1" max="1000" step="1"><span class="input-suffix">次</span></div></div><div class="field"><label for="minSpend">最低花费</label><div class="input-wrap"><input id="minSpend" type="number" min="0" max="10000" step="1"><span class="input-suffix">USD</span></div></div></div><p class="form-note">放量还要求至少 3 个广告订单。降耗只在达到最低点击和最低花费后触发，避免小样本误判。</p></form></section>
+            <section class="panel" aria-labelledby="policyTitle"><div class="panel-header"><div><h2 class="panel-title" id="policyTitle">策略规则</h2><p class="panel-subtitle">按广告类型分别配置阈值，保存后即时生效</p></div></div><form class="policy-form" id="policyForm"><div class="policy-type-switch" role="group" aria-label="广告类型阈值"><button type="button" class="diagnosis-mode-button active" data-decision-type="自动广告">自动广告</button><button type="button" class="diagnosis-mode-button" data-decision-type="手动广告">手动广告</button></div><div class="form-grid"><div class="field"><label for="targetRoas">放量 ROAS</label><div class="input-wrap"><input id="targetRoas" type="number" min="1" max="20" step="0.1"><span class="input-suffix">x</span></div></div><div class="field"><label for="floorRoas">降耗 ROAS</label><div class="input-wrap"><input id="floorRoas" type="number" min="0" max="20" step="0.1"><span class="input-suffix">x</span></div></div><div class="field"><label for="minClicks">最低点击量</label><div class="input-wrap"><input id="minClicks" type="number" min="1" max="1000" step="1"><span class="input-suffix">次</span></div></div><div class="field"><label for="minSpend">最低花费</label><div class="input-wrap"><input id="minSpend" type="number" min="0" max="10000" step="1"><span class="input-suffix">USD</span></div></div></div><p class="form-note">放量还要求至少 3 个广告订单。降耗只在达到最低点击和最低花费后触发，避免小样本误判。</p></form></section>
             <section class="panel" aria-labelledby="runTitle"><div class="panel-header"><div><h2 class="panel-title" id="runTitle">本次分析运行</h2><p class="panel-subtitle" id="runSubtitle"></p></div><button class="primary-button" type="button" id="recalculateButton">重新计算</button></div><div class="run-summary" id="runSummary"></div><div class="log-list" id="runLog"></div></section>
           </div>
           <section class="panel ai-panel" aria-labelledby="aiAnalysisTitle">
@@ -2330,7 +2518,19 @@
               <div><h2 class="panel-title" id="aiAnalysisTitle">Kie AI 二次分析</h2><p class="panel-subtitle">本地规则先计算，AI 仅分析聚合指标；只在点击按钮时调用</p></div>
               <div class="ai-status"><span class="status-badge collect" id="aiStatusBadge">读取配置</span><button class="primary-button" type="button" id="runAiButton" disabled>运行 Kie AI 分析</button></div>
             </div>
-            <div class="ai-body" id="aiAnalysisBody"><div class="empty-state"><strong>AI 不会自动调用</strong>配置 KIE_API_KEY 后，可对当前周期的聚合数据进行二次分析。</div></div>
+            <div class="ai-config" id="aiConfig">
+              <div class="ai-config-head"><button type="button" class="secondary-button" id="aiConfigToggle">配置 KIE</button><span class="ai-config-hint" id="aiConfigHint"></span></div>
+              <form class="policy-form ai-config-form" id="aiConfigForm" hidden>
+                <div class="form-grid">
+                  <div class="field"><label for="aiEnabled">启用 AI 分析</label><div class="input-wrap"><input id="aiEnabled" type="checkbox"></div></div>
+                  <div class="field"><label for="aiApiKey">KIE API Key</label><div class="input-wrap"><input id="aiApiKey" type="password" placeholder="粘贴 key，留空则保留当前 Key" autocomplete="off"></div></div>
+                  <div class="field"><label for="aiBaseUrl">Base URL</label><div class="input-wrap"><input id="aiBaseUrl" type="text"></div></div>
+                  <div class="field"><label for="aiModel">分析模型</label><div class="input-wrap"><select id="aiModel"><option value="gpt-5-6-terra">GPT-5.6 Terra（均衡，推荐）</option><option value="gpt-5-6-sol">GPT-5.6 Sol（最强）</option><option value="grok-4-5">Grok 4.5</option><option value="claude-opus-4-8">Claude Opus 4.8</option></select></div></div>
+                </div>
+                <div class="ai-config-actions"><button type="button" class="primary-button" id="aiConfigSave">保存配置</button><button type="button" class="secondary-button" id="aiConfigClear">清空 Key</button><span class="ai-config-msg" id="aiConfigMsg"></span></div>
+              </form>
+            </div>
+            <div class="ai-body" id="aiAnalysisBody"><div class="empty-state"><strong>AI 不会自动调用</strong>在上方「配置 KIE」中填入 API Key 并启用后，即可对当前周期的聚合数据进行二次分析。</div></div>
           </section>
         </section>
 
@@ -2620,6 +2820,7 @@
       inventoryPage: 0,
       inventoryPageSize: 50,
       inventoryByStyleExpanded: new Set(),
+      inventorySearchSavedExpanded: null,
       inventoryByStyleSort: { key: "parentSku", dir: "asc" },
       inventoryByStyleDetailSort: { key: "availableUnits", dir: "desc" },
       transitShipmentParentQuery: "",
@@ -2640,24 +2841,33 @@
       aiStatus: null,
       importSources: new Set(importSources.map((source) => source.key)),
       importRunning: false,
+      recent: null,
+      recentDays: 7,
+      recentRequestId: 0,
+      styleSales: null,
+      adProducts: null,
+      adProductsLatestDay: null,
     };
 
-    const titles = { dashboard: "经营驾驶舱", sales: "销量分析", diagnosis: "广告诊断", sku: "SKU 机会矩阵", inventory: "库存管理", products: "产品库", operations: "运营记录", agent: "Agent 控制室", imports: "数据导入", "profit-estimate": "毛利估算", "demand-forecast": "需求预测", "box-convert": "流水线装箱转换" };
+    const titles = { dashboard: "经营驾驶舱", sales: "销量分析", diagnosis: "广告诊断", sku: "SKU 机会矩阵", inventory: "库存管理", products: "产品库", operations: "运营记录", recent: "每日销售数量统计", agent: "Agent 控制室", imports: "数据导入", "profit-estimate": "毛利估算", "demand-forecast": "需求预测", "box-convert": "流水线装箱转换" };
     const decisionCopy = {
       scale: { label: "建议放量", short: "放量", reason: "ROAS 达标且已有稳定广告订单，可进入小步增量测试。" },
       reduce: { label: "建议降耗", short: "降耗", reason: "达到样本门槛后仍低于降耗 ROAS，需要降低出价或暂停低效商品。" },
       optimize: { label: "继续优化", short: "优化", reason: "已有足够数据但未达到放量目标，适合调整商品、词或出价。" },
       collect: { label: "数据不足", short: "观察", reason: "点击或花费不足，暂不做预算变更，继续积累样本。" },
     };
+    let decisionConfigType = "自动广告";
+    let decisionConfigCache = {};
     const inventoryRiskCopy = {
-      OUT_OF_STOCK: { label: "缺货", badge: "reduce", group: "critical" },
-      URGENT: { label: "7天内风险", badge: "reduce", group: "critical" },
-      LOW: { label: "14天内风险", badge: "optimize", group: "warning" },
-      WATCH: { label: "30天内关注", badge: "optimize", group: "warning" },
-      REPLENISH: { label: "建议补货", badge: "optimize", group: "warning" },
-      OVERSTOCK: { label: "库存偏高", badge: "collect", group: "neutral" },
-      NO_DEMAND: { label: "近期无动销", badge: "collect", group: "neutral" },
-      HEALTHY: { label: "库存健康", badge: "scale", group: "healthy" },
+      OUT_OF_STOCK: { label: "缺货", badge: "risk-outofstock", group: "critical" },
+      URGENT: { label: "7天内风险", badge: "risk-urgent", group: "critical" },
+      LOW: { label: "14天内风险", badge: "risk-low", group: "warning" },
+      WATCH: { label: "30天内关注", badge: "risk-watch", group: "warning" },
+      REPLENISH: { label: "建议补货", badge: "risk-replenish", group: "warning" },
+      OVERSTOCK: { label: "库存偏高", badge: "risk-overstock", group: "neutral" },
+      NO_DEMAND: { label: "近期无动销", badge: "risk-nodemand", group: "neutral" },
+      HEALTHY: { label: "库存健康", badge: "risk-healthy", group: "healthy" },
+      NOT_LAUNCHED: { label: "新品待开售", badge: "risk-new", group: "neutral" },
     };
     const confidenceCopy = { HIGH: "高", MEDIUM: "中", LOW: "低" };
     const salesStatusCopy = {
@@ -2739,6 +2949,10 @@
     const sum = (rows, key) => rows.reduce((total, row) => total + number(row[key]), 0);
     const money = (value, digits = 0) => `$${number(value).toLocaleString("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits })}`;
     const integer = (value) => Math.round(number(value)).toLocaleString("en-US");
+    const shortModelName = (raw) => String(raw || "")
+      .replace(/STATSFORECAST_AUTO_ETS/g, "AutoETS")
+      .replace(/BASELINE_RECENT_28/g, "基线28")
+      .replace(/BASELINE_SERVICE_FALLBACK/g, "兜底基线");
     const percent = (value, digits = 1) => `${(number(value) * 100).toFixed(digits)}%`;
     const profitText = (profit, margin) => (profit == null || margin == null)
       ? "—"
@@ -2876,7 +3090,16 @@
     }
 
     function renderTrend() {
-      const rows = DATA.daily.filter((row) => inWindow(row, state.periodDays));
+      // 折线图最少展示 7 天：以选中周期结束日为终点，向前取 max(7, 选中跨度) 天；KPI 仍按真实选中周期聚合
+      const trendRange = activePeriodRange(0);
+      const trendEnd = trendRange.end;
+      const selectedSpan = state.customPeriodActive ? inclusiveDays(trendRange.start, trendRange.end) : state.periodDays;
+      const trendDays = Math.max(7, selectedSpan);
+      const trendStart = addDays(trendEnd, -(trendDays - 1));
+      const rows = DATA.daily.filter((row) => {
+        const d = isoDate(row.date);
+        return d >= trendStart && d <= trendEnd;
+      });
       if (!rows.length) { $("#trendChart").innerHTML = `<div class="empty-state"><strong>没有趋势数据</strong>请检查分析周期。</div>`; return; }
       const trendBoxCs = getComputedStyle($("#trendChart"));
       const trendInnerWidth = $("#trendChart").clientWidth - parseFloat(trendBoxCs.paddingLeft) - parseFloat(trendBoxCs.paddingRight);
@@ -2960,6 +3183,382 @@
       $("#orderMix").innerHTML = `<div class="donut" style="--ad-share:${(share * 100).toFixed(2)}"><div class="donut-center"><div class="donut-value">${percent(share, 0)}</div><div class="donut-label">广告订单占比</div></div></div><div class="mix-legend"><div class="mix-row"><span class="legend-dot"></span><span>广告订单</span><strong>${integer(current.adOrders)}</strong></div><div class="mix-row"><span class="legend-dot" style="background:var(--steel-copy)"></span><span>自然订单</span><strong>${integer(current.naturalOrders)}</strong></div><div class="mix-row"><span class="legend-dot yellow"></span><span>总广告费</span><strong>${money(current.spend, 2)}</strong></div></div>`;
     }
 
+    /* ===== 近期数据模块：订单 + 自动广告按天汇总 ===== */
+    const recentShort = (iso) => { const p = String(iso).split("-"); return p.length === 3 ? `${p[1]}-${p[2]}` : iso; };
+    const recentFull = (iso) => iso;
+
+    function recentCard(label, value, note, icon, cost) {
+      return `<article class="metric-card${cost ? " cost" : ""}"><div class="metric-label"><span>${label}</span><span class="metric-icon">${icon}</span></div><div class="metric-value">${value}</div><div class="metric-foot"><span class="change flat">—</span><span>${note}</span></div></article>`;
+    }
+
+    const recIcon = {
+      revenue: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 2v20M17 6.5c0-1.4-2-2.5-4.5-2.5S8 5.1 8 6.5 10 9 12.5 9 17 10.1 17 11.5 15 14 12.5 14 8 15.1 8 16.5 10 19 12.5 19s4.5-1.1 4.5-2.5"/></svg>`,
+      orders: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M6 3h12l2 5-2 13H6L4 8zM4 8h16M9 12v5M15 12v5"/></svg>`,
+      impressions: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>`,
+      clicks: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M9 3l1.5 4L15 8.5 11 10l-1.5 4L9 18l-3-5-4-1 3-3 1-4 3 1Z"/><path d="M16 14l1 3 3 1-2 2-1 3-2-2-3-1 2-2Z"/></svg>`,
+      spend: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M3 10h18M16 15h2"/></svg>`,
+      roas: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 16l5-5 4 3 7-8"/><path d="M15 6h5v5"/></svg>`,
+    };
+
+    async function loadRecent() {
+      const requestId = ++state.recentRequestId;
+      const days = state.recentDays;
+      $("#recentStatusHeadline").textContent = "正在读取每日销售数量统计";
+      $("#recentStatusDetail").textContent = `正在汇总近 ${days} 天的订单、各款销量与广告表现`;
+      $("#recentMetricGrid").innerHTML = Array.from({ length: 12 }, () => `<div class="metric-card"><div class="metric-value">读取中</div></div>`).join("");
+      $("#recentTrendChart").innerHTML = `<div class="empty-state"><strong>正在生成趋势</strong>请稍候。</div>`;
+      $("#recentTableBody").innerHTML = emptyRow(16, "正在读取每日明细", "请稍候。");
+      $("#stylesMetricGrid").innerHTML = Array.from({ length: 4 }, () => `<div class="metric-card"><div class="metric-value">读取中</div></div>`).join("");
+      $("#stylesTrendChart").innerHTML = `<div class="empty-state"><strong>正在生成趋势</strong>请稍候。</div>`;
+      $("#stylesRankList").innerHTML = `<div class="empty-state">读取中</div>`;
+      $("#adsMetricGrid").innerHTML = Array.from({ length: 6 }, () => `<div class="metric-card"><div class="metric-value">读取中</div></div>`).join("");
+      $("#adsBarList").innerHTML = `<div class="empty-state">读取中</div>`;
+      $("#adsScatterChart").innerHTML = `<div class="empty-state"><strong>正在生成散点</strong>请稍候。</div>`;
+      $("#adsTableBody").innerHTML = emptyRow(11, "正在读取广告产品明细", "请稍候。");
+      try {
+        const [dRes, sRes, aRes, aLatestRes] = await Promise.all([
+          fetch(`/api/recent/daily?days=${days}`),
+          fetch(`/api/recent/styles?days=${days}`),
+          fetch(`/api/recent/ad-products?days=${days}`),
+          fetch(`/api/recent/ad-products?days=1&latest=true`)
+        ]);
+        const [dP, sP, aP, aLatestP] = await Promise.all([dRes.json(), sRes.json(), aRes.json(), aLatestRes.json()]);
+        if (requestId !== state.recentRequestId) return;
+        if (!dP.success || !sP.success || !aP.success) throw new Error(dP.message || sP.message || aP.message || "数据返回异常");
+        state.recent = dP.data;
+        state.styleSales = sP.data;
+        state.adProducts = aP.data;
+        state.adProductsLatestDay = (aLatestP.success && aLatestP.data) ? aLatestP.data : null;
+        renderRecent();
+        renderStyleSales();
+        renderAdProducts();
+      } catch (error) {
+        if (requestId !== state.recentRequestId) return;
+        $("#recentStatusHeadline").textContent = "读取失败";
+        $("#recentStatusDetail").textContent = error.message;
+        $("#recentMetricGrid").innerHTML = "";
+        $("#recentTrendChart").innerHTML = `<div class="empty-state"><strong>趋势读取失败</strong>${escapeHtml(error.message)}</div>`;
+        $("#recentTableBody").innerHTML = emptyRow(16, "明细读取失败", escapeHtml(error.message));
+        $("#stylesMetricGrid").innerHTML = "";
+        $("#stylesTrendChart").innerHTML = `<div class="empty-state"><strong>各款销量读取失败</strong>${escapeHtml(error.message)}</div>`;
+        $("#stylesRankList").innerHTML = `<div class="empty-state">明细读取失败</div>`;
+        $("#adsMetricGrid").innerHTML = "";
+        $("#adsBarList").innerHTML = `<div class="empty-state">读取失败</div>`;
+        $("#adsScatterChart").innerHTML = `<div class="empty-state"><strong>散点读取失败</strong>${escapeHtml(error.message)}</div>`;
+        $("#adsTableBody").innerHTML = emptyRow(11, "明细读取失败", escapeHtml(error.message));
+      }
+    }
+
+    function renderRecent() {
+      const data = state.recent;
+      if (!data) return;
+      const s = data.summary;
+      $("#recentStatusHeadline").textContent = `近 ${data.days} 天经营概览`;
+      $("#recentStatusDetail").textContent = `窗口 ${data.start} ~ ${data.end}，共 ${data.daily.length} 个有数据的日期`;
+      $("#recentStatusRange").textContent = `最新业务日 ${data.end}`;
+      renderRecentMetrics(s);
+      renderRecentTrend(data.daily);
+      renderRecentMix(s);
+      renderRecentTable(data.daily);
+    }
+
+    function renderRecentMetrics(s) {
+      $("#recentMetricGrid").innerHTML = [
+        recentCard("总订单", `${integer(s.totalOrders)} 件`, "窗口累计", recIcon.orders),
+        recentCard("总销售额", money(s.totalRevenue, 2), "窗口累计", recIcon.revenue),
+        recentCard("客单价", money(s.avgOrderValue, 2), "销售额 / 订单", recIcon.revenue),
+        recentCard("曝光量", integer(s.totalImpressions), "窗口累计", recIcon.impressions),
+        recentCard("点击量", integer(s.totalClicks), "窗口累计", recIcon.clicks),
+        recentCard("广告费", money(s.totalSpend, 2), `CPC ${money(s.cpc, 2)}`, recIcon.spend, true),
+        recentCard("广告订单", integer(s.totalAdOrders), `占比 ${percent(s.adOrderRatio, 0)}`, recIcon.orders),
+        recentCard("自然订单", integer(s.totalNaturalOrders), "非广告来源", recIcon.orders),
+        recentCard("广告订单占比", percent(s.adOrderRatio, 0), "广告 / 总订单", recIcon.roas),
+        recentCard("CTR", percent(s.ctr, 2), "点击 / 曝光", recIcon.clicks),
+        recentCard("CPC", money(s.cpc, 2), "广告费 / 点击", recIcon.spend, true),
+        recentCard("转化率", percent(s.conversionRate, 2), "广告订单 / 点击", recIcon.roas),
+      ].join("");
+    }
+
+    function renderRecentMix(s) {
+      const share = s.totalOrders ? s.totalAdOrders / s.totalOrders : 0;
+      $("#recentOrderMix").innerHTML = `<div class="donut" style="--ad-share:${(share * 100).toFixed(2)}"><div class="donut-center"><div class="donut-value">${percent(share, 0)}</div><div class="donut-label">广告订单占比</div></div></div><div class="mix-legend"><div class="mix-row"><span class="legend-dot"></span><span>广告订单</span><strong>${integer(s.totalAdOrders)}</strong></div><div class="mix-row"><span class="legend-dot" style="background:var(--steel-copy)"></span><span>自然订单</span><strong>${integer(s.totalNaturalOrders)}</strong></div><div class="mix-row"><span class="legend-dot yellow"></span><span>总广告费</span><strong>${money(s.totalSpend, 2)}</strong></div></div>`;
+    }
+
+    function renderRecentTrend(rows) {
+      if (!rows.length) { $("#recentTrendChart").innerHTML = `<div class="empty-state"><strong>没有趋势数据</strong>请检查时间窗口或导入订单 / 自动广告数据。</div>`; return; }
+      const chartBox = $("#recentTrendChart");
+      const boxCs = getComputedStyle(chartBox);
+      const innerWidth = chartBox.clientWidth - parseFloat(boxCs.paddingLeft) - parseFloat(boxCs.paddingRight);
+      const width = Math.max(360, Math.round(innerWidth)), height = 260, left = 54, right = 104, top = 18, bottom = 34;
+      const plotW = width - left - right, plotH = height - top - bottom;
+      const maxSales = Math.max(...rows.map((row) => number(row.revenue)), 1) * 1.12;
+      const maxSpend = Math.max(...rows.map((row) => number(row.spend)), 1) * 1.12;
+      const maxOrders = Math.max(...rows.map((row) => number(row.orders)), 1) * 1.12;
+      const xFor = (index) => left + (rows.length === 1 ? plotW / 2 : index * plotW / (rows.length - 1));
+      const points = (key, max) => rows.map((row, index) => ({ x: xFor(index), y: top + plotH - number(row[key]) / max * plotH, row }));
+      const sales = points("revenue", maxSales), spend = points("spend", maxSpend), orders = points("orders", maxOrders);
+      const path = (items) => items.map((point, index) => `${index ? "L" : "M"}${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(" ");
+      const area = `${path(sales)} L${sales.at(-1).x.toFixed(1)},${top + plotH} L${sales[0].x.toFixed(1)},${top + plotH} Z`;
+      const labelEvery = Math.max(1, Math.ceil(rows.length / 7));
+      const grid = [0, .25, .5, .75, 1].map((t) => {
+        const y = top + plotH * t;
+        return `<line class="chart-grid-line" x1="${left}" x2="${left + plotW}" y1="${y}" y2="${y}"/><text class="chart-axis-label" x="${left - 8}" y="${y + 3}" text-anchor="end">${money(maxSales * (1 - t))}</text><text class="chart-axis-label" x="${left + plotW + 10}" y="${y + 3}" text-anchor="start">${money(maxSpend * (1 - t))}</text><text class="chart-axis-orders" x="${left + plotW + 60}" y="${y + 3}" text-anchor="start">${integer(maxOrders * (1 - t))}</text>`;
+      }).join("");
+      const labels = rows.map((row, index) => index % labelEvery === 0 || index === rows.length - 1 ? `<text class="chart-axis-label" x="${sales[index].x}" y="${height - 9}" text-anchor="middle">${recentShort(row.date)}</text>` : "").join("");
+      const dots = rows.map((row, index) => `<circle class="chart-point" cx="${sales[index].x}" cy="${sales[index].y}" r="3.6" fill="var(--walmart-blue)"/><circle class="chart-point" cx="${spend[index].x}" cy="${spend[index].y}" r="3.2" fill="var(--spark-yellow)"/><circle class="chart-point" cx="${orders[index].x}" cy="${orders[index].y}" r="3" fill="#2bb673"/>`).join("");
+      chartBox.innerHTML = `<svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" role="img" aria-label="销售额、广告投入与订单趋势图">${grid}<path class="chart-area" d="${area}"/><path class="chart-sales" d="${path(sales)}"/><path class="chart-spend" d="${path(spend)}"/><path class="chart-orders" d="${path(orders)}"/>${dots}${labels}<line class="dashboard-chart-crosshair" id="recentTrendCrosshair" x1="${left}" x2="${left}" y1="${top}" y2="${top + plotH}" hidden/><g id="recentTrendMarkers"></g><rect class="dashboard-chart-hit-target" id="recentTrendHitTarget" x="${left}" y="${top}" width="${plotW}" height="${plotH}" fill="transparent" tabindex="0" role="slider" aria-label="销售额、广告投入与订单日期，使用左右方向键查看" aria-valuemin="1" aria-valuemax="${rows.length}" aria-valuenow="${rows.length}"/></svg><div class="sales-tooltip" id="recentTrendTooltip" role="status" aria-live="polite"></div>`;
+
+      const svg = chartBox.querySelector("svg");
+      const hitTarget = $("#recentTrendHitTarget");
+      const crosshair = $("#recentTrendCrosshair");
+      const markers = $("#recentTrendMarkers");
+      const tooltip = $("#recentTrendTooltip");
+      let activeIndex = rows.length - 1;
+      const showPoint = (index) => {
+        activeIndex = Math.max(0, Math.min(rows.length - 1, index));
+        const row = rows[activeIndex];
+        const salesPoint = sales[activeIndex], spendPoint = spend[activeIndex], ordersPoint = orders[activeIndex];
+        crosshair.setAttribute("x1", salesPoint.x);
+        crosshair.setAttribute("x2", salesPoint.x);
+        crosshair.hidden = false;
+        markers.innerHTML = `<circle class="dashboard-chart-marker" cx="${salesPoint.x}" cy="${salesPoint.y}" r="5" fill="var(--walmart-blue)"/><circle class="dashboard-chart-marker" cx="${spendPoint.x}" cy="${spendPoint.y}" r="5" fill="var(--spark-yellow)"/><circle class="dashboard-chart-marker" cx="${ordersPoint.x}" cy="${ordersPoint.y}" r="5" fill="#2bb673"/>`;
+        tooltip.innerHTML = `<strong>${recentFull(row.date)}</strong><div class="sales-tooltip-row"><span>销售额</span><b>${money(row.revenue, 2)}</b></div><div class="sales-tooltip-row"><span>广告投入</span><b>${money(row.spend, 2)}</b></div><div class="sales-tooltip-row"><span>订单</span><b>${integer(row.orders)} 件</b></div>`;
+        const svgRect = svg.getBoundingClientRect();
+        const chartRect = chartBox.getBoundingClientRect();
+        const tooltipHalf = Math.min(108, Math.max(92, svgRect.width / 4));
+        const tooltipX = (svgRect.left - chartRect.left) + (salesPoint.x / width) * svgRect.width;
+        tooltip.style.left = `${Math.max(tooltipHalf, Math.min(chartBox.clientWidth - tooltipHalf, tooltipX))}px`;
+        tooltip.classList.add("show");
+        hitTarget.setAttribute("aria-valuenow", String(activeIndex + 1));
+        hitTarget.setAttribute("aria-valuetext", `${recentFull(row.date)}，销售额 ${money(row.revenue, 2)}，广告投入 ${money(row.spend, 2)}，订单 ${integer(row.orders)} 件`);
+      };
+      const hidePoint = () => { crosshair.hidden = true; markers.innerHTML = ""; tooltip.classList.remove("show"); };
+      const indexFromPointer = (event) => {
+        const rect = svg.getBoundingClientRect();
+        const pointerX = (event.clientX - rect.left) / rect.width * width;
+        return sales.reduce((nearest, point, index) => (Math.abs(point.x - pointerX) < Math.abs(sales[nearest].x - pointerX) ? index : nearest), 0);
+      };
+      hitTarget.addEventListener("pointermove", (event) => showPoint(indexFromPointer(event)));
+      hitTarget.addEventListener("pointerdown", (event) => showPoint(indexFromPointer(event)));
+      hitTarget.addEventListener("pointerleave", () => { if (document.activeElement !== hitTarget) hidePoint(); });
+      hitTarget.addEventListener("focus", () => showPoint(activeIndex));
+      hitTarget.addEventListener("blur", hidePoint);
+      hitTarget.addEventListener("keydown", (event) => {
+        if (["ArrowLeft", "ArrowRight", "Home", "End", "Escape"].includes(event.key)) event.preventDefault();
+        if (event.key === "ArrowLeft") showPoint(activeIndex - 1);
+        if (event.key === "ArrowRight") showPoint(activeIndex + 1);
+        if (event.key === "Home") showPoint(0);
+        if (event.key === "End") showPoint(rows.length - 1);
+        if (event.key === "Escape") hidePoint();
+      });
+    }
+
+    function renderRecentTable(rows) {
+      const body = $("#recentTableBody");
+      if (!rows.length) { body.innerHTML = emptyRow(16, "没有每日明细", "请检查时间窗口或导入订单 / 自动广告数据。"); return; }
+      const pageRows = [...rows].reverse();
+      body.innerHTML = pageRows.map((row) => {
+        const orders = number(row.orders) || 0, adOrders = number(row.adOrders) || 0;
+        const spend = number(row.spend) || 0;
+        return `<tr>
+        <td>${weekdayCN(row.date)}</td>
+        <td>${recentShort(row.date)}</td>
+        <td class="num">${integer(row.orders)}</td>
+        <td class="num">${money(row.revenue, 2)}</td>
+        <td class="num">${money(row.avgOrderValue, 2)}</td>
+        <td class="num">${integer(row.impressions)}</td>
+        <td class="num">${integer(row.clicks)}</td>
+        <td class="num">${money(row.spend, 2)}</td>
+        <td class="num">${integer(row.adOrders)}</td>
+        <td class="num">${percent(row.ctr, 2)}</td>
+        <td class="num">${money(row.cpc, 2)}</td>
+        <td class="num">${percent(row.conversionRate, 2)}</td>
+        <td class="num">${percent(row.adOrderRatio, 0)}</td>
+        <td class="num">${money(spend / orders, 2)}</td>
+        <td class="num">${money(spend / adOrders, 2)}</td>
+        <td class="num">${integer(row.naturalOrders)}</td>
+      </tr>`;
+      }).join("");
+    }
+
+    function renderStyleSales() {
+      const data = state.styleSales;
+      if (!data) return;
+      const s = data;
+      const days = Math.max(1, s.days);
+      const head = s.ranking[0];
+      $("#stylesMetricGrid").innerHTML = [
+        recentCard("在售款数", integer(s.ranking.length), "窗口内有销量", recIcon.orders),
+        recentCard("窗口总销量", `${integer(s.grandTotal)} 件`, "累计销量件数", recIcon.revenue),
+        recentCard("日均销量", `${integer(s.grandTotal / days)} 件`, "总量 / 天数", recIcon.clicks),
+        recentCard("头部款占比", percent(head ? head.share : 0, 0), head ? `Top1 ${head.style}` : "—", recIcon.roas),
+      ].join("");
+      renderStyleTrend(s.dates, s.topStyles, s.series);
+      renderStyleRanking(s.ranking);
+      renderStylePivot(s);
+    }
+
+    const STYLE_PALETTE = ["#4f9bff", "#ffc043", "#2bb673", "#b07cff", "#ff7a8a", "#27c2c2", "#ffa14a", "#7c8cff", "#9bd64a", "#ff6fae", "#5ad1e6", "#d3a15a"];
+
+    // 原始「每日各品名销量」表的列序（与 Excel 一致）
+    const STYLE_ORDER = ["PNK366066", "PNK369006", "PNK360368", "PNK36884", "PNK366074", "PNK366075", "PNK368006", "PNK363127", "PNK366076", "PNK366077", "PNK366078", "PNK366079", "PNK0079", "PNK366080", "PNK366082", "PNK366083", "PNK366084"];
+    const STYLE_IMG_EXT = { PNK369006: "jpeg", PNK360368: "jpeg", PNK36884: "jpeg", PNK366074: "jpeg", PNK366075: "jpeg", PNK368006: "jpeg", PNK363127: "png", PNK366076: "jpeg", PNK366077: "jpeg", PNK366078: "jpeg", PNK366079: "jpeg", PNK0079: "jpeg", PNK366080: "jpeg", PNK366084: "jpeg" };
+    const styleImgUrl = (st) => `/img/styles/${st}.${(STYLE_IMG_EXT[st] || "jpeg")}`;
+    // 产品主图：优先用产品库真实商品图（Walmart CDN），未加载/缺失时回退到本地 DISPIMG 缩图
+    function stylePrimaryImg(st) {
+      const list = state.products?.products || [];
+      const p = list.find((x) => x.parentSku === st);
+      return (p && p.imageUrl) ? p.imageUrl : styleImgUrl(st);
+    }
+    // 统一的缩图 <img>：CDN 失败自动回退本地；URL 转义便于放进属性
+    function thumbImg(cls, st) {
+      const primary = (stylePrimaryImg(st) || "").replace(/&/g, "&amp;");
+      const fallback = styleImgUrl(st);
+      return `<img class="${cls}" src="${primary}" alt="${escapeHtml(st)}" loading="lazy" onerror="this.onerror=null;this.src='${fallback}'"/>`;
+    }
+    const weekdayCN = (dateStr) => { const d = new Date(dateStr); if (isNaN(d)) return ""; return "日一二三四五六".charAt(d.getDay()).replace(/(.)/, "周$1"); };
+
+    function renderStyleTrend(dates, topStyles, series) {
+      const chartBox = $("#stylesTrendChart");
+      if (!dates.length || !topStyles.length) { chartBox.innerHTML = `<div class="empty-state"><strong>没有销量数据</strong>请检查时间窗口或导入订单数据。</div>`; return; }
+      const N = dates.length;
+      const boxCs = getComputedStyle(chartBox);
+      const innerWidth = (chartBox.clientWidth || 620) - parseFloat(boxCs.paddingLeft) - parseFloat(boxCs.paddingRight);
+      const width = Math.max(360, Math.round(innerWidth)), height = 280, left = 46, right = 16, top = 16, bottom = 30;
+      const plotW = width - left - right, plotH = height - top - bottom;
+      const totals = new Array(N).fill(0);
+      topStyles.forEach((st) => (series[st] || []).forEach((v, i) => { totals[i] += v; }));
+      const maxTotal = Math.max(...totals, 1) * 1.1;
+      const xFor = (i) => left + (N === 1 ? plotW / 2 : i * plotW / (N - 1));
+      const yFor = (v) => top + plotH - (v / maxTotal) * plotH;
+      const lower = new Array(N).fill(0);
+      let areasSvg = "";
+      topStyles.forEach((st, si) => {
+        const color = STYLE_PALETTE[si % STYLE_PALETTE.length];
+        const upper = new Array(N);
+        for (let i = 0; i < N; i++) upper[i] = lower[i] + ((series[st] || [])[i] || 0);
+        let d = "";
+        for (let i = 0; i < N; i++) d += (i ? "L" : "M") + xFor(i).toFixed(1) + "," + yFor(upper[i]).toFixed(1);
+        for (let i = N - 1; i >= 0; i--) d += "L" + xFor(i).toFixed(1) + "," + yFor(lower[i]).toFixed(1);
+        d += "Z";
+        areasSvg += `<path d="${d}" fill="${color}" fill-opacity="0.78" stroke="${color}" stroke-width="1" stroke-opacity="0.85"/>`;
+        for (let i = 0; i < N; i++) lower[i] = upper[i];
+      });
+      const grid = [0, 0.5, 1].map((t) => {
+        const y = top + plotH * t;
+        return `<line class="chart-grid-line" x1="${left}" x2="${left + plotW}" y1="${y}" y2="${y}"/><text class="chart-axis-label" x="${left - 8}" y="${y + 3}" text-anchor="end">${integer(maxTotal * (1 - t))}</text>`;
+      }).join("");
+      const labelEvery = Math.max(1, Math.ceil(N / 7));
+      const xlabels = dates.map((dd, i) => (i % labelEvery === 0 || i === N - 1) ? `<text class="chart-axis-label" x="${xFor(i)}" y="${height - 9}" text-anchor="middle">${recentShort(dd)}</text>` : "").join("");
+      chartBox.innerHTML = `<svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" role="img" aria-label="各款每日销量堆叠面积图">${grid}${areasSvg}${xlabels}</svg>`;
+      $("#stylesTrendLegend").innerHTML = topStyles.map((st, si) => `<span class="legend-item"><span class="legend-dot" style="background:${STYLE_PALETTE[si % STYLE_PALETTE.length]}"></span>${escapeHtml(st)}</span>`).join("");
+    }
+
+    function renderStyleRanking(ranking) {
+      const box = $("#stylesRankList");
+      if (!ranking.length) { box.innerHTML = `<div class="empty-state"><strong>没有销量数据</strong>请检查时间窗口或导入订单数据。</div>`; return; }
+      const max = ranking[0].totalQty || 1;
+      box.innerHTML = ranking.slice(0, 20).map((r) => `<div class="rank-row"><div class="rank-head">${thumbImg("rank-thumb", r.style)}<span class="rank-name">${escapeHtml(r.style)}</span><span class="rank-meta">${integer(r.totalQty)} 件 · ${percent(r.share, 1)}</span></div><div class="rank-bar-track"><div class="rank-bar-fill" style="width:${(r.totalQty / max * 100).toFixed(1)}%"></div></div></div>`).join("");
+    }
+
+    function renderStylePivot(s) {
+      const head = $("#stylesPivotHead");
+      const body = $("#stylesPivotBody");
+      const foot = $("#stylesPivotFoot");
+      if (!s.dates.length || !s.series || !Object.keys(s.series).length) {
+        head.innerHTML = ""; body.innerHTML = emptyRow(2, "没有各款销量数据", "请检查时间窗口或导入订单数据。"); foot.innerHTML = ""; return;
+      }
+      const styles = STYLE_ORDER.filter((st) => s.series[st]);
+      const N = s.dates.length;
+      head.innerHTML = `<th class="pivot-corner">日期</th>` + styles.map((st) => `<th class="pivot-col-head"><div class="pivot-col-inner">${thumbImg("pivot-thumb", st)}<span>${escapeHtml(st)}</span></div></th>`).join("") + `<th class="pivot-total-head num">合计</th>`;
+      const colTotals = styles.map(() => 0);
+      let grand = 0;
+      body.innerHTML = s.dates.map((d, i) => {
+        let rowTotal = 0;
+        const cells = styles.map((st, k) => {
+          const v = (s.series[st] || [])[i] || 0;
+          rowTotal += v; colTotals[k] += v;
+          return `<td class="num">${v ? integer(v) : integer(0)}</td>`;
+        }).join("");
+        grand += rowTotal;
+        return `<tr><td class="pivot-row-head">${recentShort(d)}</td>${cells}<td class="num pivot-total">${integer(rowTotal)}</td></tr>`;
+      }).join("");
+      foot.innerHTML = `<td class="pivot-row-head">合计</td>` + colTotals.map((v) => `<td class="num pivot-total">${integer(v)}</td>`).join("") + `<td class="num pivot-total">${integer(grand)}</td>`;
+    }
+
+    function renderAdProducts() {
+      const data = state.adProducts;
+      if (!data) return;
+      const s = data.summary;
+      $("#adsMetricGrid").innerHTML = [
+        recentCard("广告费", money(s.totalSpend, 2), "窗口累计", recIcon.spend, true),
+        recentCard("归因销售", money(s.totalSales, 2), "广告带来 GMV", recIcon.revenue),
+        recentCard("RoAS", ratio(s.roas), "销售 / 广告费", recIcon.roas),
+        recentCard("ACOS", percent(s.acos, 1), "广告费 / 销售", recIcon.spend, true),
+        recentCard("广告订单", integer(s.totalOrders), "归因订单", recIcon.orders),
+        recentCard("曝光量", integer(s.totalImpressions), "窗口累计", recIcon.impressions),
+      ].join("");
+      // 广告产品明细表固定显示「最新一天」；汇总卡片/条形/散点仍用窗口聚合
+      const detail = (state.adProductsLatestDay && state.adProductsLatestDay.products) ? state.adProductsLatestDay : data;
+      const detailDay = (state.adProductsLatestDay && state.adProductsLatestDay.latest) ? state.adProductsLatestDay.end : null;
+      const sub = $("#adsDetailSubtitle");
+      if (sub) sub.textContent = detailDay ? `最新一天（${detailDay}）· 按广告费降序` : "按广告费降序，父 SKU 级聚合";
+      renderAdBars(data.products);
+      renderAdScatter(data.products);
+      renderAdTable(detail.products);
+    }
+
+    function renderAdBars(products) {
+      const box = $("#adsBarList");
+      if (!products.length) { box.innerHTML = `<div class="empty-state"><strong>没有广告数据</strong>请检查时间窗口或导入广告数据。</div>`; return; }
+      const max = Math.max(...products.map((p) => p.sales), 1);
+      box.innerHTML = products.slice(0, 15).map((p) => `<div class="rank-row"><div class="rank-head"><span class="rank-name">${escapeHtml(p.style)}</span><span class="rank-meta">${money(p.sales, 0)} · RoAS ${ratio(p.roas)}</span></div><div class="rank-bar-track"><div class="rank-bar-fill sales" style="width:${(p.sales / max * 100).toFixed(1)}%"></div></div></div>`).join("");
+    }
+
+    function renderAdScatter(products) {
+      const chartBox = $("#adsScatterChart");
+      const pts = products.filter((p) => p.spend > 0 && p.sales > 0);
+      if (!pts.length) { chartBox.innerHTML = `<div class="empty-state"><strong>没有广告数据</strong>请检查时间窗口或导入广告数据。</div>`; return; }
+      const boxCs = getComputedStyle(chartBox);
+      const innerWidth = (chartBox.clientWidth || 620) - parseFloat(boxCs.paddingLeft) - parseFloat(boxCs.paddingRight);
+      const width = Math.max(360, Math.round(innerWidth)), height = 300, left = 54, right = 16, top = 16, bottom = 36;
+      const plotW = width - left - right, plotH = height - top - bottom;
+      const maxSpend = Math.max(...pts.map((p) => p.spend), 1) * 1.12;
+      const maxSales = Math.max(...pts.map((p) => p.sales), 1) * 1.12;
+      const maxOrders = Math.max(...pts.map((p) => p.orders), 1);
+      const xFor = (v) => left + (v / maxSpend) * plotW;
+      const yFor = (v) => top + plotH - (v / maxSales) * plotH;
+      const rFor = (o) => 4 + Math.sqrt(o / maxOrders) * 12;
+      const hgrid = [0, 0.5, 1].map((t) => {
+        const y = top + plotH * t;
+        return `<line class="chart-grid-line" x1="${left}" x2="${left + plotW}" y1="${y}" y2="${y}"/><text class="chart-axis-label" x="${left - 8}" y="${y + 3}" text-anchor="end">${money(maxSales * (1 - t), 0)}</text>`;
+      }).join("");
+      const vgrid = [0, 0.5, 1].map((t) => {
+        const x = left + plotW * t;
+        return `<line class="chart-grid-line" x1="${x}" x2="${x}" y1="${top}" y2="${top + plotH}"/><text class="chart-axis-label" x="${x}" y="${height - 16}" text-anchor="middle">${money(maxSpend * t, 0)}</text>`;
+      }).join("");
+      const circles = pts.map((p) => `<circle cx="${xFor(p.spend).toFixed(1)}" cy="${yFor(p.sales).toFixed(1)}" r="${rFor(p.orders).toFixed(1)}" fill="var(--spark-yellow)" fill-opacity="0.55" stroke="var(--spark-yellow)" stroke-opacity="0.9"><title>${escapeHtml(p.style)}：广告费 ${money(p.spend, 0)} / 归因销售 ${money(p.sales, 0)} / RoAS ${ratio(p.roas)}</title></circle>`).join("");
+      chartBox.innerHTML = `<svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" role="img" aria-label="广告费与归因销售散点图">${hgrid}${vgrid}${circles}<text class="chart-axis-label" x="${left + plotW / 2}" y="${height - 3}" text-anchor="middle">广告费 (USD)</text></svg>`;
+    }
+
+    function renderAdTable(products) {
+      const body = $("#adsTableBody");
+      if (!products.length) { body.innerHTML = emptyRow(11, "没有广告产品明细", "请检查时间窗口或导入广告数据。"); return; }
+      body.innerHTML = products.map((p) => `<tr>
+        <td class="ad-product-cell">${thumbImg("ad-thumb", p.style)}<span class="ad-style">${escapeHtml(p.style)}</span></td>
+        <td class="num">${money(p.spend, 2)}</td>
+        <td class="num">${money(p.sales, 2)}</td>
+        <td class="num">${ratio(p.roas)}</td>
+        <td class="num">${percent(p.acos, 1)}</td>
+        <td class="num">${integer(p.orders)}</td>
+        <td class="num">${integer(p.clicks)}</td>
+        <td class="num">${integer(p.impressions)}</td>
+        <td class="num">${percent(p.ctr, 2)}</td>
+        <td class="num">${money(p.cpc, 2)}</td>
+        <td class="num">${percent(p.conversionRate, 2)}</td>
+      </tr>`).join("");
+    }
+
     function renderSkuSummary() {
       const rows = groupAggregate(DATA.skuDaily, "sku", state.periodDays).sort((a, b) => b.revenue - a.revenue);
       const maxRevenue = Math.max(...rows.map((row) => row.revenue), 1);
@@ -2967,11 +3566,56 @@
       $("#skuCount").textContent = integer(rows.filter((row) => row.orders || row.spend).length);
     }
 
-    function campaignRows() {
-      return groupAggregate(DATA.campaignDaily, "campaign", state.periodDays).map((row) => ({ ...row, decision: decide(row) })).sort((a, b) => {
-        const rank = { reduce: 0, scale: 1, optimize: 2, collect: 3 };
-        return rank[a.decision] - rank[b.decision] || b.spend - a.spend;
+    function applyDecisionConfigToForm() {
+      const cfg = decisionConfigCache[decisionConfigType] || { targetRoas: 3, floorRoas: 1.5, minClicks: 20, minSpend: 10 };
+      $("#targetRoas").value = cfg.targetRoas;
+      $("#floorRoas").value = cfg.floorRoas;
+      $("#minClicks").value = cfg.minClicks;
+      $("#minSpend").value = cfg.minSpend;
+      $$('[data-decision-type]').forEach((button) => {
+        button.classList.toggle("active", button.dataset.decisionType === decisionConfigType);
       });
+    }
+
+    async function loadDecisionConfig() {
+      try {
+        const response = await fetch("/api/decision/config");
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const payload = await response.json();
+        (payload.data || []).forEach((cfg) => { decisionConfigCache[cfg.campaignType] = cfg; });
+      } catch (error) {
+        showToast("无法读取决策阈值配置，使用默认值。");
+      }
+      applyDecisionConfigToForm();
+    }
+
+    async function saveDecisionConfig() {
+      const cfg = {
+        campaignType: decisionConfigType,
+        targetRoas: number($("#targetRoas").value),
+        floorRoas: number($("#floorRoas").value),
+        minClicks: number($("#minClicks").value),
+        minSpend: number($("#minSpend").value),
+      };
+      try {
+        const response = await fetch("/api/decision/config", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(cfg),
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const payload = await response.json();
+        decisionConfigCache[decisionConfigType] = payload.data;
+        state.thresholds.targetRoas = cfg.targetRoas;
+        state.thresholds.floorRoas = cfg.floorRoas;
+        state.thresholds.minClicks = cfg.minClicks;
+        state.thresholds.minSpend = cfg.minSpend;
+      } catch (error) {
+        showToast("保存失败，请稍后重试。");
+        return;
+      }
+      renderAll();
+      showToast(`${decisionConfigType} 决策阈值已保存并即时生效。`);
     }
 
     function diagnosisRange() {
@@ -3234,12 +3878,21 @@
       $("#skuRanking").innerHTML = priority.map((row) => `<div class="matrix-list-row"><div><strong>${escapeHtml(row.sku)}</strong><span>${decisionCopy[row.decision].label} · ${integer(row.orders)} 单 · 花费 ${money(row.spend, 2)}</span></div><div class="mono">${ratio(row.roas)}</div></div>`).join("");
     }
 
-    function renderAgent() {
-      const rows = campaignRows();
-      const counts = { scale: 0, reduce: 0, optimize: 0, collect: 0 };
-      rows.forEach((row) => counts[row.decision]++);
-      $("#runSubtitle").textContent = `${analysisPeriodLabel()} 分析范围。`;
-      $("#runSummary").innerHTML = `<div class="run-stat"><strong>${counts.scale}</strong><span>建议放量</span></div><div class="run-stat"><strong>${counts.reduce}</strong><span>建议降耗</span></div><div class="run-stat"><strong>${counts.optimize}</strong><span>继续优化</span></div>`;
+    async function renderAgent() {
+      let data;
+      try {
+        const response = await fetch(`/api/decision/analysis?periodDays=${state.periodDays}`);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const payload = await response.json();
+        data = payload.data;
+      } catch (error) {
+        $("#runLog").innerHTML = `<div class="empty-state"><strong>无法加载决策结果</strong>后端服务异常，请稍后重试。</div>`;
+        return;
+      }
+      const rows = data.rows || [];
+      const summary = data.summary || { scale: 0, reduce: 0, optimize: 0, collect: 0 };
+      $("#runSubtitle").textContent = `${data.rangeStart} 至 ${data.rangeEnd}（${data.periodDays} 天）分析范围。`;
+      $("#runSummary").innerHTML = `<div class="run-stat"><strong>${summary.scale}</strong><span>建议放量</span></div><div class="run-stat"><strong>${summary.reduce}</strong><span>建议降耗</span></div><div class="run-stat"><strong>${summary.optimize}</strong><span>继续优化</span></div>`;
       const samples = rows.filter((row) => row.decision !== "collect").slice(0, 5);
       $("#runLog").innerHTML = samples.map((row, index) => `<div class="log-row"><span class="log-time">RULE-${String(index + 1).padStart(2, "0")}</span><span class="log-copy"><strong>${escapeHtml(row.sku || row.campaign)}</strong>：${decisionCopy[row.decision].reason}</span><span class="status-badge ${row.decision}">${decisionCopy[row.decision].short}</span></div>`).join("") || `<div class="empty-state"><strong>没有触发动作规则</strong>分析已完成，当前仅保留观察项。</div>`;
     }
@@ -3277,7 +3930,8 @@
         salesMetricCard("动销 SKU", `${integer(summary.activeSkus)} / ${integer(summary.knownSkus)}`, summary.activeSkuChangePct, `动销率 ${percent(summary.activeRate)}`),
         salesMetricCard("订单数", integer(summary.orders), summary.ordersChangePct, `${integer(summary.activeParents)} 个活跃款号`),
       ].join("");
-      renderSalesTrend(state.sales.daily, meta.sampleDays);
+      const trendRows = (state.sales.trendDaily && state.sales.trendDaily.length) ? state.sales.trendDaily : state.sales.daily;
+      renderSalesTrend(trendRows, trendRows.length);
       renderSalesRanking();
       const dimensionSkuRows = productLibrarySkuRows();
       renderSalesDimensions(aggregateSalesDimensions(dimensionSkuRows, true), "#salesColorList");
@@ -3768,7 +4422,7 @@
     }
 
     function renderInventoryRisk(counts, total) {
-      const ordered = ["OUT_OF_STOCK", "URGENT", "LOW", "WATCH", "REPLENISH", "OVERSTOCK", "NO_DEMAND", "HEALTHY"];
+      const ordered = ["OUT_OF_STOCK", "URGENT", "LOW", "WATCH", "REPLENISH", "OVERSTOCK", "NO_DEMAND", "NOT_LAUNCHED", "HEALTHY"];
       const max = Math.max(...ordered.map((key) => number(counts[key])), 1);
       $("#inventoryRiskList").innerHTML = ordered.map((key) => {
         const copy = inventoryRiskCopy[key];
@@ -3927,6 +4581,33 @@
       });
     }
 
+    // 有搜索词时返回匹配到的款号(parentSku)集合；无搜索词返回 null（表示不过滤）。
+    // 字段与 inventoryFilteredRows 保持一致，确保"清单级过滤"与"明细级过滤"口径统一。
+    function inventoryMatchedParentSkus() {
+      const query = (state.inventorySearch || "").trim();
+      if (!query) return null;
+      const productParents = new Set((state.products?.products || []).map((p) => p.parentSku).filter(Boolean));
+      const sourceRows = productParents.size === 0
+        ? state.inventory.rows
+        : state.inventory.rows.filter((r) => productParents.has(r.parentSku));
+      const matched = new Set();
+      for (const row of sourceRows) {
+        if (fuzzySearchMatches(
+          query, row.sku, row.parentSku, row.itemId, row.itemName,
+          row.status, row.publishingStatus, row.itemLifecycle, row.productionNote
+        )) matched.add(row.parentSku || "—");
+      }
+      return matched;
+    }
+
+    // 更新搜索计数标签：有搜索词显示"找到 N 个款号"，无词清空
+    function updateInventorySearchCount(visibleCount) {
+      const el = $("#inventorySearchCount");
+      if (!el) return;
+      const query = (state.inventorySearch || "").trim();
+      el.textContent = query ? `找到 ${visibleCount} 个款号` : "";
+    }
+
     function inventoryStyleSystemRisk(totalAvailable, totalSupply, totalForecastDaily, forecastSuggested, targetDays = state.inventoryTargetDays) {
       if (totalAvailable <= 0) return "OUT_OF_STOCK";
       if (totalForecastDaily <= 0) return "NO_DEMAND";
@@ -3940,7 +4621,7 @@
     }
 
     function renderInventoryByStyle(rows) {
-      const riskOrder = ["OUT_OF_STOCK", "URGENT", "LOW", "WATCH", "REPLENISH", "OVERSTOCK", "NO_DEMAND", "HEALTHY"];
+      const riskOrder = ["OUT_OF_STOCK", "URGENT", "LOW", "WATCH", "REPLENISH", "OVERSTOCK", "NO_DEMAND", "NOT_LAUNCHED", "HEALTHY"];
       const productParents = new Set((state.products?.products || []).map((p) => p.parentSku).filter(Boolean));
       const sourceRows = productParents.size === 0 ? rows : rows.filter((r) => productParents.has(r.parentSku));
       const sum = (skus, field) => skus.reduce((acc, r) => acc + number(r[field]), 0);
@@ -3950,14 +4631,28 @@
         if (!groups.has(key)) groups.set(key, []);
         groups.get(key).push(row);
       }
+      // 搜索词命中时，仅在清单级保留匹配的款号（之前搜索只在展开后的明细里生效，顶层款号纹丝不动）
+      const matchedParents = inventoryMatchedParentSkus();
+      if (matchedParents) {
+        for (const key of [...groups.keys()]) {
+          if (!matchedParents.has(key)) groups.delete(key);
+        }
+      }
       const body = $("#inventoryByStyleBody");
       if (!groups.size) {
-        const emptyHint = productParents.size === 0
-          ? "扫描导入库存文件后，这里会展示款号汇总。"
-          : "当前仅展示产品库中已经匹配的款号，其余款号不展示。";
-        body.innerHTML = emptyRow(11, "没有库存数据", emptyHint);
+        let emptyTitle = "没有库存数据", emptyHint;
+        if (matchedParents) {
+          emptyTitle = "没有匹配的款号";
+          emptyHint = "试试更短的关键词，如 6066、PNK，或商品名片段。";
+        } else if (productParents.size === 0) {
+          emptyHint = "扫描导入库存文件后，这里会展示款号汇总。";
+        } else {
+          emptyHint = "当前仅展示产品库中已经匹配的款号，其余款号不展示。";
+        }
+        body.innerHTML = emptyRow(11, emptyTitle, emptyHint);
         updateByStyleSortIndicators();
         updateByStyleDetailSortIndicators();
+        updateInventorySearchCount(0);
         return;
       }
       const aggregates = [...groups.entries()].map(([parentSku, skus]) => {
@@ -3970,14 +4665,27 @@
         const fcSuggest = sum(skus, "forecastSuggestedUnits");
         const productionSuggest = sum(skus, "productionSuggestedUnits");
         const domesticShipment = sum(skus, "domesticShipmentUnits");
-        const systemRisk = inventoryStyleSystemRisk(totalAvailable, totalStock, totalForecastDaily, fcSuggest);
-        const outOfStockSkuCount = skus.filter((row) => number(row.availableUnits) <= 0).length;
+        // 新品判定：该父款下所有 SKU 均未被开售（后端已对「无销量且缺货」标为 NOT_LAUNCHED），
+        // 则父款整体视为「新品待开售」，不再按库存量误判为缺货。
+        const allNew = skus.length > 0 && skus.every((r) => r.risk === "NOT_LAUNCHED");
+        const systemRisk = allNew ? "NOT_LAUNCHED" : inventoryStyleSystemRisk(totalAvailable, totalStock, totalForecastDaily, fcSuggest);
+        const outOfStockSkuCount = allNew ? 0 : skus.filter((row) => number(row.availableUnits) <= 0).length;
         const projected = totalForecastDaily > 0 ? totalStock / totalForecastDaily : null;
         return { parentSku, skus, totalAvailable, totalTransit, totalStock, totalRecent, totalForecastDaily, fcSuggest, productionSuggest, domesticShipment, production, systemRisk, outOfStockSkuCount, projected };
       });
+      // 风险筛选：按父款级 systemRisk 过滤父款（让顶部筛选按钮对款号本身生效，不只子表）
+      const risks = state.inventoryRisk === "all" ? null : state.inventoryRisk.split(",");
+      const visible = risks ? aggregates.filter((g) => risks.includes(g.systemRisk)) : aggregates;
+      if (!visible.length) {
+        body.innerHTML = emptyRow(11, "没有匹配的款号", "当前筛选条件下没有款号，换个风险类型或清除搜索试试。");
+        updateByStyleSortIndicators();
+        updateByStyleDetailSortIndicators();
+        updateInventorySearchCount(0);
+        return;
+      }
       const { key, dir } = state.inventoryByStyleSort;
       const riskIndex = (k) => riskOrder.indexOf(k);
-      aggregates.sort((a, b) => {
+      visible.sort((a, b) => {
         if (key === "parentSku") {
           const compared = compareStyleNo(a.parentSku, b.parentSku);
           return dir === "asc" ? compared : -compared;
@@ -3987,7 +4695,7 @@
         else { av = number(a[key]); bv = number(b[key]); }
         return dir === "asc" ? av - bv : bv - av;
       });
-      const html = aggregates.map((g) => {
+      const html = visible.map((g) => {
         const { parentSku, skus, totalAvailable, totalTransit, totalStock, totalRecent, projected, fcSuggest, productionSuggest, domesticShipment, production, systemRisk, outOfStockSkuCount } = g;
         const risk = inventoryRiskCopy[systemRisk] || inventoryRiskCopy.HEALTHY;
         const rep = skus[0];
@@ -4030,7 +4738,7 @@
           <td class="num">${integer(totalStock)}</td>
           <td class="num">${integer(totalRecent)}</td>
           <td class="num">${projected != null ? projected.toFixed(1) : "—"}</td>
-          <td class="num">${integer(fcSuggest)}</td>
+          <td class="num fc-suggest-jump" title="点击跳转到需求分析" data-jump-workbench="${escapeHtml(parentSku)}">${integer(fcSuggest)}</td>
           <td class="num">${integer(productionSuggest)}</td>
           <td class="num">${integer(production)}</td>
           <td><button class="table-link bystyle-toggle-btn" type="button" data-parent="${escapeHtml(parentSku)}">${expanded ? "收起" : "展开"}</button></td>
@@ -4044,10 +4752,10 @@
                 <th class="num bystyle-detail-sortable" data-sort="recentUnits">近期销量<span class="bystyle-detail-sort-ind"></span></th>
                 <th class="num bystyle-detail-sortable" data-sort="forecastDailyUnits">预测日均<span class="bystyle-detail-sort-ind"></span></th>
                 <th class="num bystyle-detail-sortable" data-sort="availableUnits">可售<span class="bystyle-detail-sort-ind"></span></th>
-                <th class="num bystyle-detail-sortable" data-sort="productionUnits">做货<span class="bystyle-detail-sort-ind"></span></th>
+                <th class="num bystyle-detail-sortable" data-sort="productionUnits" title="数值由「需求分析 60 天计划」回写覆盖（裁床取整后做货量）；未覆盖 SKU 回落本地快捷算法">做货<span class="bystyle-detail-sort-ind"></span></th>
                 <th class="num bystyle-detail-sortable" data-sort="transitUnits">路途<span class="bystyle-detail-sort-ind"></span></th>
-                <th class="num bystyle-detail-sortable" data-sort="forecastSuggestedUnits">预测建议补货<span class="bystyle-detail-sort-ind"></span></th>
-                <th class="num bystyle-detail-sortable" data-sort="productionSuggestedUnits">裁床建议做货<span class="bystyle-detail-sort-ind"></span></th>
+                <th class="num bystyle-detail-sortable" data-sort="forecastSuggestedUnits" title="数值由「需求分析 60 天计划」回写覆盖；未覆盖 SKU 回落本地快捷算法">预测建议补货<span class="bystyle-detail-sort-ind"></span></th>
+                <th class="num bystyle-detail-sortable" data-sort="productionSuggestedUnits" title="数值由「需求分析 60 天计划」回写覆盖（裁床取整后）；未覆盖 SKU 回落本地快捷算法">裁床建议做货<span class="bystyle-detail-sort-ind"></span></th>
                 <th class="num bystyle-detail-sortable" data-sort="projectedDaysSupply">预测可售天数<span class="bystyle-detail-sort-ind"></span></th>
               </tr></thead>
               <tbody>${detailRows}</tbody>
@@ -4056,6 +4764,7 @@
         </tr>`;
       }).join("");
       body.innerHTML = html;
+      updateInventorySearchCount(groups.size);
       updateByStyleSortIndicators();
       updateByStyleDetailSortIndicators();
       body.querySelectorAll(".bystyle-detail-sortable").forEach((th) => {
@@ -4080,6 +4789,26 @@
           if (detailRow) detailRow.classList.toggle("collapsed");
           if (caret) caret.classList.toggle("open");
           if (btn) btn.textContent = isOpen ? "展开" : "收起";
+        });
+      });
+      body.querySelectorAll("[data-jump-workbench]").forEach((el) => {
+        el.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const parent = el.dataset.jumpWorkbench;
+          if (!parent) return;
+          state.forecastWorkbenchFilter = "all";
+          state.forecastWorkbenchExpanded.add(parent);
+          switchView("demand-forecast");
+          renderDemandForecast();
+          requestAnimationFrame(() => {
+            const row = [...document.querySelectorAll("#forecastWorkbenchBody .forecast-style-row")]
+              .find((r) => r.dataset.style === parent);
+            if (row) {
+              row.scrollIntoView({ behavior: "smooth", block: "center" });
+              row.classList.add("flash-highlight");
+              setTimeout(() => row.classList.remove("flash-highlight"), 1600);
+            }
+          });
         });
       });
     }
@@ -4162,23 +4891,9 @@
       state.productPage = Math.min(state.productPage, totalPages - 1);
       const start = state.productPage * state.productPageSize;
       const pageRows = filtered.slice(start, start + state.productPageSize);
-      $("#productCatalogBody").innerHTML = pageRows.map((product) => {
-        const image = product.imageUrl
-          ? `<img class="product-thumb" src="${escapeHtml(product.imageUrl)}" alt="${escapeHtml(product.title || product.parentSku)}" loading="lazy">`
-          : `<span class="product-thumb" aria-hidden="true"></span>`;
-        return `<tr>
-          <td><div class="product-cell">${image}<div><span class="product-parent-sku"><span class="product-group-label">主体父款</span>${escapeHtml(product.parentSku)}</span>${productLifecycleTags(product)}</div></div></td>
-          <td class="num">${integer(product.variantCount)}</td>
-          <td class="num">${integer(product.colorCount)}</td>
-          <td class="num">${integer(product.sizeCount)}</td>
-          <td class="num">${product.price != null ? money(product.price, 2) : "—"}</td>
-          <td class="num">${product.deliveryFee != null ? money(product.deliveryFee, 2) : "—"}</td>
-          <td class="num">${profitText(product.profit, product.margin)}</td>
-          <td class="num"><span class="cutting-yield-box" tabindex="0" title="双击编辑：每个布色一床的总做货量；0 表示淘汰款" data-product-parent-cutting="${escapeHtml(product.parentSku)}">${product.cuttingYield != null ? product.cuttingYield : "—"}</span></td>
-          <td>${product.updatedAt ? new Date(product.updatedAt).toLocaleDateString("zh-CN") : "未知"}</td>
-          <td><div class="table-actions"><button class="table-link" type="button" data-product-parent="${escapeHtml(product.parentSku)}">查看详情</button><button class="table-link" type="button" data-operation-parent="${escapeHtml(product.parentSku)}">记操作</button></div></td>
-        </tr>`;
-      }).join("") || emptyRow(10, "没有匹配的产品组", "请清除搜索条件后重试。");
+      $("#productCatalogBody").innerHTML = pageRows.length
+        ? pageRows.map(productCard).join("")
+        : emptyGrid("没有匹配的产品组", "请清除搜索条件后重试。");
       $("#productTableCount").textContent = `${filtered.length.toLocaleString("zh-CN")} 条结果，当前显示 ${pageRows.length} 条`;
       $("#productPageText").textContent = `${state.productPage + 1} / ${totalPages}`;
       $("#productPrevPage").disabled = state.productPage === 0;
@@ -4234,6 +4949,37 @@
           });
         });
       });
+    }
+
+    function productCard(product) {
+      const image = product.imageUrl
+        ? `<img class="product-thumb" src="${escapeHtml(product.imageUrl)}" alt="${escapeHtml(product.title || product.parentSku)}" loading="lazy">`
+        : `<span class="product-thumb" aria-hidden="true"></span>`;
+      const cutting = `<span class="cutting-yield-box" tabindex="0" title="双击编辑：每个布色一床的总做货量；0 表示淘汰款" data-product-parent-cutting="${escapeHtml(product.parentSku)}">${product.cuttingYield != null ? product.cuttingYield : "—"}</span>`;
+      return `<article class="product-card">
+        <div class="product-card-head">
+          ${image}
+          <div class="product-card-id">
+            <span class="product-parent-sku"><span class="product-group-label">主体父款</span>${escapeHtml(product.parentSku)}</span>
+            ${productLifecycleTags(product)}
+          </div>
+        </div>
+        <dl class="product-card-metrics">
+          <div class="pc-metric"><dt>变体 SKU</dt><dd>${integer(product.variantCount)}</dd></div>
+          <div class="pc-metric"><dt>颜色组</dt><dd>${integer(product.colorCount)}</dd></div>
+          <div class="pc-metric"><dt>尺码</dt><dd>${integer(product.sizeCount)}</dd></div>
+          <div class="pc-metric"><dt>价格</dt><dd>${product.price != null ? money(product.price, 2) : "—"}</dd></div>
+          <div class="pc-metric"><dt>预估配送费</dt><dd>${product.deliveryFee != null ? money(product.deliveryFee, 2) : "—"}</dd></div>
+          <div class="pc-metric"><dt>测试毛利</dt><dd>${profitText(product.profit, product.margin)}</dd></div>
+          <div class="pc-metric"><dt>裁床数/布色</dt><dd>${cutting}</dd></div>
+          <div class="pc-metric"><dt>开售时间</dt><dd>${product.launchDate ? escapeHtml(product.launchDate) : "—"}</dd></div>
+          <div class="pc-metric pc-metric-wide"><dt>更新时间</dt><dd>${product.updatedAt ? new Date(product.updatedAt).toLocaleDateString("zh-CN") : "未知"}</dd></div>
+        </dl>
+        <div class="product-card-actions">
+          <button class="table-link" type="button" data-product-parent="${escapeHtml(product.parentSku)}">查看详情</button>
+          <button class="table-link" type="button" data-operation-parent="${escapeHtml(product.parentSku)}">记操作</button>
+        </div>
+      </article>`;
     }
 
     function rawFieldValue(value) {
@@ -4517,7 +5263,7 @@
     async function loadProducts() {
       if (state.productsLoading) return;
       state.productsLoading = true;
-      $("#productCatalogBody").innerHTML = emptyRow(9, "正在读取产品上传表", "请稍候。");
+      $("#productCatalogBody").innerHTML = emptyGrid("正在读取产品上传表", "请稍候。");
       try {
         const response = await fetch("/api/products/catalog");
         const payload = await response.json();
@@ -4534,10 +5280,15 @@
         if (state.view === "demand-forecast") renderDemandForecast();
         if (state.view === "inventory" && state.inventory) renderInventoryByStyle(state.inventory.rows);
         if (state.view === "sales" && state.sales) renderSales();
+        if (state.view === "recent") {
+          if (state.recent) renderRecent();
+          if (state.styleSales) renderStyleSales();
+          if (state.adProducts) renderAdProducts();
+        }
       } catch (error) {
         $("#productStatusHeadline").textContent = "产品资料读取失败";
         $("#productStatusDetail").textContent = error.message;
-        $("#productCatalogBody").innerHTML = emptyRow(9, "产品资料读取失败", escapeHtml(error.message));
+        $("#productCatalogBody").innerHTML = emptyGrid("产品资料读取失败", escapeHtml(error.message));
       } finally {
         state.productsLoading = false;
       }
@@ -4726,7 +5477,7 @@
     }
 
     function forecastRiskRank(risk) {
-      return ({ OUT_OF_STOCK: 0, URGENT: 1, LOW: 2, WATCH: 3, REPLENISH: 4, OVERSTOCK: 5, NO_DEMAND: 6, HEALTHY: 7 })[risk] ?? 8;
+      return ({ OUT_OF_STOCK: 0, URGENT: 1, LOW: 2, WATCH: 3, REPLENISH: 4, OVERSTOCK: 5, NO_DEMAND: 6, NOT_LAUNCHED: 7, HEALTHY: 8 })[risk] ?? 9;
     }
 
     function forecastInventoryCompleteness(row) {
@@ -4796,7 +5547,7 @@
           if (plan.forecastModel) g.forecastModels.add(plan.forecastModel);
         }
         if (number(r.availableUnits) <= 0) g.oosCount += 1;
-        if (fc > 0 && !["ALLOCATED", "PLANNED", "PARTIALLY_COVERED", "BED_NOT_COVERED", "MANUAL_REVIEW", "NOT_NEEDED", "CLEARANCE", "RETIRED", "NEW_NO_HISTORY"].includes(r.productionSuggestionStatus)) {
+        if (fc > 0 && !["ALLOCATED", "PLANNED", "PLANNED_LATE", "PARTIALLY_COVERED", "BED_NOT_COVERED", "MANUAL_REVIEW", "NOT_NEEDED", "CLEARANCE", "RETIRED", "NEW_NO_HISTORY"].includes(r.productionSuggestionStatus)) {
           g.productionConfigIssues += 1;
         }
         if (!g.itemName && r.itemName) g.itemName = r.itemName;
@@ -4978,8 +5729,18 @@
           <td class="num" data-label="做货库存"><strong>${integer(style.totalProduction)}</strong></td>
           <td class="num" data-label="供应中"><div class="forecast-cell-stack"><strong>国内仓发 ${integer(style.totalDomesticShipment)}</strong><span>做货中 ${integer(style.totalWip)}</span></div></td>
           <td class="num" data-label="覆盖与风险"><div class="forecast-cell-stack"><strong class="${riskClass === "critical" ? "danger" : ""}" title="${escapeHtml(style.expectedStockoutVariant?.sku || "")}">P50 ${escapeHtml(forecastStockoutLabel(style.expectedStockoutDate, style.expectedStockoutVariant))}</strong><span title="${escapeHtml(style.highRiskStockoutVariant?.sku || "")}">P90 ${escapeHtml(forecastStockoutLabel(style.highRiskStockoutDate, style.highRiskStockoutVariant))}</span></div></td>
-          <td class="num" data-label="系统判断"><div class="forecast-cell-stack"><strong>工厂做货 ${integer(style.totalProductionSuggested)}</strong><span>P90需求 ${integer(style.totalP90Demand)}</span><span>${escapeHtml([...style.forecastModels].join(" / ") || "待计算")}</span>${style.productionConfigIssues ? `<span class="danger">${integer(style.productionConfigIssues)} 个SKU待维护裁床资料</span>` : ""}</div></td>
-          <td class="num" data-label="人工最终决策"><div class="forecast-cell-stack"><span class="forecast-decision-value ${finalQuantity == null ? "empty" : ""}">${finalQuantity == null ? "尚未填写" : integer(finalQuantity)}</span><span class="forecast-mini-badge ${decisionMeta.className}">${decisionMeta.label}</span><button class="table-link forecast-open-decision" type="button" data-open-forecast-decision="${escapeHtml(style.parentSku)}">${style.decision ? "编辑决策" : "填写决策"}</button></div></td>
+          <td class="num fc-figure" data-label="预测建议补货">${integer(style.totalFc)}</td>
+          <td class="num" data-label="系统判断"><div class="forecast-cell-stack sys-judgment">
+            <div class="sj-row"><span class="sj-label">工厂做货</span><strong class="sj-value prod-figure">${integer(style.totalProductionSuggested)}<span class="unit">件</span></strong></div>
+            <div class="sj-row"><span class="sj-label">P90需求</span><span class="sj-value">${integer(style.totalP90Demand)}</span></div>
+            <div class="sj-row"><span class="sj-label">模型</span><span class="sj-value sj-model">${escapeHtml(shortModelName([...style.forecastModels].join(" / ") || "待计算"))}</span></div>
+            ${style.productionConfigIssues ? `<div class="sj-row sj-alert"><span class="sj-label">⚠ 裁床</span><span class="sj-value danger">${integer(style.productionConfigIssues)} 待维护</span></div>` : ""}
+          </div></td>
+          <td class="num" data-label="人工最终决策"><div class="forecast-cell-stack sys-judgment">
+            <div class="sj-row"><span class="sj-label">最终数量</span><span class="sj-value forecast-decision-value ${finalQuantity == null ? "empty" : ""}">${finalQuantity == null ? "尚未填写" : integer(finalQuantity) + " 件"}</span></div>
+            <div class="sj-row"><span class="sj-label">状态</span><span class="forecast-mini-badge ${decisionMeta.className}">${decisionMeta.label}</span></div>
+            <div class="sj-row"><span class="sj-label">操作</span><button class="table-link forecast-open-decision" type="button" data-open-forecast-decision="${escapeHtml(style.parentSku)}">${style.decision ? "编辑决策" : "填写决策"}</button></div>
+          </div></td>
         </tr>${detail}`;
       }).join("");
       $("#forecastWorkbenchCount").textContent = `显示 ${styles.length} 个款式，共 ${allStyles.length} 个款式`;
@@ -5006,6 +5767,7 @@
       return ({
         ALLOCATED: { label: "已按整床分配", className: "confirmed" },
         PLANNED: { label: "已计划做货", className: "confirmed" },
+        PLANNED_LATE: { label: "已计划做货·到货晚", className: "confirmed" },
         PARTIALLY_COVERED: { label: "本床未完全覆盖", className: "warning" },
         BED_NOT_COVERED: { label: "本床未覆盖", className: "warning" },
         MANUAL_REVIEW: { label: "需人工复核", className: "warning" },
@@ -5777,7 +6539,7 @@
 
         let resultsSheet = [["SKU", "FNSKU", "数量(计划上加减条码后的数量)", "验证", "右侧求和"]];
         let thirdSheet = [["父SKU"]];
-        let sumSheet = [["箱数", boxNoArrNo - 1], ["重量"], ["发货数量"], ["品名数量"]];
+        let sumSheet = [["箱数", boxNoArrNo - 1], ["重量"], ["每箱向上取整(1kg)重量和"], ["发货数量"], ["品名数量"]];
 
         for (let i = 0; i < boxNum; i++) {
           resultsSheet[0].push("箱" + (i + 1));
@@ -5863,9 +6625,11 @@
         }
 
         const spuNumStr = spuNum.map((a) => a.join("")).join("\n");
+        const sumWeightCeil = boxWeight.slice(5).map((w) => Number(w || 0)).reduce((acc, w) => acc + Math.ceil(w), 0);
         sumSheet[1].push(sumWeight);
-        sumSheet[2].push(sumNum);
-        sumSheet[3].push(spuNumStr);
+        sumSheet[2].push(sumWeightCeil);
+        sumSheet[3].push(sumNum);
+        sumSheet[4].push(spuNumStr);
 
         resultsSheet.push([]); resultsSheet.push([]);
         resultsSheet.push(["", "", "", "", "每箱数量："]); resultsSheet.push([]);
@@ -5914,6 +6678,7 @@
         summaryEl.innerHTML = `<table class="bc-summary-table"><tbody>
           <tr><th>箱数</th><td>${boxNoArrNo - 1}</td></tr>
           <tr><th>重量</th><td>${sumWeight}</td></tr>
+          <tr><th>每箱向上取整(1kg)重量和</th><td>${sumWeightCeil} KG</td></tr>
           <tr><th>发货数量</th><td>${sumNum}</td></tr>
           <tr><th>品名数量</th><td style="white-space:pre-wrap">${spuNumStr}</td></tr>
         </tbody></table>`;
@@ -5995,12 +6760,16 @@
       if (view === "demand-forecast") {
         loadDemandForecast();
       }
+      if (view === "recent") {
+        loadRecent();
+      }
       if (view === "dashboard" && DATA.daily?.length) {
         requestAnimationFrame(() => renderTrend());
       }
     }
 
     function emptyRow(columns, title, detail) { return `<tr><td colspan="${columns}"><div class="empty-state"><strong>${title}</strong>${detail}</div></td></tr>`; }
+    function emptyGrid(title, detail) { return `<div class="empty-grid-state"><strong>${title}</strong><span>${detail}</span></div>`; }
     function escapeHtml(value) { return String(value ?? "").replace(/[&<>"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;" })[char]); }
     function showToast(message) { const toast = $("#toast"); toast.textContent = message; toast.classList.add("show"); clearTimeout(showToast.timer); showToast.timer = setTimeout(() => toast.classList.remove("show"), 3400); }
 
@@ -6249,7 +7018,7 @@
       const actions = [...(analysis.actions || [])].sort((a, b) => number(a.priority) - number(b.priority));
       $("#aiAnalysisBody").innerHTML = `
         <div class="ai-summary">${escapeHtml(analysis.summary || "分析完成。")}</div>
-        <div class="ai-meta">${escapeHtml(result.provider)} / ${escapeHtml(result.model)} · ${result.cached ? "复用历史缓存" : "本次新调用"} · Token ${integer(result.totalTokens)}</div>
+        <div class="ai-meta">${escapeHtml(result.provider)} / ${escapeHtml(result.model)} · ${result.cached ? "复用历史缓存" : "本次新调用"} · Token ${integer(result.totalTokens)} · ${result.costCredits > 0 ? `<span class="ai-cost">本次费用 积分 ${integer(result.costCredits)} / ¥${number(result.costRmb).toFixed(2)}</span>` : "费用未知（历史缓存）"}</div>
         <div class="ai-grid">${insightColumn("机会", analysis.opportunities)}${insightColumn("风险", analysis.risks)}</div>
         <div class="ai-actions">${actions.map((item) => `<div class="ai-action"><span class="ai-action-priority">P${integer(item.priority)}</span><strong>${escapeHtml(item.target)}</strong><div><strong>${escapeHtml(item.action)}</strong><p>${escapeHtml(item.reason)}</p></div></div>`).join("") || `<div class="empty-state"><strong>没有新增动作</strong>继续执行本地规则建议。</div>`}</div>`;
     }
@@ -6266,7 +7035,7 @@
         badge.textContent = ready ? `${payload.data.model} 已就绪` : payload.data.enabled ? "缺少 API Key" : "默认关闭";
         badge.className = `status-badge ${ready ? "scale" : "collect"}`;
         button.disabled = !ready;
-        button.title = ready ? "仅发送聚合指标并手工触发" : "设置 WALMART_ADS_AI_ENABLED=true 和 KIE_API_KEY";
+        button.title = ready ? "仅发送聚合指标并手工触发" : "在上方「配置 KIE」中设置 Key 并启用";
       } catch (error) {
         badge.textContent = "状态读取失败";
         badge.className = "status-badge reduce";
@@ -6282,6 +7051,77 @@
       } catch (_) {
         // 历史结果读取失败不影响规则分析页面。
       }
+    }
+
+    async function loadAiConfig() {
+      const hint = $("#aiConfigHint");
+      try {
+        const response = await fetch("/api/ai/config");
+        const payload = await response.json();
+        if (!response.ok || !payload.success) throw new Error(payload.message || `HTTP ${response.status}`);
+        const cfg = payload.data;
+        $("#aiEnabled").checked = !!cfg.enabled;
+        $("#aiApiKey").value = "";
+        $("#aiBaseUrl").value = cfg.baseUrl || "";
+        $("#aiModel").value = cfg.model || "";
+        hint.textContent = cfg.hasKey ? `当前 Key：${cfg.maskedKey}（yml 配置，界面临时修改重启还原）` : "尚未配置 Key（在 application.yml 设置）";
+      } catch (error) {
+        hint.textContent = "配置读取失败";
+      }
+    }
+
+    function setupAiConfig() {
+      $("#aiConfigToggle").addEventListener("click", () => {
+        const form = $("#aiConfigForm");
+        form.hidden = !form.hidden;
+      });
+      $("#aiConfigSave").addEventListener("click", async () => {
+        const msg = $("#aiConfigMsg");
+        msg.textContent = "保存中…";
+        const body = {
+          enabled: $("#aiEnabled").checked,
+          apiKey: $("#aiApiKey").value === "" ? null : $("#aiApiKey").value,
+          baseUrl: $("#aiBaseUrl").value.trim(),
+          model: $("#aiModel").value.trim(),
+        };
+        try {
+          const response = await fetch("/api/ai/config", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          });
+          const payload = await response.json();
+          if (!response.ok || !payload.success) throw new Error(payload.message || `HTTP ${response.status}`);
+          await loadAiConfig();
+          await loadAiStatus();
+          msg.textContent = "已临时保存（重启还原）";
+          showToast("KIE 配置已临时保存（重启后还原为 application.yml 配置）。");
+        } catch (error) {
+          msg.textContent = `保存失败：${error.message}`;
+          showToast(`保存失败：${error.message}`);
+        }
+      });
+      $("#aiConfigClear").addEventListener("click", async () => {
+        if (!window.confirm("确认清空当前 KIE API Key？仅影响本次会话，重启后还原为 application.yml 配置。")) return;
+        const msg = $("#aiConfigMsg");
+        msg.textContent = "清空中…";
+        try {
+          const response = await fetch("/api/ai/config", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ clearApiKey: true }),
+          });
+          const payload = await response.json();
+          if (!response.ok || !payload.success) throw new Error(payload.message || `HTTP ${response.status}`);
+          await loadAiConfig();
+          await loadAiStatus();
+          msg.textContent = "Key 已清空（重启还原）";
+          showToast("KIE API Key 已临时清空（重启后还原）。");
+        } catch (error) {
+          msg.textContent = `清空失败：${error.message}`;
+          showToast(`清空失败：${error.message}`);
+        }
+      });
     }
 
     async function runAiAnalysis() {
@@ -6304,8 +7144,18 @@
       }
     }
 
-    function exportRecommendations() {
-      const rows = campaignRows().filter((row) => row.decision !== "collect");
+    async function exportRecommendations() {
+      let data;
+      try {
+        const response = await fetch(`/api/decision/analysis?periodDays=${state.periodDays}`);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const payload = await response.json();
+        data = payload.data;
+      } catch (error) {
+        showToast(`导出失败：${error.message}`);
+        return;
+      }
+      const rows = (data.rows || []).filter((row) => row.decision !== "collect");
       const header = ["分析周期", "广告活动", "父SKU", "广告类型", "广告费USD", "归因销售USD", "广告订单", "ROAS", "CPC", "建议", "判断依据"];
       const csvRows = rows.map((row) => [
         analysisPeriodLabel(), row.campaign, row.sku, row.type, row.spend.toFixed(2), row.adSales.toFixed(2), Math.round(row.adOrders), row.roas.toFixed(2), row.cpc.toFixed(2), decisionCopy[row.decision].label, decisionCopy[row.decision].reason,
@@ -6376,9 +7226,28 @@
       state.inventoryPage = 0;
       loadInventory();
     });
-    $("#inventorySearch").addEventListener("input", (event) => {
-      state.inventorySearch = event.target.value;
-      if (state.inventory) renderInventoryByStyle(state.inventory.rows);
+    // 搜索框：防抖 + 搜索态自动展开匹配款号、清空恢复用户原展开态
+    let inventorySearchTimer = null;
+    const inventorySearchInput = $("#inventorySearch");
+    inventorySearchInput.addEventListener("input", (event) => {
+      const raw = event.target.value;
+      const hadQuery = (state.inventorySearch || "").trim() !== "";
+      clearTimeout(inventorySearchTimer);
+      inventorySearchTimer = setTimeout(() => {
+        const hasQuery = raw.trim() !== "";
+        if (hasQuery && !hadQuery) {
+          // 进入搜索态：保存当前展开态，并把匹配款号全部展开，直接看到命中 SKU
+          state.inventorySearchSavedExpanded = new Set(state.inventoryByStyleExpanded);
+          const matched = inventoryMatchedParentSkus();
+          state.inventoryByStyleExpanded = matched ? new Set(matched) : new Set();
+        } else if (!hasQuery && hadQuery) {
+          // 退出搜索态：还原用户原来的展开态
+          state.inventoryByStyleExpanded = state.inventorySearchSavedExpanded || new Set();
+          state.inventorySearchSavedExpanded = null;
+        }
+        state.inventorySearch = raw;
+        if (state.inventory) renderInventoryByStyle(state.inventory.rows);
+      }, 150);
     });
     $$("#inventoryFilters .filter-button").forEach((button) => button.addEventListener("click", () => {
       state.inventoryRisk = button.dataset.inventoryRisk;
@@ -6640,19 +7509,13 @@
     $("#scanImportPageButton").addEventListener("click", runImport);
     $("#refreshBatchesButton").addEventListener("click", loadBatches);
     $("#runAiButton").addEventListener("click", runAiAnalysis);
-    $("#recalculateButton").addEventListener("click", () => {
-      state.thresholds.targetRoas = number($("#targetRoas").value);
-      state.thresholds.floorRoas = number($("#floorRoas").value);
-      state.thresholds.minClicks = number($("#minClicks").value);
-      state.thresholds.minSpend = number($("#minSpend").value);
-      renderAll();
-      showToast("策略规则已重算。仍处于仅建议模式。")
-    });
+    $("#recalculateButton").addEventListener("click", saveDecisionConfig);
+    $$('[data-decision-type]').forEach((button) => button.addEventListener("click", () => {
+      decisionConfigType = button.dataset.decisionType;
+      applyDecisionConfigToForm();
+    }));
 
-    $("#targetRoas").value = state.thresholds.targetRoas;
-    $("#floorRoas").value = state.thresholds.floorRoas;
-    $("#minClicks").value = state.thresholds.minClicks;
-    $("#minSpend").value = state.thresholds.minSpend;
+    loadDecisionConfig();
     $("#sidebarSourceTime").textContent = `最新业务日 ${DATA.meta.latestDate}`;
     $("#operationOccurredAt").value = localDateTimeValue();
     loadBatches();
@@ -6661,8 +7524,16 @@
     loadProducts();
     loadOperationTargets();
     loadOperations();
+    loadRecent();
+    $$("#view-recent .diagnosis-mode-button").forEach((btn) => btn.addEventListener("click", () => {
+      state.recentDays = number(btn.dataset.days);
+      $$("#view-recent .diagnosis-mode-button").forEach((b) => b.classList.toggle("active", b === btn));
+      loadRecent();
+    }));
     loadAiStatus();
     loadLatestAiAnalysis();
+    setupAiConfig();
+    loadAiConfig();
     initBoxConvert();
     renderAll();
     const requestedView = location.hash.replace("#", "");

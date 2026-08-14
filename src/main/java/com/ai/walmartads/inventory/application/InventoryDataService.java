@@ -105,7 +105,8 @@ public class InventoryDataService {
                        product.main_image_url,
                        product.color,
                        product.size,
-                       product.cutting_yield
+                       product.cutting_yield,
+                       product.launch_date
                   from wm_ads_inventory_snapshot inventory
                   join wm_ads_import_file inventory_file
                     on inventory_file.id = inventory.import_file_id
@@ -115,7 +116,8 @@ public class InventoryDataService {
                                max(main_image_url) as main_image_url,
                                max(color) as color,
                                max(size) as size,
-                               max(cutting_yield) as cutting_yield
+                               max(cutting_yield) as cutting_yield,
+                               max(launch_date) as launch_date
                           from wm_ads_product_record
                          where current_version = true
                          group by sku
@@ -134,6 +136,7 @@ public class InventoryDataService {
             double transitUnits = transitBySku.getOrDefault(sku, 0.0);
             double productionUnits = productionBySku.getOrDefault(sku, 0.0);
             double surplusUnits = number(source, "surplus_units");
+            LocalDate launchDate = localDate(source.get("launch_date"));
             // 日均销量(手动)按款号维度覆盖：取该款号的手填值，套用到其下所有 SKU
             InventoryForecastCalculator.ForecastFactors baseFactors =
                     factorBySku.getOrDefault(sku, InventoryForecastCalculator.ForecastFactors.DEFAULT);
@@ -158,6 +161,10 @@ public class InventoryDataService {
                     safeTargetDays,
                     factors
             );
+            String risk = forecast.risk();
+            if (launchDate == null && "OUT_OF_STOCK".equals(risk)) {
+                risk = "NOT_LAUNCHED";
+            }
             rows.add(new InventoryRow(
                     sku,
                     text(source, "parent_sku"),
@@ -182,7 +189,7 @@ public class InventoryDataService {
                     localDate(source.get("out_of_stock_date")),
                     text(source, "publishing_status"),
                     text(source, "item_lifecycle"),
-                    forecast.risk(),
+                    risk,
                     forecast.confidence(),
                     null,
                     null,
@@ -678,7 +685,7 @@ public class InventoryDataService {
                     reservedUnits,
                     transitUnits,
                     round(plan.domesticShipmentUnits()),
-                    round(plan.wipUnits()),
+                    productionUnits,
                     systemSuggestedUnits,
                     round(plan.rawProductionUnits()),
                     systemDaysSupply,

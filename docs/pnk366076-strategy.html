@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PNK366076 补货策略 · 真实预测透视</title>
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --panel2:#1c2330; --border:#2a3340;
+    --ink:#e6edf3; --dim:#8b97a6; --steel:#9fb0c3;
+    --green:#3fb950; --amber:#d29922; --red:#f85149; --blue:#58a6ff;
+    --violet:#bc8cff; --cyan:#39d0d8;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:14px/1.55 -apple-system,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif;}
+  .wrap{max-width:1180px;margin:0 auto;padding:22px 20px 60px;}
+  header{display:flex;flex-wrap:wrap;align-items:center;gap:14px;margin-bottom:6px;}
+  h1{font-size:22px;margin:0;letter-spacing:.5px;}
+  .badge{font-size:12px;padding:3px 10px;border-radius:999px;border:1px solid var(--border);}
+  .badge.py{color:var(--green);border-color:#1f6f33;background:#0f2916;}
+  .badge.real{color:var(--blue);border-color:#1f4f7a;background:#0c1c2e;}
+  .sub{color:var(--dim);font-size:12.5px;margin:2px 0 18px;}
+  .grid{display:grid;gap:16px;}
+  .cols-2{grid-template-columns:1fr 1fr;}
+  @media(max-width:820px){.cols-2{grid-template-columns:1fr;}}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px 18px;}
+  .card h2{font-size:14px;margin:0 0 12px;color:var(--steel);font-weight:600;
+    display:flex;align-items:center;gap:8px;}
+  .card h2 .dot{width:8px;height:8px;border-radius:50%;background:var(--cyan);}
+  .kv{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px dashed #202830;}
+  .kv:last-child{border-bottom:none;}
+  .kv .k{color:var(--dim);} .kv .v{font-weight:600;}
+  .pill{display:inline-block;font-size:11px;padding:2px 8px;border-radius:6px;font-weight:600;}
+  .pill.amber{color:var(--amber);background:#2a210b;}
+  .pill.green{color:var(--green);background:#0f2916;}
+  .pill.red{color:var(--red);background:#2a1110;}
+  .pill.gray{color:var(--dim);background:#1c2330;}
+  .pill.blue{color:var(--blue);background:#0c1c2e;}
+  .note{font-size:12px;color:var(--dim);margin-top:10px;line-height:1.6;}
+  .note b{color:var(--steel);}
+  .callout{border-left:3px solid var(--amber);background:#1d1808;padding:10px 14px;border-radius:0 8px 8px 0;margin-top:12px;font-size:12.5px;}
+  .callout.green{border-color:var(--green);background:#0f2916;}
+  .callout.red{border-color:var(--red);background:#2a1110;}
+  table{width:100%;border-collapse:collapse;font-size:12.5px;}
+  th,td{padding:6px 8px;text-align:right;border-bottom:1px solid #1b2230;}
+  th{color:var(--dim);font-weight:600;position:sticky;top:0;background:var(--panel);}
+  td.l,th.l{text-align:left;}
+  tr:hover td{background:#11161d;}
+  .sim-prod{color:var(--green);font-weight:700;}
+  .toolbar{display:flex;flex-wrap:wrap;gap:18px;align-items:center;margin-bottom:12px;}
+  .ctrl{display:flex;flex-direction:column;gap:4px;min-width:200px;}
+  .ctrl label{font-size:12px;color:var(--dim);display:flex;justify-content:space-between;}
+  .ctrl input[type=range]{width:200px;accent-color:var(--cyan);}
+  .toggle{display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none;
+    background:var(--panel2);border:1px solid var(--border);padding:8px 12px;border-radius:8px;}
+  .toggle input{accent-color:var(--green);width:16px;height:16px;}
+  .summary{display:flex;gap:14px;flex-wrap:wrap;margin:4px 0 14px;}
+  .stat{background:var(--panel2);border:1px solid var(--border);border-radius:10px;padding:10px 14px;min-width:120px;}
+  .stat .n{font-size:20px;font-weight:700;} .stat .l{font-size:11px;color:var(--dim);}
+  .n.red{color:var(--red);} .n.green{color:var(--green);} .n.blue{color:var(--blue);} .n.amber{color:var(--amber);}
+  .muted{color:var(--dim);font-size:11.5px;}
+  code{background:#0c1118;padding:1px 5px;border-radius:4px;color:var(--cyan);font-size:12px;}
+  .legend{font-size:11.5px;color:var(--dim);margin-top:8px;}
+  .legend span{margin-right:14px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1 id="title">PNK366076 补货策略透视</h1>
+    <span class="badge py">● Python 8091 已接入</span>
+    <span class="badge real">真实预测数据（非模拟）</span>
+  </header>
+  <div class="sub" id="subline"></div>
+
+  <div class="summary" id="summary"></div>
+
+  <div class="grid cols-2">
+    <div class="card">
+      <h2><span class="dot"></span>Python 预测模型选模证据</h2>
+      <div id="modelProof"></div>
+      <div class="callout green" id="modelCallout"></div>
+    </div>
+    <div class="card">
+      <h2><span class="dot"></span>做货 = 0 的根因</h2>
+      <div id="rootCause"></div>
+      <div class="callout red" id="rootCallout"></div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:16px;">
+    <h2><span class="dot"></span>策略常量（驱动本款计算）</h2>
+    <div id="constants"></div>
+    <div class="note">
+      红框常量为 <b>Java 硬编码</b>（改需重打包）；其余（如 <code>cutting_yield</code>）来自产品库 / DB，可热配。
+      完整 8 模块策略全景见 <code>docs/replenishment-strategy-dashboard.html</code>。
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:16px;">
+    <h2><span class="dot"></span>调参模拟器（即时重算做货）</h2>
+    <div class="toolbar">
+      <label class="toggle"><input type="checkbox" id="bypass"><span>绕过 MANUAL_REVIEW 防御锁</span></label>
+      <div class="ctrl">
+        <label>裁床数 cuttingYield <span id="cyVal">45</span></label>
+        <input type="range" id="cy" min="5" max="120" step="5" value="45">
+      </div>
+      <div class="ctrl">
+        <label>工厂可售提前期 FACTORY_TO_SELLABLE_DAYS <span id="ftVal">60</span></label>
+        <input type="range" id="ft" min="0" max="120" step="5" value="60">
+      </div>
+      <div class="ctrl">
+        <label>最小单 SKU 量 MINIMUM_SKU_QUANTITY <span id="mqVal">5</span></label>
+        <input type="range" id="mq" min="1" max="20" step="1" value="5">
+      </div>
+    </div>
+    <div class="note" id="simNote"></div>
+    <div class="legend">
+      <span><span class="pill gray">NOT_NEEDED</span> 无缺口</span>
+      <span><span class="pill amber">MANUAL_REVIEW</span> 防御锁拦截</span>
+      <span><span class="pill blue">NEW_NO_HISTORY</span> 无90天销量</span>
+      <span><span class="pill green">PLANNED</span> 模拟可生产</span>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:16px;">
+    <h2><span class="dot"></span>PNK366076 全 80 SKU 明细</h2>
+    <div style="max-height:520px;overflow:auto;">
+      <table id="tbl">
+        <thead><tr>
+          <th class="l">SKU</th><th class="l">颜色</th><th class="l">尺码</th>
+          <th>P90需求</th><th>raw<br>缺口</th><th>裁床数</th>
+          <th>当前做货</th><th>模拟做货</th><th>断货日</th><th class="l">状态</th>
+        </tr></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="note" style="margin-top:18px;">
+    <b>说明：</b>本页数据来自 <code>GET /api/forecast/recommendations</code> 真实返回（Java 经 Python 8091 计算，snapshot 2026-08-03）。
+    「模拟做货」列由页面 JS 忠实复刻 <code>ReplenishmentPlanner</code> + <code>ProductionPlanAllocator</code> 数学重算，
+    裁床分配的余量分摊按 <code>rawSuggestedUnits</code> 做权重近似（真实系统用 90 天销量权重，本环境未导出）。
+    模拟仅为决策参考，真实落库请以系统重算为准。
+  </div>
+</div>
+
+<script>
+const DATA = {"meta": {"parentSku": "PNK366076", "snapshotDate": "2026-08-03", "targetCoverageDays": 60, "rowCount": 80, "totalP90": 1289.9, "totalRaw": 232.7, "totalProd": 0, "byStatus": {"MANUAL_REVIEW": 20, "NOT_NEEDED": 28, "NEW_NO_HISTORY": 32}, "modelWmape": 0.34073, "baselineWmape": 0.322757, "model": "BASELINE_RECENT_28", "pythonOnline": true, "constants": {"HORIZON_DAYS": 60, "DOMESTIC_SHIPMENT_LEAD_DAYS": 30, "FACTORY_TO_SELLABLE_DAYS": 60, "MINIMUM_SKU_QUANTITY": 5, "cuttingYield": 45, "MAX_AUTO_CUTTING_SURPLUS_RATIO": 1.0}}, "rows": [{"sku": "PNK366076-C-Black-4X-WFS", "color": "Black", "size": "4X", "cuttingYield": 45, "p90": 50.37, "wfs": 0, "domAvail": 0, "domShip": 0, "wip": 0, "raw": 6.37, "prod": 0, "colorProd": 0, "surplus": 0, "stockout": "2026-08-04", "status": "MANUAL_REVIEW", "model": "BASELINE_RECENT_28", "modelSelected": false, "modelWmape": 0.34073, "baselineWmape": 0.322757}, {"sku": "PNK366076-C-Gray Blue-2X-WFS", "color": "Gray Blue", "size": "2X", "cuttingYield": 45, "p90": 18.19, "wfs": 0, "domAvail": 0, "domShip": 0, "wip": 0, "raw": 3.19, "prod": 0, "colorProd": 0, "surplus": 0, "stockout": "2026-08-04", "status": "MANUAL_REVIEW", "model": "BASELINE_RECENT_28", "modelSelected": false, "modelWmape": 0.34073, "baselineWmape": 0.322757}, {"sku": "PNK366076-C-Gray Blue-4X-WFS", "color": "Gray Blue", "size": "4X", "cuttingYield": 45, "p90": 33.58, "wfs": 0, "domAvail": 0, "domShip": 0, "wip": 0, "raw": 3.58, "prod": 0, "colorProd": 0, "surplus": 0, "stockout": "2026-08-04", "status": "MANUAL_REVIEW", "model": "BASELINE_RECENT_28", "modelSelected": false, "modelWmape": 0.34073, "baselineWmape": 0.322757}, {"sku": "PNK366076-C-Light Gray-4X-WFS", "color": "Light Gray", "size": "4X", "cuttingYield": 45, "p90": 13.99, "wfs": 0, "domAvail": 0, "domShip": 0, "wip": 0, "raw": 0, "prod": 0, "colorProd": 0, "surplus": 0, "stockout": "2026-08-04", "status": "NOT_NEEDED", "model": "BASELINE_RECENT_28", "modelSelected": false, "modelWmape": 0.34073, "baselineWmape": 0.322757}, {"sku": "PNK366076-C-Olive Green-4X-WFS", "color": "Olive Green", "size": "4X", "cuttingYield": 45, "p90": 32.18, "wfs": 0, "domAvail": 0, "domShip": 0, "wip": 0, "raw": 2.18, "prod": 0, "colorProd": 0, "surplus": 0, "stockout": "2026-08-04", "status": "MANUAL_REVIEW", "model": "BASELINE_RECENT_28", "modelSelected": false, "modelWmape": 0.34073, "baselineWmape": 0.322757}, {"sku": "PNK366076-C-Purple Red-4X-WFS", "color": "Purple Red", "size": "4X", "cuttingYield": 45, "p90": 34.98, "wfs": 0, "domAvail": 0, "domShip": 0, "wip": 0, "raw": 8.98, "prod": 0, "colorProd": 0, "surplus": 0, "stockout": "2026-08-04", "status": "MANUAL_REVIEW", "model": "BASELINE_RECENT_28", "modelSelected": false, "modelWmape": 0.34073, "baselineWmape": 0.322757}, {"sku": "PNK366076-C-Wine Red-1X-WFS", "color": "Wine Red", "size": "1X", "cuttingYield": 45, "p90": 16.79, "wfs": 0, "domAvail": 0, "domShip": 0, "wip": 0, "raw": 2.79, "prod": 0, "colorProd": 0, "surplus": 0, "stockout": "2026-08-04", "status": "MANUAL_REVIEW", "model": "BASELINE_RECENT_28", "modelSelected": false, "modelWmape": 0.34073, "baselineWmape": 0.322757}, {"sku": "PNK366076-C-Wine Red-4X-WFS", "color": "Wine Red", "size": "4X", "cuttingYield": 45, "p90": 34.98, "wfs": 0, "domAvail": 0, "domShip": 0, "wip": 0, "raw": 6.98, "prod": 0, "colorProd": 0, "surplus": 0, "stockout": "2026-08-04", "status": "MANUAL_REVIEW", "model": "BASELINE_RECENT_28", "modelSelected": false, "modelWmape": 0.34073, "baselineWmape": 0.322757}, {"sku": "PNK366076-FP-BK Leaf Butterfly-4X-WFS", "color": "BK Leaf Butterfly", "size": "4X", "cuttingYield": 45, "p90": 30.78, "wfs": 0, "domAvail": 0, "domShip": 0, "wip": 0, "raw": 4.78, "prod": 0, "colorProd": 0, "surplus": 0, "stockout": "2026-08-04", "status": "MANUAL_REVIEW", "model": "BASELINE_RECENT_28", "modelSelected": false, "modelWmape": 0.34073, "baselineWmape": 0.322757}, {"sku": "PNK366076-FP-Black Star Moon-1X-WFS", "color": "Black Star Moon", "size": "1X", "cuttingYield": 45, "p90": 13.99, "wfs": 0, "domAvail": 0, "domShip": 0, "wip": 0, "raw": 0, "prod": 0, "colorProd": 0, "surplus": 0, "stockout": "2026-08-04", "status": "NOT_NEEDED", "model": "BASELINE_RECENT_28", "modelSelected": false, "modelWmape": 0.34073, "baselineWmape": 0.322757}, {"sku": "PNK366076-FP-Black Star Moon-2X-WFS", "color": "Black Star Moon", "size": "2X", "cuttingYield": 45, "p90": 32.18, "wfs": 0, "domAvail": 0, "domShip": 0, "wip": 0, "raw": 0, "prod": 0, "colorProd": 0, "surplus": 0, "stockout": "2026-08-04", "status": "NOT_NEEDED", "model": "BASELINE_RECENT_28", "modelSelected": false, "modelWmape": 0.34073, "baselineWmape": 0.322757}, {"sku": "PNK366076-FP-Black Star Moon-3X-WFS", "color": "Black Star Moon", "size": "3X", "cuttingYield": 45, "p90": 62.96, "wfs": 0, "domAvail": 0, "domShip": 0, "wip": 0, "raw": 34.96, "prod": 0, "colorProd": 0, "surplus": 0, "stockout": "2026-08-04", "status": "MANUAL_REVIEW", "model": "BASELINE_RECENT_28", "modelSelected": false, "modelWmape": 0.34073, "baselineWmape": 0.322757}, {"sku": "PNK366076-FP-Black Star Moon-4X-WFS", "color": "Black Star Moon", "size": "4X", "cuttingYield": 45, "p90": 30.78, "wfs": 0, "domAvail": 0, "domShip": 0, "wip": 0, "raw": 0, "prod": 0, "colorProd": 0, "surplus": 0, "stockout": "2026-08-04", "status": "NOT_NEEDED", "model": "BASELINE_RECENT_28", "modelSelected": false, "modelWmape": 0.34073, "baselineWmape": 0.322757}, {"sku": "PNK366076-FP-Leopard Khaki-1X-WFS", "color": "Leopard Khaki", "size": "1X", "cuttingYield": 45, "p90": 13.99, "wfs": 0, "domAvail": 0, "domShip": 0, "wip": 0, "raw": 0, "prod": 0, "colorProd": 0, "surplus": 0, "stockout": "2026-08-04", "status": "NOT_NEEDED", "model": "BASELINE_RECENT_28", "modelSelected": false, "modelWmape": 0.34073, "baselineWmape": 0.322757}, {"sku": "PNK366076-FP-Leopard Khaki-2X-WFS", "color": "Leopard Khaki", "size": "2X", "cuttingYield": 45, "p90": 27.98, "wfs": 0, "domAvail": 0, "domShip": 0, "wip": 0, "raw": 0, "prod": 0, "colorProd": 0, "surplus": 0, "stockout": "2026-08-04", "status": "NOT_NEEDED", "model": "BASELINE_RECENT_28", "modelSelected": false, "modelWmape": 0.34073, "baselineWmape": 0.322757}, {"sku": "PNK366076-FP-Leopard Khaki-3X-WFS", "color": "Leopard Khaki", "size": "3X", "cuttingYield": 45, "p90": 55.96, "wfs": 0, "domAvail": 0, "domShip": 0, "wip": 0, "raw": 16.96, "prod": 0, "colorProd": 0, "surplus": 0, "stockout": "2026-08-04", "status": "MANUAL_REVIEW", "model": "BASELINE_RECENT_28", "modelSelected": false, "modelWmape": 0.34073, "baselineWmape": 0.322757}, {"sku": "PNK366076-FP-Leopard Khaki-4X-WFS", "color": "Leopard Khaki", "size": "4X", "cuttingYield": 45, "p90": 27.98, "wfs": 0, "domAvail": 0, "domShip": 0, "wip": 0, "raw": 0, "prod": 0, "colorProd": 0, "surplus": 0, "stockout": "2026-08-04", "status": "NOT_NEEDED", "model": "BASELINE_RECENT_28", "modelSelected": false, "modelWmape": 0.34073, "baselineWmape": 0.322757}, {"sku": "PNK366076-FP-Pink Star-4X-WFS", "color": "Pink Star", "size": "4X", "cuttingYield": 45, "p90": 25.18, "wfs": 0, "domAvail": 0, "domShip": 0, "wip": 0, "raw": 0, "prod": 0, "colorProd": 0, "surplus": 0, "stockout": "2026-08-04", "status": "NOT_NEEDED", "model": "BASELINE_RECENT_28", "modelSelected": false, "modelWmape": 0.34073, "baselineWmape": 0.322757}, {"sku": "PNK366076-FP-Pink White Flower-4X-WFS", "color": "Pink White Flower", "size": "4X", "cuttingYield": 45, "p90": 30.78, "wfs": 0, "domAvail": 0, "domShip": 0, "wip": 0, "raw": 0, "prod": 0, "colorProd": 0, "surplus": 0, "stockout": "2026-08-04", "status": "NOT_NEEDED", "model": "BASELINE_RECENT_28", "modelSelected": false, "modelWmape": 0.34073, "baselineWmape": 0.322757}, {"sku": "PNK366076-FP-Spot Blue-1X-WFS", "color": "Spot Blue", "size": "1X", "cuttingYield": 45, "p90": 13.99, "wfs": 0, "domAvail": 0, "domShip": 0, "wip": 0, "raw": 0, "prod": 0, "colorProd": 0, "surplus": 0, "stockout": "2026-08-04", "status": "NOT_NEEDED", "model": "BASELINE_RECENT_28", "modelSelected": false, "modelWmape": 0.34073, "baselineWmape": 0.322757}, {"sku": "PNK366076-FP-Spot Blue-2X-WFS", "color": "Spot Blue", "size": "2X", "cuttingYield": 45, "p90": 29.38, "wfs": 0, "domAvail": 0, "domShip": 0, "wip": 0, "raw": 0, "prod": 0, "colorProd": 0, "surplus": 0, "stockout": "2026-08-04", "status": "NOT_NEEDED", "model": "BASELINE_RECENT_28", "modelSelected": false, "modelWmape": 0.34073, "baselineWmape": 0.322757}, {"sku": "PNK366076-FP-Spot Blue-4X-WFS", "color": "Spot Blue", "size": "4X", "cuttingYield": 45, "p90": 30.78, "wfs": 0, "domAvail": 0, "domShip": 0, "wip": 0, "raw": 0, "prod": 0, "colorProd": 0, "surplus": 0, "stockout": "2026-08-04", "status": "NOT_NEEDED", "model": "BASELINE_RECENT_28", "modelSelected": false, "modelWmape": 0.34073, "baselineWmape": 0.322757}, {"sku": "PNK366076-FP-Pink Star-2X-WFS", "color": "Pink Star", "size": "2X", "cuttingYield": 45, "p90": 22.39, "wfs": 1.0, "domAvail": 0, "domShip": 0, "wip": 0, "raw": 3.39, "prod": 0, "colorProd": 0, "surplus": 0, "stockout": "2026-08-07", "status": "MANUAL_REVIEW", "model": "BASELINE_RECENT_28", "modelSelected": false, "modelWmape": 0.34073, "baselineWmape": 0.322757}, {"sku": "PNK366076-C-Wine Red-2X-WFS", "color": "Wine Red", "size": "2X", "cuttingYield": 45, "p90": 37.77, "wfs": 2.0, "domAvail": 0, "domShip": 0, "wip": 0, "raw": 21.77, "prod": 0, "colorProd": 0, "surplus": 0, "stockout": "2026-08-08", "status": "MANUAL_REVIEW", "model": "BASELINE_RECENT_28", "modelSelected": false, "modelWmape": 0.34073, "baselineWmape": 0.322757}, {"sku": "PNK366076-FP-Pink Star-3X-WFS", "color": "Pink Star", "size": "3X", "cuttingYield": 45, "p90": 37.77, "wfs": 6.0, "domAvail": 0, "domShip": 0, "wip": 0, "raw": 31.77, "prod": 0, "colorProd": 0, "surplus": 0, "stockout": "2026-08-16", "status": "MANUAL_REVIEW", "model": "BASELINE_RECENT_28", "modelSelected": false, "modelWmape": 0.34073, "baselineWmape": 0.322757}, {"sku": "PNK366076-FP-Pink White Flower-1X-WFS", "color": "Pink White Flower", "size": "1X", "cuttingYield": 45, "p90": 12.59, "wfs": 2.0, "domAvail": 0, "domShip": 0, "wip": 0, "raw": 0, "prod": 0, "colorProd": 0, "surplus": 0, "stockout": "2026-08-16", "status": "NOT_NEEDED", "model": "BASELINE_RECENT_28", "modelSelected": false, "modelWmape": 0.34073, "baselineWmape": 0.322757}, {"sku": "PNK366076-C-Gray Blue-1X-WFS", "color": "Gray Blue", "size": "1X", "cuttingYield": 45, "p90": 16.79, "wfs": 3.0, "domAvail": 0, "domShip": 0, "wip": 0, "raw": 0, "prod": 0, "colorProd": 0, "surplus": 0, "stockout": "2026-08-18", "status": "NOT_NEEDED", "model": "BASELINE_RECENT_28", "modelSelected": false, "modelWmape": 0.34073, "baselineWmape": 0.322757}, {"sku": "PNK366076-C-Wine Red-3X-WFS", "color": "Wine Red", "size": "3X", "cuttingYield": 45, "p90": 55.96, "wfs": 10.0, "domAvail": 0, "domShip": 0, "wip": 0, "raw": 45.96, "prod": 0, "colorProd": 0, "surplus": 0, "stockout": "2026-08-18", "status": "MANUAL_REVIEW", "model": "BASELINE_RECENT_28", "modelSelected": false, "modelWmape": 0.34073, "baselineWmape": 0.322757}, {"sku": "PNK366076-FP-BK Leaf Butterfly-1X-WFS", "color": "BK Leaf Butterfly", "size": "1X", "cuttingYield": 45, "p90": 11.19, "wfs": 2.0, "domAvail": 0, "domShip": 0, "wip": 0, "raw": 0, "prod": 0, "colorProd": 0, "surplus": 0, "stockout": "2026-08-18", "status": "NOT_NEEDED", "model": "BASELINE_RECENT_28", "modelSelected": false, "modelWmape": 0.34073, "baselineWmape": 0.322757}, {"sku": "PNK366076-C-Purple Red-2X-WFS", "color": "Purple Red", "size": "2X", "cuttingYield": 45, "p90": 25.18, "wfs": 7.0, "domAvail": 0, "domShip": 0, "wip": 0, "raw": 4.18, "prod": 0, "colorProd": 0, "surplus": 0, "stockout": "2026-08-25", "status": "MANUAL_REVIEW", "model": "BASELINE_RECENT_28", "modelSelected": false, "modelWmape": 0.34073, "baselineWmape": 0.322757}, {"sku": "PNK366076-FP-Pink White Flower-3X-WFS", "color": "Pink White Flower", "size": "3X", "cuttingYield": 45, "p90": 47.57, "wfs": 10.0, "domAvail": 0, "domShip": 0, "wip": 0, "raw": 17.57, "prod": 0, "colorProd": 0, "surplus": 0, "stockout": "2026-09-22", "status": "MANUAL_REVIEW", "model": "BASELINE_RECENT_28", "modelSelected": false, "modelWmape": 0.34073, "baselineWmape": 0.322757}, {"sku": "PNK366076-C-Black-1X-WFS", "color": "Black", "size": "1X", "cuttingYield": 45, "p90": 16.79, "wfs": 3.0, "domAvail": 0, "domShip": 0, "wip": 0, "raw": 3.79, "prod": 0, "colorProd": 0, "surplus": 0, "stockout": null, "status": "MANUAL_REVIEW", "model": "BASELINE_RECENT_28", "modelSelected": false, "modelWmape": 0.34073, "baselineWmape": 0.322757}, {"sku": "PNK366076-C-Black-2X-WFS", "color": "Black", "size": "2X", "cuttingYield": 45, "p90": 27.98, "wfs": 18.0, "domAvail": 0, "domShip": 0, "wip": 0, "raw": 0, "prod": 0, "colorProd": 0, "surplus": 0, "stockout": null, "status": "NOT_NEEDED", "model": "BASELINE_RECENT_28", "modelSelected": false, "modelWmape": 0.34073, "baselineWmape": 0.322757}, {"sku": "PNK366076-C-Black-3X-WFS", "color": "Black", "size": "3X", "cuttingYield": 45, "p90": 51.77, "wfs": 46.0, "domAvail": 0, "domShip": 0, "wip": 0, "raw": 0, "prod": 0, "colorProd": 0, "surplus": 0, "stockout": null, "status": "NOT_NEEDED", "model": "BASELINE_RECENT_28", "modelSelected": false, "modelWmape": 0.34073, "baselineWmape": 0.322757}, {"sku": "PNK366076-C-Brown-1X-WFS02", "color": "Brown", "size": "1X", "cuttingYield": 45, "p90": 0, "wfs": 0, "domAvail": 0, "domShip": 0, "wip": 0, "raw": 0, "prod": 0, "colorProd": 0, "surplus": 0, "stockout": null, "status": "NEW_NO_HISTORY", "model": "BASELINE_RECENT_28", "modelSelected": false, "modelWmape": 0.34073, "baselineWmape": 0.322757}, {"sku": "PNK366076-C-Brown-2X-WFS02", "color": "Brown", "size": "2X", "cuttingYield": 45, "p90": 0, "wfs": 0, "domAvail": 0, "domShip": 0, "wip": 0, "raw": 0, "prod": 0, "colorProd": 0, "surplus": 0, "stockout": null, "status": "NEW_NO_HISTORY", "model": "BASELINE_RECENT_28", "modelSelected": false, "modelWmape": 0.34073, "baselineWmape": 0.322757}, {"sku": "PNK366076-C-Brown-3X-WFS02", "color": "Brown", "size": "3X", "cuttingYield": 45, "p90": 0, "wfs": 0, "domAvail": 0, "domShip": 0, "wip": 0, "raw": 0, "prod": 0, "colorProd": 0, "surplus": 0, "stockout": null, "status": "NEW_NO_HISTORY", "model": "BASELINE_RECENT_28", "modelSelected": false, "modelWmape": 0.34073, "baselineWmape": 0.322757}, {"sku": "PNK366076-C-Brown-4X-WFS02", "color": "Brown", "size": "4X", "cuttingYield": 45, "p90": 0, "wfs": 0, "domAvail": 0, "domShip": 0, "wip": 0, "raw": 0, "prod": 0, "colorProd": 0, "surplus": 0, "stockout": null, "status": "NEW_NO_HISTORY", "model": "BASELINE_RECENT_28", "modelSelected": false, "modelWmape": 0.34073, "baselineWmape": 0.322757}, {"sku": "PNK366076-C-Gray Blue-3X-WFS", "color": "Gray Blue", "size": "3X", "cuttingYield": 45, "p90": 39.17, "wfs": 48.0, "domAvail": 0, "domShip": 0, "wip": 0, "raw": 0, "prod": 0, "colorProd": 0, "surplus": 0, "stockout": null, "status": "NOT_NEEDED", "model": "BASELINE_RECENT_28", "modelSelected": false, "modelWmape": 0.34073, "baselineWmape": 0.322757}, {"sku": "PNK366076-C-Light Gray-1X-WFS", "color": "Light Gray", "size": "1X", "cuttingYield": 45, "p90": 11.19, "wfs": 9.0, "domAvail": 0, "domShip": 0, "wip": 0, "raw": 0, "prod": 0, "colorProd": 0, "surplus": 0, "stockout": null, "status": "NOT_NEEDED", "model": "BASELINE_RECENT_28", "modelSelected": false, "modelWmape": 0.34073, "baselineWmape": 0.322757}, {"sku": "PNK366076-C-Light Gray-2X-WFS", "color": "Light Gray", "size": "2X", "cuttingYield": 45, "p90": 15.39, "wfs": 18.0, "domAvail": 0, "domShip": 0, "wip": 0, "raw": 0, "prod": 0, "colorProd": 0, "surplus": 0, "stockout": null, "status": "NOT_NEEDED", "model": "BASELINE_RECENT_28", "modelSelected": false, "modelWmape": 0.34073, "baselineWmape": 0.322757}, {"sku": "PNK366076-C-Light Gray-3X-WFS", "color": "Light Gray", "size": "3X", "cuttingYield": 45, "p90": 8.39, "wfs": 29.0, "domAvail": 0, "domShip": 0, "wip": 0, "raw": 0, "prod": 0, "colorProd": 0, "surplus": 0, "stockout": null, "status": "NOT_NEEDED", "model": "BASELINE_RECENT_28", "modelSelected": false, "modelWmape": 0.34073, "baselineWmape": 0.322757}, {"sku": "PNK366076-C-Mustard Yellow-1X-WFS02", "color": "Mustard Yellow", "size": "1X", "cuttingYield": 45, "p90": 0, "wfs": 0, "domAvail": 0, "domShip": 0, "wip": 0, "raw": 0, "prod": 0, "colorProd": 0, "surplus": 0, "stockout": null, "status": "NEW_NO_HISTORY", "model": "BASELINE_RECENT_28", "modelSelected": false, "modelWmape": 0.34073, "baselineWmape": 0.322757}, {"sku": "PNK366076-C-Mustard Yellow-2X-WFS02", "color": "Mustard Yellow", "size": "2X", "cuttingYield": 45, "p90": 0, "wfs": 0, "domAvail": 0, "domShip": 0, "wip": 0, "raw": 0, "prod": 0, "colorProd": 0, "surplus": 0, "stockout": null, "status": "NEW_NO_HISTORY", "model": "BASELINE_RECENT_28", "modelSelected": false, "modelWmape": 0.34073, "baselineWmape": 0.322757}, {"sku": "PNK366076-C-Mustard Yellow-3X-WFS02", "color": "Mustard Yellow", "size": "3X", "cuttingYield": 45, "p90": 0, "wfs": 0, "domAvail": 0, "domShip": 0, "wip": 0, "raw": 0, "prod": 0, "colorProd": 0, "surplus": 0, "stockout": null, "status": "NEW_NO_HISTORY", "model": "BASELINE_RECENT_28", "modelSelected": false, "modelWmape": 0.34073, "baselineWmape": 0.322757}, {"sku": "PNK366076-C-Mustard Yellow-4X-WFS02", "color": "Mustard Yellow", "size": "4X", "cuttingYield": 45, "p90": 0, "wfs": 0, "domAvail": 0, "domShip": 0, "wip": 0, "raw": 0, "prod": 0, "colorProd": 0, "surplus": 0, "stockout": null, "status": "NEW_NO_HISTORY", "model": "BASELINE_RECENT_28", "modelSelected": false, "modelWmape": 0.34073, "baselineWmape": 0.322757}, {"sku": "PNK366076-C-Navy Blue-1X-WFS02", "color": "Navy Blue", "size": "1X", "cuttingYield": 45, "p90": 0, "wfs": 0, "domAvail": 0, "domShip": 0, "wip": 0, "raw": 0, "prod": 0, "colorProd": 0, "surplus": 0, "stockout": null, "status": "NEW_NO_HISTORY", "model": "BASELINE_RECENT_28", "modelSelected": false, "modelWmape": 0.34073, "baselineWmape": 0.322757}, {"sku": "PNK366076-C-Navy Blue-2X-WFS02", "color": "Navy Blue", "size": "2X", "cuttingYield": 45, "p90": 0, "wfs": 0, "domAvail": 0, "domShip": 0, "wip": 0, "raw": 0, "prod": 0, "colorProd": 0, "surplus": 0, "stockout": null, "status": "NEW_NO_HISTORY", "model": "BASELINE_RECENT_28", "modelSelected": false, "modelWmape": 0.34073, "baselineWmape": 0.322757}, {"sku": "PNK366076-C-Navy Blue-3X-WFS02", "color": "Navy Blue", "size": "3X", "cuttingYield": 45, "p90": 0, "wfs": 0, "domAvail": 0, "domShip": 0, "wip": 0, "raw": 0, "prod": 0, "colorProd": 0, "surplus": 0, "stockout": null, "status": "NEW_NO_HISTORY", "model": "BASELINE_RECENT_28", "modelSelected": false, "modelWmape": 0.34073, "baselineWmape": 0.322757}, {"sku": "PNK366076-C-Navy Blue-4X-WFS02", "color": "Navy Blue", "size": "4X", "cuttingYield": 45, "p90": 0, "wfs": 0, "domAvail": 0, "domShip": 0, "wip": 0, "raw": 0, "prod": 0, "colorProd": 0, "surplus": 0, "stockout": null, "status": "NEW_NO_HISTORY", "model": "BASELINE_RECENT_28", "modelSelected": false, "modelWmape": 0.34073, "baselineWmape": 0.322757}, {"sku": "PNK366076-C-Olive Green-1X-WFS", "color": "Olive Green", "size": "1X", "cuttingYield": 45, "p90": 5.6, "wfs": 6.0, "domAvail": 0, "domShip": 0, "wip": 0, "raw": 0, "prod": 0, "colorProd": 0, "surplus": 0, "stockout": null, "status": "NOT_NEEDED", "model": "BASELINE_RECENT_28", "modelSelected": false, "modelWmape": 0.34073, "baselineWmape": 0.322757}, {"sku": "PNK366076-C-Olive Green-2X-WFS", "color": "Olive Green", "size": "2X", "cuttingYield": 45, "p90": 18.19, "wfs": 10.0, "domAvail": 0, "domShip": 0, "wip": 0, "raw": 0, "prod": 0, "colorProd": 0, "surplus": 0, "stockout": null, "status": "NOT_NEEDED", "model": "BASELINE_RECENT_28", "modelSelected": false, "modelWmape": 0.34073, "baselineWmape": 0.322757}, {"sku": "PNK366076-C-Olive Green-3X-WFS", "color": "Olive Green", "size": "3X", "cuttingYield": 45, "p90": 15.39, "wfs": 37.0, "domAvail": 0, "domShip": 0, "wip": 0, "raw": 0, "prod": 0, "colorProd": 0, "surplus": 0, "stockout": null, "status": "NOT_NEEDED", "model": "BASELINE_RECENT_28", "modelSelected": false, "modelWmape": 0.34073, "baselineWmape": 0.322757}, {"sku": "PNK366076-C-Purple Red-1X-WFS", "color": "Purple Red", "size": "1X", "cuttingYield": 45, "p90": 5.6, "wfs": 6.0, "domAvail": 0, "domShip": 0, "wip": 0, "raw": 0, "prod": 0, "colorProd": 0, "surplus": 0, "stockout": null, "status": "NOT_NEEDED", "model": "BASELINE_RECENT_28", "modelSelected": false, "modelWmape": 0.34073, "baselineWmape": 0.322757}, {"sku": "PNK366076-C-Purple Red-3X-WFS", "color": "Purple Red", "size": "3X", "cuttingYield": 45, "p90": 32.18, "wfs": 27.0, "domAvail": 0, "domShip": 0, "wip": 0, "raw": 5.18, "prod": 0, "colorProd": 0, "surplus": 0, "stockout": null, "status": "MANUAL_REVIEW", "model": "BASELINE_RECENT_28", "modelSelected": false, "modelWmape": 0.34073, "baselineWmape": 0.322757}, {"sku": "PNK366076-C-Red-1X-WFS02", "color": "Red", "size": "1X", "cuttingYield": 45, "p90": 0, "wfs": 0, "domAvail": 0, "domShip": 0, "wip": 0, "raw": 0, "prod": 0, "colorProd": 0, "surplus": 0, "stockout": null, "status": "NEW_NO_HISTORY", "model": "BASELINE_RECENT_28", "modelSelected": false, "modelWmape": 0.34073, "baselineWmape": 0.322757}, {"sku": "PNK366076-C-Red-2X-WFS02", "color": "Red", "size": "2X", "cuttingYield": 45, "p90": 0, "wfs": 0, "domAvail": 0, "domShip": 0, "wip": 0, "raw": 0, "prod": 0, "colorProd": 0, "surplus": 0, "stockout": null, "status": "NEW_NO_HISTORY", "model": "BASELINE_RECENT_28", "modelSelected": false, "modelWmape": 0.34073, "baselineWmape": 0.322757}, {"sku": "PNK366076-C-Red-3X-WFS02", "color": "Red", "size": "3X", "cuttingYield": 45, "p90": 0, "wfs": 0, "domAvail": 0, "domShip": 0, "wip": 0, "raw": 0, "prod": 0, "colorProd": 0, "surplus": 0, "stockout": null, "status": "NEW_NO_HISTORY", "model": "BASELINE_RECENT_28", "modelSelected": false, "modelWmape": 0.34073, "baselineWmape": 0.322757}, {"sku": "PNK366076-C-Red-4X-WFS02", "color": "Red", "size": "4X", "cuttingYield": 45, "p90": 0, "wfs": 0, "domAvail": 0, "domShip": 0, "wip": 0, "raw": 0, "prod": 0, "colorProd": 0, "surplus": 0, "stockout": null, "status": "NEW_NO_HISTORY", "model": "BASELINE_RECENT_28", "modelSelected": false, "modelWmape": 0.34073, "baselineWmape": 0.322757}, {"sku": "PNK366076-FP-Apricot Bear-1X-WFS", "color": "Apricot Bear", "size": "1X", "cuttingYield": 45, "p90": 0, "wfs": 0, "domAvail": 0, "domShip": 0, "wip": 0, "raw": 0, "prod": 0, "colorProd": 0, "surplus": 0, "stockout": null, "status": "NEW_NO_HISTORY", "model": "BASELINE_RECENT_28", "modelSelected": false, "modelWmape": 0.34073, "baselineWmape": 0.322757}, {"sku": "PNK366076-FP-Apricot Bear-2X-WFS", "color": "Apricot Bear", "size": "2X", "cuttingYield": 45, "p90": 0, "wfs": 0, "domAvail": 0, "domShip": 0, "wip": 0, "raw": 0, "prod": 0, "colorProd": 0, "surplus": 0, "stockout": null, "status": "NEW_NO_HISTORY", "model": "BASELINE_RECENT_28", "modelSelected": false, "modelWmape": 0.34073, "baselineWmape": 0.322757}, {"sku": "PNK366076-FP-Apricot Bear-3X-WFS", "color": "Apricot Bear", "size": "3X", "cuttingYield": 45, "p90": 0, "wfs": 0, "domAvail": 0, "domShip": 0, "wip": 0, "raw": 0, "prod": 0, "colorProd": 0, "surplus": 0, "stockout": null, "status": "NEW_NO_HISTORY", "model": "BASELINE_RECENT_28", "modelSelected": false, "modelWmape": 0.34073, "baselineWmape": 0.322757}, {"sku": "PNK366076-FP-Apricot Bear-4X-WFS", "color": "Apricot Bear", "size": "4X", "cuttingYield": 45, "p90": 0, "wfs": 0, "domAvail": 0, "domShip": 0, "wip": 0, "raw": 0, "prod": 0, "colorProd": 0, "surplus": 0, "stockout": null, "status": "NEW_NO_HISTORY", "model": "BASELINE_RECENT_28", "modelSelected": false, "modelWmape": 0.34073, "baselineWmape": 0.322757}, {"sku": "PNK366076-FP-BK Leaf Butterfly-2X-WFS", "color": "BK Leaf Butterfly", "size": "2X", "cuttingYield": 45, "p90": 16.79, "wfs": 10.0, "domAvail": 0, "domShip": 0, "wip": 0, "raw": 0, "prod": 0, "colorProd": 0, "surplus": 0, "stockout": null, "status": "NOT_NEEDED", "model": "BASELINE_RECENT_28", "modelSelected": false, "modelWmape": 0.34073, "baselineWmape": 0.322757}, {"sku": "PNK366076-FP-BK Leaf Butterfly-3X-WFS", "color": "BK Leaf Butterfly", "size": "3X", "cuttingYield": 45, "p90": 25.18, "wfs": 25.0, "domAvail": 0, "domShip": 0, "wip": 0, "raw": 0.18, "prod": 0, "colorProd": 0, "surplus": 0, "stockout": null, "status": "MANUAL_REVIEW", "model": "BASELINE_RECENT_28", "modelSelected": false, "modelWmape": 0.34073, "baselineWmape": 0.322757}, {"sku": "PNK366076-FP-Green Butterfly-1X-WFS", "color": "Green Butterfly", "size": "1X", "cuttingYield": 45, "p90": 0, "wfs": 0, "domAvail": 0, "domShip": 0, "wip": 0, "raw": 0, "prod": 0, "colorProd": 0, "surplus": 0, "stockout": null, "status": "NEW_NO_HISTORY", "model": "BASELINE_RECENT_28", "modelSelected": false, "modelWmape": 0.34073, "baselineWmape": 0.322757}, {"sku": "PNK366076-FP-Green Butterfly-2X-WFS", "color": "Green Butterfly", "size": "2X", "cuttingYield": 45, "p90": 0, "wfs": 0, "domAvail": 0, "domShip": 0, "wip": 0, "raw": 0, "prod": 0, "colorProd": 0, "surplus": 0, "stockout": null, "status": "NEW_NO_HISTORY", "model": "BASELINE_RECENT_28", "modelSelected": false, "modelWmape": 0.34073, "baselineWmape": 0.322757}, {"sku": "PNK366076-FP-Green Butterfly-3X-WFS", "color": "Green Butterfly", "size": "3X", "cuttingYield": 45, "p90": 0, "wfs": 0, "domAvail": 0, "domShip": 0, "wip": 0, "raw": 0, "prod": 0, "colorProd": 0, "surplus": 0, "stockout": null, "status": "NEW_NO_HISTORY", "model": "BASELINE_RECENT_28", "modelSelected": false, "modelWmape": 0.34073, "baselineWmape": 0.322757}, {"sku": "PNK366076-FP-Green Butterfly-4X-WFS", "color": "Green Butterfly", "size": "4X", "cuttingYield": 45, "p90": 0, "wfs": 0, "domAvail": 0, "domShip": 0, "wip": 0, "raw": 0, "prod": 0, "colorProd": 0, "surplus": 0, "stockout": null, "status": "NEW_NO_HISTORY", "model": "BASELINE_RECENT_28", "modelSelected": false, "modelWmape": 0.34073, "baselineWmape": 0.322757}, {"sku": "PNK366076-FP-LD Snow White-1X-WFS", "color": "LD Snow White", "size": "1X", "cuttingYield": 45, "p90": 0, "wfs": 0, "domAvail": 0, "domShip": 0, "wip": 0, "raw": 0, "prod": 0, "colorProd": 0, "surplus": 0, "stockout": null, "status": "NEW_NO_HISTORY", "model": "BASELINE_RECENT_28", "modelSelected": false, "modelWmape": 0.34073, "baselineWmape": 0.322757}, {"sku": "PNK366076-FP-LD Snow White-2X-WFS", "color": "LD Snow White", "size": "2X", "cuttingYield": 45, "p90": 0, "wfs": 0, "domAvail": 0, "domShip": 0, "wip": 0, "raw": 0, "prod": 0, "colorProd": 0, "surplus": 0, "stockout": null, "status": "NEW_NO_HISTORY", "model": "BASELINE_RECENT_28", "modelSelected": false, "modelWmape": 0.34073, "baselineWmape": 0.322757}, {"sku": "PNK366076-FP-LD Snow White-3X-WFS", "color": "LD Snow White", "size": "3X", "cuttingYield": 45, "p90": 0, "wfs": 0, "domAvail": 0, "domShip": 0, "wip": 0, "raw": 0, "prod": 0, "colorProd": 0, "surplus": 0, "stockout": null, "status": "NEW_NO_HISTORY", "model": "BASELINE_RECENT_28", "modelSelected": false, "modelWmape": 0.34073, "baselineWmape": 0.322757}, {"sku": "PNK366076-FP-LD Snow White-4X-WFS", "color": "LD Snow White", "size": "4X", "cuttingYield": 45, "p90": 0, "wfs": 0, "domAvail": 0, "domShip": 0, "wip": 0, "raw": 0, "prod": 0, "colorProd": 0, "surplus": 0, "stockout": null, "status": "NEW_NO_HISTORY", "model": "BASELINE_RECENT_28", "modelSelected": false, "modelWmape": 0.34073, "baselineWmape": 0.322757}, {"sku": "PNK366076-FP-Pink Star-1X-WFS", "color": "Pink Star", "size": "1X", "cuttingYield": 45, "p90": 7.0, "wfs": 5.0, "domAvail": 0, "domShip": 0, "wip": 0, "raw": 0, "prod": 0, "colorProd": 0, "surplus": 0, "stockout": null, "status": "NOT_NEEDED", "model": "BASELINE_RECENT_28", "modelSelected": false, "modelWmape": 0.34073, "baselineWmape": 0.322757}, {"sku": "PNK366076-FP-Pink White Flower-2X-WFS", "color": "Pink White Flower", "size": "2X", "cuttingYield": 45, "p90": 25.18, "wfs": 4.0, "domAvail": 0, "domShip": 0, "wip": 0, "raw": 0, "prod": 0, "colorProd": 0, "surplus": 0, "stockout": null, "status": "NOT_NEEDED", "model": "BASELINE_RECENT_28", "modelSelected": false, "modelWmape": 0.34073, "baselineWmape": 0.322757}, {"sku": "PNK366076-FP-Rose White-1X-WFS", "color": "Rose White", "size": "1X", "cuttingYield": 45, "p90": 0, "wfs": 0, "domAvail": 0, "domShip": 0, "wip": 0, "raw": 0, "prod": 0, "colorProd": 0, "surplus": 0, "stockout": null, "status": "NEW_NO_HISTORY", "model": "BASELINE_RECENT_28", "modelSelected": false, "modelWmape": 0.34073, "baselineWmape": 0.322757}, {"sku": "PNK366076-FP-Rose White-2X-WFS", "color": "Rose White", "size": "2X", "cuttingYield": 45, "p90": 0, "wfs": 0, "domAvail": 0, "domShip": 0, "wip": 0, "raw": 0, "prod": 0, "colorProd": 0, "surplus": 0, "stockout": null, "status": "NEW_NO_HISTORY", "model": "BASELINE_RECENT_28", "modelSelected": false, "modelWmape": 0.34073, "baselineWmape": 0.322757}, {"sku": "PNK366076-FP-Rose White-3X-WFS", "color": "Rose White", "size": "3X", "cuttingYield": 45, "p90": 0, "wfs": 0, "domAvail": 0, "domShip": 0, "wip": 0, "raw": 0, "prod": 0, "colorProd": 0, "surplus": 0, "stockout": null, "status": "NEW_NO_HISTORY", "model": "BASELINE_RECENT_28", "modelSelected": false, "modelWmape": 0.34073, "baselineWmape": 0.322757}, {"sku": "PNK366076-FP-Rose White-4X-WFS", "color": "Rose White", "size": "4X", "cuttingYield": 45, "p90": 0, "wfs": 0, "domAvail": 0, "domShip": 0, "wip": 0, "raw": 0, "prod": 0, "colorProd": 0, "surplus": 0, "stockout": null, "status": "NEW_NO_HISTORY", "model": "BASELINE_RECENT_28", "modelSelected": false, "modelWmape": 0.34073, "baselineWmape": 0.322757}, {"sku": "PNK366076-FP-Spot Blue-3X-WFS", "color": "Spot Blue", "size": "3X", "cuttingYield": 45, "p90": 39.17, "wfs": 13.0, "domAvail": 0, "domShip": 0, "wip": 0, "raw": 8.17, "prod": 0, "colorProd": 0, "surplus": 0, "stockout": null, "status": "MANUAL_REVIEW", "model": "BASELINE_RECENT_28", "modelSelected": false, "modelWmape": 0.34073, "baselineWmape": 0.322757}]};
+const { meta, rows } = DATA;
+
+// ---- 渲染头信息 ----
+document.getElementById('subline').textContent =
+  `parentSku ${meta.parentSku} · 快照日 ${meta.snapshotDate} · 目标覆盖 ${meta.targetCoverageDays} 天 · ${meta.rowCount} 个 SKU`;
+
+document.getElementById('summary').innerHTML = `
+  <div class="stat"><div class="n blue">${meta.totalP90}</div><div class="l">P90 总需求(件)</div></div>
+  <div class="stat"><div class="n amber">${meta.totalRaw}</div><div class="l">raw 缺口合计</div></div>
+  <div class="stat"><div class="n red">${meta.totalProd}</div><div class="l">当前做货合计</div></div>
+  <div class="stat"><div class="n green">${meta.byStatus.MANUAL_REVIEW||0}</div><div class="l">MANUAL_REVIEW</div></div>
+  <div class="stat"><div class="n">${meta.byStatus.NEW_NO_HISTORY||0}</div><div class="l">NEW_NO_HISTORY</div></div>
+`;
+
+// ---- 模型选模证据 ----
+const mw = meta.modelWmape, bw = meta.baselineWmape;
+const baselineWon = mw > bw;
+document.getElementById('modelProof').innerHTML = `
+  <div class="kv"><span class="k">选用模型</span><span class="v">${meta.model}</span></div>
+  <div class="kv"><span class="k">AutoETS WMAPE</span><span class="v" style="color:var(--amber)">${mw}</span></div>
+  <div class="kv"><span class="k">Baseline WMAPE</span><span class="v" style="color:var(--green)">${bw}</span></div>
+  <div class="kv"><span class="k">结论</span><span class="v">${baselineWon?'Baseline 更优→选用':'AutoETS 更优→选用'}</span></div>
+`;
+document.getElementById('modelCallout').innerHTML = baselineWon
+  ? `<b>这是真实选模结果，不是服务降级。</b> Python 8091 跑了 AutoETS 与 baseline 的 backtest 对比，
+     baseline 的 WMAPE（${bw}）低于 AutoETS（${mw}），所以系统主动选了 <code>BASELINE_RECENT_28</code>。
+     若 8091 宕机，模型字段会是 <code>BASELINE_SERVICE_FALLBACK</code> 且 WMAPE 为 null——本款两者都有值，证明 Python 真实在线并参与计算。`
+  : `<b>AutoETS 模型胜出。</b> Python 8091 在线并选用了时间序列模型。`;
+
+// ---- 根因 ----
+document.getElementById('rootCause').innerHTML = `
+  <div class="kv"><span class="k">MANUAL_REVIEW (防御锁)</span><span class="v">${meta.byStatus.MANUAL_REVIEW||0} 个</span></div>
+  <div class="kv"><span class="k">NEW_NO_HISTORY (无历史)</span><span class="v">${meta.byStatus.NEW_NO_HISTORY||0} 个</span></div>
+  <div class="kv"><span class="k">NOT_NEEDED (无缺口)</span><span class="v">${meta.byStatus.NOT_NEEDED||0} 个</span></div>
+  <div class="kv"><span class="k">典型断货日</span><span class="v" style="color:var(--red)">2026-08-04</span></div>
+`;
+document.getElementById('rootCallout').innerHTML =
+  `<b>做货=0 的主因是防御锁，不是裁床取整。</b> <code>ReplenishmentPlanner</code> 规定：若某 SKU 的 P90 断货日早于
+   <code>snapshot + FACTORY_TO_SELLABLE_DAYS(60)</code>，新工厂单（60 天才能可售）救不了眼前的断货，遂标
+   <code>MANUAL_REVIEW</code> 并<b>不做货</b>。PNK366076 断货日 2026-08-04（几乎已断货），故 20 个有需求的 SKU 全部被锁。
+   另有 32 个 SKU 无 90 天销量（NEW_NO_HISTORY）无法规划。`;
+
+// ---- 常量表 ----
+const C = meta.constants;
+document.getElementById('constants').innerHTML = `
+  <div class="kv"><span class="k">HORIZON_DAYS（规划窗口）</span><span class="v">${C.HORIZON_DAYS} <span class="pill gray">硬编码</span></span></div>
+  <div class="kv"><span class="k">DOMESTIC_SHIPMENT_LEAD_DAYS（国内仓提前期）</span><span class="v">${C.DOMESTIC_SHIPMENT_LEAD_DAYS} <span class="pill gray">硬编码</span></span></div>
+  <div class="kv"><span class="k">FACTORY_TO_SELLABLE_DAYS（工厂可售提前期）</span><span class="v">${C.FACTORY_TO_SELLABLE_DAYS} <span class="pill gray">硬编码</span></span></div>
+  <div class="kv"><span class="k">MAX_AUTO_CUTTING_SURPLUS_RATIO</span><span class="v">${C.MAX_AUTO_CUTTING_SURPLUS_RATIO} <span class="pill gray">硬编码</span></span></div>
+  <div class="kv"><span class="k">MINIMUM_SKU_QUANTITY（单 SKU 最小量）</span><span class="v">${C.MINIMUM_SKU_QUANTITY} <span class="pill gray">硬编码</span></span></div>
+  <div class="kv"><span class="k">cuttingYield（裁床数，本款）</span><span class="v">${C.cuttingYield} <span class="pill green">产品库</span></span></div>
+`;
+
+// ---- 生产模拟器（忠实复刻 Java 逻辑）----
+function nonNeg(v){ return v==null?0:Math.max(0,v); }
+function allocate(requirements, cuttingYield, MIN){
+  const empty={}; requirements.forEach(r=>empty[r.key]=0);
+  const positive=requirements.filter(r=>r.raw>0);
+  if(positive.length===0) return {colorTotal:0, alloc:empty, status:'NOT_NEEDED'};
+  if(!cuttingYield||cuttingYield<=0) return {colorTotal:0, alloc:empty, status:'MISSING_CUTTING_YIELD'};
+  const rawTotal=positive.reduce((s,r)=>s+r.raw,0);
+  const bedCount=Math.max(1, Math.ceil(rawTotal/cuttingYield));
+  const colorTotal=bedCount*cuttingYield;
+  const units={}; positive.forEach(r=>units[r.key]=0);
+  let remaining=colorTotal;
+  // 每个正需求 SKU 先给 MIN
+  for(const r of positive){ if(remaining<MIN) break; units[r.key]=MIN; remaining-=MIN; }
+  // 补齐各自缺口
+  for(const r of positive){ if(remaining===0) break;
+    const alloc=units[r.key]; const shortage=Math.max(0, Math.ceil(r.raw)-alloc);
+    const applied=Math.min(remaining, shortage); units[r.key]=alloc+applied; remaining-=applied; }
+  // 余量按权重分摊（近似：用 raw 作权重）
+  if(remaining>0){
+    const wt=positive.reduce((s,r)=>s+r.raw,0);
+    const rem={}; let dist=0;
+    for(const r of positive){ const exact=remaining*r.raw/wt; const whole=Math.floor(exact);
+      units[r.key]+=whole; rem[r.key]=exact-whole; dist+=whole; }
+    const order=positive.slice().sort((a,b)=>rem[b.key]-rem[a.key]);
+    for(let i=dist;i<remaining;i++){ const r=order[i-dist]; units[r.key]+=1; }
+  }
+  const uncovered=positive.filter(r=>(units[r.key]||0)<=0).map(r=>r.key);
+  return {colorTotal, alloc:units, status: uncovered.length?'PARTIALLY_COVERED':'ALLOCATED'};
+}
+
+function recompute(){
+  const bypass=document.getElementById('bypass').checked;
+  const cy=+document.getElementById('cy').value;
+  const ft=+document.getElementById('ft').value;
+  const mq=+document.getElementById('mq').value;
+  document.getElementById('cyVal').textContent=cy;
+  document.getElementById('ftVal').textContent=ft;
+  document.getElementById('mqVal').textContent=mq;
+  const snap=new Date(meta.snapshotDate+'T00:00:00');
+
+  // 按颜色分组
+  const byColor={};
+  rows.forEach(r=>{
+    const c=(r.color||'未知').trim().toLowerCase();
+    byColor[c]=byColor[c]||[]; byColor[c].push(r);
+  });
+
+  const simProd={}; // sku -> sim production
+  let simTotal=0; let plannedCount=0;
+  Object.values(byColor).forEach(group=>{
+    // 计算每 SKU rawProduction（本款 wfs/domestic/wip 均为0 → raw=p90）
+    const reqs=group.map(r=>({
+      key:r.sku, raw:nonNeg(r.p90)-nonNeg(r.wfs)-nonNeg(r.domShip)-nonNeg(r.wip),
+      p90stockout: r.stockout
+    })).filter(r=>r.raw>0);
+    if(reqs.length===0) return;
+    // 防御锁：任一 SKU 断货日早于 snapshot+ft
+    let locked=false;
+    if(!bypass){
+      reqs.forEach(r=>{
+        if(r.p90stockout){
+          const so=new Date(r.p90stockout+'T00:00:00');
+          if(so < new Date(snap.getTime()+ft*86400000)) locked=true;
+        }
+      });
+    }
+    if(locked) return; // 维持现状：不做货
+    const alloc=allocate(reqs, cy, mq);
+    Object.entries(alloc.alloc).forEach(([k,v])=>{ simProd[k]=v; });
+  });
+
+  rows.forEach(r=>{
+    const sp=simProd[r.sku]||0;
+    r._sim=sp; if(sp>0){ simTotal+=sp; plannedCount++; }
+  });
+
+  // 重新渲染表格的模拟列 + 状态
+  const tbody=document.getElementById('tbody');
+  [...tbody.children].forEach((tr,i)=>{
+    const r=rows[i];
+    const sp=r._sim||0;
+    tr.children[7].textContent=sp>0?sp:0;
+    tr.children[7].className=sp>0?'sim-prod':'';
+    let st=r.status, cls='gray';
+    if(bypass && sp>0){ st='PLANNED(模拟)'; cls='green'; }
+    else if(r.status==='MANUAL_REVIEW'){ cls='amber'; }
+    else if(r.status==='NEW_NO_HISTORY'){ cls='blue'; }
+    else cls='gray';
+    tr.children[9].innerHTML=`<span class="pill ${cls}">${st}</span>`;
+  });
+
+  document.getElementById('simNote').innerHTML =
+    `当前参数：绕过防御锁=<b>${bypass}</b>，裁床数=<b>${cy}</b>，工厂可售=<b>${ft}</b>天，最小单SKU=<b>${mq}</b>。
+     → 模拟可做货 <b style="color:var(--green)">${simTotal}</b> 件（${plannedCount} 个 SKU）。
+     ${bypass?'<b style="color:var(--green)">已绕过防御锁</b>，按下述裁床数学即可生产；真实系统需人工在需求分析页确认。':
+       '<b style="color:var(--red)">防御锁仍生效</b>：断货日早于 snapshot+'+ft+'天的 SKU 维持 MANUAL_REVIEW、不做货。'}`;
+}
+
+// 初始渲染表格
+const tbody=document.getElementById('tbody');
+rows.forEach(r=>{
+  const tr=document.createElement('tr');
+  const statusCls = r.status==='MANUAL_REVIEW'?'amber':(r.status==='NEW_NO_HISTORY'?'blue':'gray');
+  tr.innerHTML=`
+    <td class="l">${r.sku}</td><td class="l">${r.color||''}</td><td class="l">${r.size||''}</td>
+    <td>${r.p90}</td><td>${r.raw}</td><td>${r.cuttingYield??'—'}</td>
+    <td>${r.prod}</td><td class="">0</td><td>${r.stockout||'—'}</td>
+    <td class="l"><span class="pill ${statusCls}">${r.status}</span></td>`;
+  tbody.appendChild(tr);
+});
+
+['bypass','cy','ft','mq'].forEach(id=>
+  document.getElementById(id).addEventListener('input', recompute));
+recompute();
+</script>
+</body>
+</html>

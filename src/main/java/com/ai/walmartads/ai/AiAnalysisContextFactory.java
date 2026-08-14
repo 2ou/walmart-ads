@@ -1,5 +1,8 @@
 package com.ai.walmartads.ai;
 
+import com.ai.walmartads.analytics.application.CampaignDecisionConfig;
+import com.ai.walmartads.analytics.application.CampaignDecisionService;
+import com.ai.walmartads.analytics.application.CampaignDecisionService.DecisionAnalysis;
 import com.ai.walmartads.analytics.application.DashboardDataService;
 import com.ai.walmartads.config.KieAiProperties;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -17,15 +20,18 @@ public class AiAnalysisContextFactory {
 
     private final DashboardDataService dashboardDataService;
     private final KieAiProperties properties;
+    private final CampaignDecisionService campaignDecisionService;
     private final ObjectMapper objectMapper;
 
     public AiAnalysisContextFactory(
             DashboardDataService dashboardDataService,
             KieAiProperties properties,
+            CampaignDecisionService campaignDecisionService,
             ObjectMapper objectMapper
     ) {
         this.dashboardDataService = dashboardDataService;
         this.properties = properties;
+        this.campaignDecisionService = campaignDecisionService;
         this.objectMapper = objectMapper;
     }
 
@@ -69,6 +75,7 @@ public class AiAnalysisContextFactory {
                 .toList();
         List<Map<String, Object>> topSkus = topSkus(payload.skuDaily(), startDate, endDate);
 
+        DecisionAnalysis decision = campaignDecisionService.classify(days);
         Map<String, Object> context = new LinkedHashMap<>();
         context.put("dataAsOf", endDate);
         context.put("periodStart", startDate);
@@ -80,7 +87,11 @@ public class AiAnalysisContextFactory {
         context.put("ruleRecommendations", recommendations);
         context.put("topSkus", topSkus);
         context.put("dailyTrend", daily);
+        context.put("decisionSummary", decision.summary());
+        context.put("decisionRows", decision.rows());
+        context.put("decisionThresholds", campaignDecisionService.getConfigs());
         context.put("analysisConstraints", List.of(
+                "Agent 控制室的决策分类（scale/reduce/optimize/collect）是本次分析的核心输入，请据此展开跨维度解释与建议排序",
                 "规则结果优先，AI 只做跨维度解释和建议排序",
                 "不执行广告修改",
                 "样本不足时保持观察",

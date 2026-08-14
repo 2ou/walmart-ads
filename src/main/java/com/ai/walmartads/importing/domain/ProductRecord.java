@@ -10,6 +10,7 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Entity
@@ -114,6 +115,10 @@ public class ProductRecord {
     @Column(name = "cutting_yield")
     private Integer cuttingYield;
 
+    /** 开售时间：该父款最早有销量日；无销量为 null（新品）。由订单表最早成交日回填，按父款去重。 */
+    @Column(name = "launch_date")
+    private LocalDate launchDate;
+
     @Column(nullable = false, columnDefinition = "json")
     /** 原始报文（JSON） */
     private String rawPayload;
@@ -189,5 +194,13 @@ public class ProductRecord {
 
     public void setCuttingYield(Integer cuttingYield) {
         this.cuttingYield = cuttingYield;
+    }
+
+    public LocalDate getLaunchDate() {
+        return launchDate;
+    }
+
+    public void setLaunchDate(LocalDate launchDate) {
+        this.launchDate = launchDate;
     }
 }

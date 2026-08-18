@@ -65,8 +65,26 @@ public class TransitInventoryService {
         }
     }
 
+    /**
+     * 路途总件数（申收差异之和）达到阈值的货件编号集合。
+     * 少于阈值的货件视为拆单/噪音等“多余货件”，不参与货件明细、按 SKU 路途库存与补货供应的任何计算。
+     */
+    private static final double MIN_SHIPMENT_UNITS = 50.0;
+
+    private Set<String> keptShipmentNos() {
+        Map<String, Double> unitsByShipment = new LinkedHashMap<>();
+        for (ShipmentRecord record : shipmentRepository.findCurrentVersions()) {
+            unitsByShipment.merge(record.getShipmentNo(), nonNegative(record.getReceiptDifference()), Double::sum);
+        }
+        return unitsByShipment.entrySet().stream()
+                .filter(entry -> entry.getValue() >= MIN_SHIPMENT_UNITS)
+                .map(java.util.Map.Entry::getKey)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+    }
+
     @Transactional(readOnly = true)
     public TransitData load() {
+        Set<String> kept = keptShipmentNos();
         Map<String, ShipmentLogisticsRecord> logisticsByShipment = new LinkedHashMap<>();
         logisticsRepository.findCurrentVersions().forEach(record ->
                 logisticsByShipment.putIfAbsent(record.getShipmentNo(), record));
@@ -77,7 +95,9 @@ public class TransitInventoryService {
         Map<String, Double> unitsBySku = new LinkedHashMap<>();
         for (ShipmentRecord record : shipmentRepository.findCurrentVersions()) {
             double units = nonNegative(record.getReceiptDifference());
-            unitsBySku.merge(record.getSku(), units, Double::sum);
+            if (kept.contains(record.getShipmentNo())) {
+                unitsBySku.merge(record.getSku(), units, Double::sum);
+            }
             MutableShipment shipment = shipments.computeIfAbsent(record.getShipmentNo(), key ->
                     new MutableShipment(record.getShipmentNo(), record.getLocalStatus(), record.getShipmentCreatedAt()));
             shipment.units += units;
@@ -88,6 +108,9 @@ public class TransitInventoryService {
 
         List<TransitShipment> views = new ArrayList<>();
         shipments.values().forEach(shipment -> {
+            if (!kept.contains(shipment.shipmentNo)) {
+                return;
+            }
             ShipmentLogisticsRecord logistics = logisticsByShipment.get(shipment.shipmentNo);
             String channel = logistics == null ? null : logistics.getChannelName();
             TransitChannelLeadTime leadTime = channel == null ? null : leadTimeByChannel.get(channel);
@@ -129,6 +152,7 @@ public class TransitInventoryService {
         if (snapshotDate == null || horizonDays <= 0) {
             return List.of();
         }
+        Set<String> kept = keptShipmentNos();
         Map<String, ShipmentLogisticsRecord> logisticsByShipment = new LinkedHashMap<>();
         logisticsRepository.findCurrentVersions().forEach(record ->
                 logisticsByShipment.putIfAbsent(record.getShipmentNo(), record));
@@ -136,6 +160,9 @@ public class TransitInventoryService {
                 .collect(Collectors.toMap(TransitChannelLeadTime::getChannelName, value -> value));
         List<TransitSkuSupply> result = new ArrayList<>();
         for (ShipmentRecord record : shipmentRepository.findCurrentVersions()) {
+            if (!kept.contains(record.getShipmentNo())) {
+                continue;
+            }
             ShipmentLogisticsRecord logistics = logisticsByShipment.get(record.getShipmentNo());
             String channel = logistics == null ? null : logistics.getChannelName();
             TransitChannelLeadTime leadTime = channel == null ? null : leadTimeByChannel.get(channel);

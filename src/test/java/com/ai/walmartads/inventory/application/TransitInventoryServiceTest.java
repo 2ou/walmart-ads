@@ -42,7 +42,7 @@ class TransitInventoryServiceTest {
         when(shipment.getShipmentCreatedAt()).thenReturn(LocalDateTime.of(2026, 7, 25, 10, 55));
         when(shipment.getSku()).thenReturn("SKU-001");
         when(shipment.getParentSku()).thenReturn("PNK001");
-        when(shipment.getReceiptDifference()).thenReturn(BigDecimal.TEN);
+        when(shipment.getReceiptDifference()).thenReturn(BigDecimal.valueOf(100));
         when(logistics.getShipmentNo()).thenReturn("SHP-001");
         when(logistics.getChannelName()).thenReturn("海运渠道 A");
         when(shipmentRepository.findCurrentVersions()).thenReturn(List.of(shipment));
@@ -93,5 +93,43 @@ class TransitInventoryServiceTest {
         assertThat(captor.getValue().getChannelName()).isEqualTo("渠道 B");
         assertThat(captor.getValue().getLeadDays()).isNull();
         assertThat(captor.getValue().isManual()).isFalse();
+    }
+
+    @Test
+    void excludesShipmentsWithLessThanMinimumUnits() {
+        ShipmentRecordRepository shipmentRepository = mock(ShipmentRecordRepository.class);
+        ShipmentLogisticsRepository logisticsRepository = mock(ShipmentLogisticsRepository.class);
+        TransitChannelLeadTimeRepository leadTimeRepository = mock(TransitChannelLeadTimeRepository.class);
+        ShipmentRecord small = mock(ShipmentRecord.class);
+        ShipmentRecord large = mock(ShipmentRecord.class);
+
+        when(small.getShipmentNo()).thenReturn("SHP-SMALL");
+        when(small.getLocalStatus()).thenReturn("已发货");
+        when(small.getShipmentCreatedAt()).thenReturn(LocalDateTime.of(2026, 7, 25, 10, 55));
+        when(small.getSku()).thenReturn("SKU-SMALL");
+        when(small.getParentSku()).thenReturn("PNK-SMALL");
+        when(small.getReceiptDifference()).thenReturn(BigDecimal.valueOf(30)); // < 50 应被排除
+
+        when(large.getShipmentNo()).thenReturn("SHP-LARGE");
+        when(large.getLocalStatus()).thenReturn("已发货");
+        when(large.getShipmentCreatedAt()).thenReturn(LocalDateTime.of(2026, 7, 25, 10, 55));
+        when(large.getSku()).thenReturn("SKU-LARGE");
+        when(large.getParentSku()).thenReturn("PNK-LARGE");
+        when(large.getReceiptDifference()).thenReturn(BigDecimal.valueOf(200)); // >= 50 应保留
+
+        when(shipmentRepository.findCurrentVersions()).thenReturn(List.of(small, large));
+        when(logisticsRepository.findCurrentVersions()).thenReturn(List.of());
+        when(leadTimeRepository.findAll()).thenReturn(List.of());
+
+        TransitInventoryService.TransitData result = new TransitInventoryService(
+                shipmentRepository,
+                logisticsRepository,
+                leadTimeRepository
+        ).load();
+
+        assertThat(result.shipments()).hasSize(1);
+        assertThat(result.shipments().get(0).shipmentNo()).isEqualTo("SHP-LARGE");
+        assertThat(result.unitsBySku()).doesNotContainKey("SKU-SMALL");
+        assertThat(result.unitsBySku()).containsEntry("SKU-LARGE", 200.0);
     }
 }

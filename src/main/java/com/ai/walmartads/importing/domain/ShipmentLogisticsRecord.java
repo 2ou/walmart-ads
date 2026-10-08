@@ -17,7 +17,7 @@ import java.time.LocalDateTime;
 /** 物流信息登记表的一条货件关联记录。 */
 @Entity
 @Table(name = "wm_ads_shipment_logistics")
-public class ShipmentLogisticsRecord {
+public class ShipmentLogisticsRecord extends com.ai.walmartads.workspace.WorkspaceOwnedEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

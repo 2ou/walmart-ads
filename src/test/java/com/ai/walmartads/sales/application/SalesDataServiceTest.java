@@ -1,5 +1,6 @@
 package com.ai.walmartads.sales.application;
 
+import com.ai.walmartads.inventory.application.TransitInventoryService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
@@ -9,8 +10,13 @@ import org.springframework.jdbc.datasource.embedded.EmbeddedDatabaseType;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class SalesDataServiceTest {
 
@@ -27,7 +33,8 @@ class SalesDataServiceTest {
         jdbc.getJdbcTemplate().execute("""
                 create table wm_ads_import_file (
                     id bigint primary key,
-                    active boolean not null
+                    active boolean not null,
+                    report_kind varchar(40)
                 )
                 """);
         jdbc.getJdbcTemplate().execute("""
@@ -56,6 +63,18 @@ class SalesDataServiceTest {
                     size varchar(120)
                 )
                 """);
+        // V53：订单读路径改走 wm_ads_order_record_valid 视图（只保留产品库 current_version=1 的款）。
+        // 夹具不建这张视图，SalesDataService 的三条读 SQL 在 H2 里会直接 BadSqlGrammar。
+        jdbc.getJdbcTemplate().execute("""
+                create view wm_ads_order_record_valid as
+                select o.*
+                  from wm_ads_order_record o
+                 where o.parent_sku in (
+                       select p.parent_sku
+                         from wm_ads_product_record p
+                        where p.current_version = true
+                 )
+                """);
         jdbc.getJdbcTemplate().execute("""
                 create table wm_ads_inventory_snapshot (
                     id bigint primary key,
@@ -70,7 +89,34 @@ class SalesDataServiceTest {
                     inbound_units decimal(18,4) not null
                 )
                 """);
-        jdbc.getJdbcTemplate().update("insert into wm_ads_import_file values (1, true), (2, true), (3, true), (4, false)");
+        // 生产侧改读统一视图（旧报表快照 ∪ 领星库存快照，V49）。测试只建旧报表那一路，
+        // 领星独有的列在视图里以 NULL 呈现 —— 与 V49 的视图口径保持一致。
+        jdbc.getJdbcTemplate().execute("""
+                create view wm_ads_inventory_unified as
+                select 'LEGACY' as source_type,
+                       s.snapshot_at, s.sku, s.parent_sku, s.item_id, s.item_name,
+                       s.available_units,
+                       cast(null as decimal(18,4)) as reserved_units,
+                       cast(null as decimal(18,4)) as inbound_units
+                  from wm_ads_inventory_snapshot s
+                  join wm_ads_import_file f on f.id = s.import_file_id and f.active = true
+                """);
+        jdbc.getJdbcTemplate().execute("""
+                create table wm_ads_lx_ad_report (
+                    id bigint primary key,
+                    report_date date not null,
+                    report_level varchar(20) not null,
+                    ad_spend decimal(18,4) not null,
+                    attributed_sales decimal(18,4) not null
+                )
+                """);
+        jdbc.getJdbcTemplate().update("""
+                insert into wm_ads_import_file values
+                    (1, true, 'ITEM_PERFORMANCE'),
+                    (2, true, 'ITEM_PERFORMANCE'),
+                    (3, true, 'KEYWORD_PERFORMANCE'),
+                    (4, false, 'ITEM_PERFORMANCE')
+                """);
 
         insertOrder(1, 1, "2026-07-20", "O1", "SKU-A", "P1", 2, 10);
         insertOrder(2, 1, "2026-07-21", "O2", "SKU-A", "P1", 3, 12);
@@ -89,7 +135,18 @@ class SalesDataServiceTest {
         insertInventory(2, "SKU-B", "P1", 0, 0, 2);
         insertInventory(3, "SKU-C", "P2", 5, 0, 0);
         insertInventory(4, "SKU-D", "P2", 10, 1, 0);
-        service = new SalesDataService(jdbc);
+        // 文件 1：启用中的商品广告报表，参与统计
+        insertAd(1, 1, "2026-07-20", 10, 50);
+        insertAd(2, 1, "2026-07-21", 5, 10);
+        insertAd(3, 1, "2026-07-22", 20, 40);
+        // 路途库存改由 TransitInventoryService 提供（原报表 inbound_units 列已下线）。
+        TransitInventoryService transitInventoryService = mock(TransitInventoryService.class);
+        when(transitInventoryService.load()).thenReturn(new TransitInventoryService.TransitData(
+                Map.of("SKU-A", 4.0, "SKU-B", 2.0),
+                List.of(),
+                List.of()
+        ));
+        service = new SalesDataService(jdbc, transitInventoryService);
     }
 
     @Test
@@ -125,13 +182,14 @@ class SalesDataServiceTest {
         assertThat(skuA.units()).isEqualTo(6);
         assertThat(skuA.revenue()).isEqualTo(67);
         assertThat(skuA.availableUnits()).isEqualTo(12);
-        assertThat(skuA.reservedUnits()).isEqualTo(1);
+        // reserved_units（预留库存）已随 CSV 报表下线，统一视图里恒为 NULL → 0
+        assertThat(skuA.reservedUnits()).isEqualTo(0);
         assertThat(skuA.transitUnits()).isEqualTo(4);
         assertThat(skuA.availableDays()).isEqualTo(6);
         assertThat(skuA.status()).isEqualTo("GROWING");
         assertThat(parent.units()).isEqualTo(8);
         assertThat(parent.availableUnits()).isEqualTo(12);
-        assertThat(parent.reservedUnits()).isEqualTo(1);
+        assertThat(parent.reservedUnits()).isEqualTo(0);
         assertThat(parent.transitUnits()).isEqualTo(6);
         assertThat(parent.availableDays()).isEqualTo(4.5);
         assertThat(parent.variantCount()).isEqualTo(2);
@@ -159,6 +217,39 @@ class SalesDataServiceTest {
         assertThat(payload.meta().periodDays()).isEqualTo(3);
         assertThat(payload.summary().units()).isEqualTo(8);
         assertThat(payload.daily()).hasSize(3);
+    }
+
+    @Test
+    void sumsDailyAdSpendAndRoasFromLingXingItemReports() {
+        SalesDataService.SalesPayload payload = service.load(3);
+        Map<LocalDate, SalesDataService.DailyRow> byDate = payload.daily().stream()
+                .collect(Collectors.toMap(
+                        SalesDataService.DailyRow::date,
+                        row -> row
+                ));
+
+        // 只统计领星 AD_ITEM 日事实，避免活动、广告组和关键词层级重复累计。
+        assertThat(byDate.get(LocalDate.of(2026, 7, 20)).adSpend()).isEqualTo(10);
+        assertThat(byDate.get(LocalDate.of(2026, 7, 20)).roas()).isEqualTo(5);
+        assertThat(byDate.get(LocalDate.of(2026, 7, 21)).adSpend()).isEqualTo(5);
+        assertThat(byDate.get(LocalDate.of(2026, 7, 21)).roas()).isEqualTo(2);
+        assertThat(byDate.get(LocalDate.of(2026, 7, 22)).adSpend()).isEqualTo(20);
+        assertThat(byDate.get(LocalDate.of(2026, 7, 22)).roas()).isEqualTo(2);
+    }
+
+    @Test
+    void reportsZeroAdSpendAndRoasWhenNoAdReportExists() {
+        SalesDataService.SalesPayload payload = service.load(
+                7,
+                LocalDate.of(2026, 7, 18),
+                LocalDate.of(2026, 7, 19)
+        );
+
+        // 07-18 / 07-19 有订单但无广告报表，广告费与 RoAS 应为 0 而不是报错
+        assertThat(payload.daily()).allSatisfy(row -> {
+            assertThat(row.adSpend()).isEqualTo(0);
+            assertThat(row.roas()).isEqualTo(0);
+        });
     }
 
     private void insertOrder(
@@ -210,5 +301,19 @@ class SalesDataServiceTest {
                     available_units, reserved_units, inbound_units
                 ) values (?, 3, timestamp '2026-07-22 12:00:00', ?, ?, ?, ?, ?, ?, ?)
                 """, id, sku, parent, "ITEM-" + id, sku + " inventory", available, reserved, inbound);
+    }
+
+    private void insertAd(
+            long id,
+            long fileId,
+            String date,
+            double spend,
+            double adSales
+    ) {
+        jdbc.getJdbcTemplate().update("""
+                insert into wm_ads_lx_ad_report (
+                    id, report_date, report_level, ad_spend, attributed_sales
+                ) values (?, ?, 'AD_ITEM', ?, ?)
+                """, id, date, spend, adSales);
     }
 }

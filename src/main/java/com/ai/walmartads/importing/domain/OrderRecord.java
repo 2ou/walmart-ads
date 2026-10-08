@@ -16,7 +16,7 @@ import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "wm_ads_order_record")
-public class OrderRecord {
+public class OrderRecord extends com.ai.walmartads.workspace.WorkspaceOwnedEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

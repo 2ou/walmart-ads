@@ -1,5 +1,6 @@
 package com.ai.walmartads.product.application;
 
+import com.ai.walmartads.returns.application.ReturnQuerySupport;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -11,8 +12,8 @@ import java.util.Map;
 
 /**
  * 依据 RETURN_ORDER 历史数据，按"对应款(parent)"推算平均退款率。
- * 口径复用 ReturnAnalyticsService：退款率 = 该款 Refunded 件数 ÷ 同款订单销售件数（全量历史）。
- * 仅返回存在历史数据的款；无历史的款不在结果中（由调用方回退到手动填写或默认 0）。
+ * 口径复用 ReturnAnalyticsService：退款率 = 该款 RETURN_INVOICED 件数 ÷ 退款文件时间范围内的同款订单销售件数。
+ * 仅返回存在历史数据的款；该数据在产品库仅供参考，不会覆盖手工退款率。
  */
 @Service
 public class RefundRateService {
@@ -25,14 +26,20 @@ public class RefundRateService {
 
     public Map<String, BigDecimal> ratesByParent() {
         Map<String, BigDecimal> result = new LinkedHashMap<>();
-        List<Map<String, Object>> rows = jdbc.queryForList("""
-                with return_parent as (
+        List<Map<String, Object>> rows = jdbc.queryForList(ReturnQuerySupport.ACTIVE_RETURN_CTE + """
+                , refund_period as (
+                    select min(r.report_month) as start_month,
+                           max(r.report_month) as end_month
+                      from active_return_rows r
+                ),
+                return_parent as (
                     select coalesce(r.parent_sku, m.parent_sku) as parent_sku,
-                           sum(case when r.current_status like 'Refunded:%'
+                           sum(case when r.current_status = 'RETURN_INVOICED'
                                     then r.quantity else 0 end) as refunded_units
-                      from wm_ads_return_order r
-                      join wm_ads_import_file f on f.id = r.import_file_id and f.active = true
+                      from active_return_rows r
                       left join wm_ads_sku_mapping m on m.item_id = r.item_id and m.current_version = true
+                      cross join refund_period period
+                     where r.report_month between period.start_month and period.end_month
                      group by coalesce(r.parent_sku, m.parent_sku)
                 )
                 select rp.parent_sku as parent_sku,
@@ -41,9 +48,11 @@ public class RefundRateService {
                   from return_parent rp
                   left join (
                       select p.parent_sku, sum(o.quantity) as sold_units
-                        from wm_ads_order_record o
+                        from wm_ads_order_record_valid o
                         join wm_ads_product_record p on p.sku = o.sku and p.current_version = true
                         join wm_ads_import_file f on f.id = o.import_file_id and f.active = true
+                       cross join refund_period period
+                       where o.order_date between period.start_month and last_day(period.end_month)
                        group by p.parent_sku
                   ) o on o.parent_sku = rp.parent_sku
                  where rp.parent_sku is not null

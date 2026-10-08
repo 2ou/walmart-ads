@@ -1,14 +1,16 @@
 package com.ai.walmartads.inventory.application;
 
+import com.ai.walmartads.common.WalmartImageUrl;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.ai.walmartads.importing.repository.ProductionOrderRepository;
 import com.ai.walmartads.inventory.domain.ForecastFactor;
+import com.ai.walmartads.returns.application.ReturnAnalyticsService;
 import com.ai.walmartads.inventory.repository.ForecastFactorRepository;
 import com.ai.walmartads.inventory.repository.ParentDailySalesOverrideRepository;
+import com.ai.walmartads.supplychain.ProductionOrderSource;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -29,26 +31,29 @@ public class InventoryDataService {
     private static final BigDecimal ZERO = BigDecimal.ZERO;
 
     private final NamedParameterJdbcTemplate jdbc;
-    private final ProductionOrderRepository productionOrderRepository;
+    private final ProductionOrderSource productionOrderSource;
     private final ForecastFactorRepository forecastFactorRepository;
     private final ParentDailySalesOverrideRepository parentDailySalesRepository;
     private final TransitInventoryService transitInventoryService;
     private final ReplenishmentPlanCache replenishmentPlanCache;
+    private final ReturnAnalyticsService returnAnalyticsService;
 
     public InventoryDataService(
             NamedParameterJdbcTemplate jdbc,
-            ProductionOrderRepository productionOrderRepository,
+            ProductionOrderSource productionOrderSource,
             ForecastFactorRepository forecastFactorRepository,
             ParentDailySalesOverrideRepository parentDailySalesRepository,
             TransitInventoryService transitInventoryService,
-            ReplenishmentPlanCache replenishmentPlanCache
+            ReplenishmentPlanCache replenishmentPlanCache,
+            ReturnAnalyticsService returnAnalyticsService
     ) {
         this.jdbc = jdbc;
-        this.productionOrderRepository = productionOrderRepository;
+        this.productionOrderSource = productionOrderSource;
         this.forecastFactorRepository = forecastFactorRepository;
         this.parentDailySalesRepository = parentDailySalesRepository;
         this.transitInventoryService = transitInventoryService;
         this.replenishmentPlanCache = replenishmentPlanCache;
+        this.returnAnalyticsService = returnAnalyticsService;
     }
 
     @Transactional(readOnly = true)
@@ -86,6 +91,11 @@ public class InventoryDataService {
         Map<String, Double> transitBySku = transitData.unitsBySku();
         Map<String, InventoryForecastCalculator.ForecastFactors> factorBySku = loadForecastFactors();
         Map<String, Double> parentDailySalesByParent = loadParentDailySales();
+        Map<String, Double> domesticBySku = domesticBySku();
+        // 产品库口径：只展示 wm_ads_product_record(current_version=1) 内的款。
+        // 用命名参数绑定有效款清单（约 28 个），避免 `in (子查询)` 导致优化器放弃 snapshot_at 索引（见 V54）。
+        List<String> validParents = loadValidParentSkus();
+        String parentFilter = validParents.isEmpty() ? "and 1 = 0" : "and inventory.parent_sku in (:parents)";
         List<Map<String, Object>> inventory = jdbc.queryForList("""
                 select inventory.sku,
                        inventory.parent_sku,
@@ -107,10 +117,7 @@ public class InventoryDataService {
                        product.size,
                        product.cutting_yield,
                        product.launch_date
-                  from wm_ads_inventory_snapshot inventory
-                  join wm_ads_import_file inventory_file
-                    on inventory_file.id = inventory.import_file_id
-                   and inventory_file.active = true
+                  from wm_ads_inventory_unified inventory
                   left join (
                         select sku,
                                max(main_image_url) as main_image_url,
@@ -123,8 +130,13 @@ public class InventoryDataService {
                          group by sku
                   ) product on product.sku = inventory.sku
                  where inventory.snapshot_at = :snapshotAt
+                   """ + parentFilter + """
                  order by inventory.parent_sku, inventory.sku
-                """, new MapSqlParameterSource("snapshotAt", snapshotAt));
+                """, new MapSqlParameterSource("snapshotAt", snapshotAt)
+                        .addValue("parents", validParents));
+
+        // 累计款号退款率（退款率分析口径）：按 parentSku 取；无退款数据时为 null，前端显示「—」
+        Map<String, Double> refundRateByParent = returnAnalyticsService.cumulativeRefundRateByParent();
 
         List<InventoryRow> rows = new ArrayList<>(inventory.size());
         for (Map<String, Object> source : inventory) {
@@ -165,12 +177,15 @@ public class InventoryDataService {
             if (launchDate == null && "OUT_OF_STOCK".equals(risk)) {
                 risk = "NOT_LAUNCHED";
             }
+            Double cumulativeRefundRate = refundRateByParent == null
+                    ? null
+                    : refundRateByParent.getOrDefault(parentSku, 0.0);
             rows.add(new InventoryRow(
                     sku,
                     text(source, "parent_sku"),
                     text(source, "item_id"),
                     text(source, "item_name"),
-                    text(source, "main_image_url"),
+                    WalmartImageUrl.thumb(text(source, "main_image_url")),
                     text(source, "status"),
                     round(recentUnits),
                     forecast.recentDailyUnits(),
@@ -201,11 +216,12 @@ public class InventoryDataService {
                     0,
                     forecast.forecastSuggestedUnits() > 0
                             ? ProductionPlanAllocator.Status.MISSING_COLOR.name()
-                            : ProductionPlanAllocator.Status.NOT_NEEDED.name()
+                            : ProductionPlanAllocator.Status.NOT_NEEDED.name(),
+                    cumulativeRefundRate
             ));
         }
         rows = applyProductionPlans(rows);
-        rows = applyReplenishmentPlans(rows);
+        rows = applyReplenishmentPlans(rows, safeTargetDays);
         rows.sort(Comparator
                 .comparingInt((InventoryRow row) -> riskPriority(row.risk()))
                 .thenComparing(InventoryRow::forecastSuggestedUnits, Comparator.reverseOrder())
@@ -227,27 +243,41 @@ public class InventoryDataService {
                 rows.size(),
                 salesWindow.sampleDays() >= 7
         );
-        return new InventoryPayload(meta, summary, riskCounts, loadTrend(productionTotal, transitData.shipments()), rows, transitData);
+        DomesticStock domesticStock = buildDomesticStock(rows, domesticBySku);
+        return new InventoryPayload(meta, summary, riskCounts, loadTrend(productionTotal, transitData.shipments()), rows, transitData, domesticStock);
     }
 
     @Transactional(readOnly = true)
     public List<ProductionOrderView> productionOrders() {
-        return productionOrderRepository.findCurrentVersions().stream()
+        return productionOrderSource.currentOrders().stream()
                 .map(record -> new ProductionOrderView(
-                        record.getOrderNo(),
-                        record.getStyleNo(),
-                        record.getSku(),
-                        record.getProductionQty() == null ? 0 : round(record.getProductionQty().doubleValue()),
-                        record.getFactoryReturnDate()
+                        record.orderNo(),
+                        record.styleNo(),
+                        record.sku(),
+                        record.productionQty() == null ? 0 : round(record.productionQty().doubleValue()),
+                        record.factoryReturnDate(),
+                        record.source()
                 ))
                 .toList();
+    }
+
+    /**
+     * 有效款号清单（产品库 current_version = 1）。库存口径统一以它为准，
+     * 与 loadTrend / 其它模块的过滤保持一致。
+     */
+    private List<String> loadValidParentSkus() {
+        return jdbc.queryForList("""
+                select distinct product.parent_sku
+                  from wm_ads_product_record product
+                 where product.current_version = 1
+                 order by product.parent_sku
+                """, new MapSqlParameterSource(), String.class);
     }
 
     private LocalDateTime latestSnapshotAt() {
         return jdbc.queryForList("""
                 select max(inventory.snapshot_at) as snapshot_at
-                  from wm_ads_inventory_snapshot inventory
-                  join wm_ads_import_file file on file.id = inventory.import_file_id and file.active = true
+                  from wm_ads_inventory_unified inventory
                 """, new MapSqlParameterSource()).stream()
                 .map(row -> localDateTime(row.get("snapshot_at")))
                 .findFirst()
@@ -263,7 +293,7 @@ public class InventoryDataService {
         Map<String, Object> bounds = jdbc.queryForMap("""
                 select min(orders.report_date) as first_date,
                        max(orders.report_date) as latest_date
-                  from wm_ads_order_record orders
+                  from wm_ads_order_record_valid orders
                   join wm_ads_import_file file on file.id = orders.import_file_id and file.active = true
                 """, new MapSqlParameterSource());
         LocalDate firstDate = localDate(bounds.get("first_date"));
@@ -275,7 +305,7 @@ public class InventoryDataService {
         LocalDate endDate = requestedEnd == null ? latestDate : requestedEnd;
         Integer sampleDays = jdbc.queryForObject("""
                 select count(distinct orders.report_date)
-                  from wm_ads_order_record orders
+                  from wm_ads_order_record_valid orders
                   join wm_ads_import_file file on file.id = orders.import_file_id and file.active = true
                  where orders.report_date between :startDate and :endDate
                 """, new MapSqlParameterSource()
@@ -288,7 +318,7 @@ public class InventoryDataService {
         Map<String, BigDecimal> result = new LinkedHashMap<>();
         jdbc.queryForList("""
                 select orders.sku, sum(orders.quantity) as units
-                  from wm_ads_order_record orders
+                  from wm_ads_order_record_valid orders
                   join wm_ads_import_file file on file.id = orders.import_file_id and file.active = true
                  where orders.report_date between :startDate and :latestDate
                  group by orders.sku
@@ -301,14 +331,36 @@ public class InventoryDataService {
 
     private Map<String, Double> loadProductionOrderTotals() {
         Map<String, Double> result = new LinkedHashMap<>();
-        productionOrderRepository.findCurrentVersions().forEach(record -> {
-            String sku = record.getSku();
+        productionOrderSource.currentOrders().forEach(record -> {
+            String sku = record.sku();
             if (sku == null) {
                 return;
             }
-            double qty = record.getProductionQty() == null ? 0 : record.getProductionQty().doubleValue();
+            double qty = record.wipQty() == null ? 0 : record.wipQty().doubleValue();
             result.merge(sku, qty, Double::sum);
         });
+        return result;
+    }
+
+    /**
+     * 国内仓最新快照的可用数量（按 SKU 汇总）。
+     * 复用 ReplenishmentPlanningService.domesticBySku 的查询口径：取 active 导入文件中 snapshot_at 最大的一批。
+     */
+    private Map<String, Double> domesticBySku() {
+        Map<String, Double> result = new LinkedHashMap<>();
+        jdbc.queryForList("""
+                select domestic.sku, sum(domestic.available_units) as available_units
+                  from wm_ads_domestic_inventory_snapshot domestic
+                  join wm_ads_import_file file on file.id = domestic.import_file_id and file.active = true
+                 where domestic.snapshot_at = (
+                        select max(current_domestic.snapshot_at)
+                          from wm_ads_domestic_inventory_snapshot current_domestic
+                          join wm_ads_import_file current_file
+                            on current_file.id = current_domestic.import_file_id and current_file.active = true
+                 )
+                 group by domestic.sku
+                """, new MapSqlParameterSource()).forEach(row ->
+                result.put(text(row, "sku"), number(row, "available_units")));
         return result;
     }
 
@@ -349,20 +401,25 @@ public class InventoryDataService {
     ) {
         return jdbc.queryForList("""
                 with rep as (
-                  select s.snapshot_at,
-                         case when sum(case when f.file_type = 'INVENTORY' then 1 else 0 end) > 0
-                              then 'INVENTORY' else 'WEEKLY_INVENTORY' end as rep_type
-                    from wm_ads_inventory_snapshot s
-                    join wm_ads_import_file f on f.id = s.import_file_id and f.active = true
-                   group by s.snapshot_at
+                  select snapshot_at,
+                         case when sum(case when source_type = 'INVENTORY' then 1 else 0 end) > 0
+                              then 'INVENTORY' else min(source_type) end as source_type
+                    from wm_ads_inventory_unified
+                   where parent_sku in (select p.parent_sku
+                                          from wm_ads_product_record p
+                                         where p.current_version = 1)
+                   group by snapshot_at
                 )
                 select inventory.snapshot_at,
                        sum(inventory.available_units) as available_units,
                        sum(inventory.reserved_units) as reserved_units,
                        sum(inventory.suggested_units) as system_suggested_units
-                  from wm_ads_inventory_snapshot inventory
-                  join wm_ads_import_file file on file.id = inventory.import_file_id and file.active = true
-                  join rep on rep.snapshot_at = inventory.snapshot_at and rep.rep_type = file.file_type
+                  from wm_ads_inventory_unified inventory
+                  join rep on rep.snapshot_at = inventory.snapshot_at
+                          and rep.source_type = inventory.source_type
+                 where inventory.parent_sku in (select p.parent_sku
+                                                  from wm_ads_product_record p
+                                                 where p.current_version = 1)
                  group by inventory.snapshot_at
                  order by inventory.snapshot_at
                 """, new MapSqlParameterSource()).stream().map(row -> new TrendRow(
@@ -431,8 +488,8 @@ public class InventoryDataService {
         return planned;
     }
 
-    private List<InventoryRow> applyReplenishmentPlans(List<InventoryRow> rows) {
-        ReplenishmentPlanningService.PlanningPayload payload = replenishmentPlanCache.current();
+    private List<InventoryRow> applyReplenishmentPlans(List<InventoryRow> rows, int targetDays) {
+        ReplenishmentPlanningService.PlanningPayload payload = replenishmentPlanCache.current(targetDays);
         Map<String, ReplenishmentPlanningService.VariantRecommendation> bySku = new LinkedHashMap<>();
         payload.recommendations().forEach(plan -> bySku.put(plan.sku(), plan));
         return new ArrayList<>(rows.stream()
@@ -474,6 +531,78 @@ public class InventoryDataService {
         };
     }
 
+    /**
+     * 由 WFS 库存快照行 + 国内仓可用数量构建国内仓库存钻取数据。
+     * 仅纳入国内仓可用 > 0 的 SKU（国内仓 = 0 视为缺货、不展示）。
+     * 三级结构：款号(parentSku) → SKC(款+色) → SKU(款+色+码)，每层均按国内仓可用件数降序。
+     */
+    private static DomesticStock buildDomesticStock(
+            List<InventoryRow> rows,
+            Map<String, Double> domesticBySku
+    ) {
+        Map<String, List<InventoryRow>> byParent = new LinkedHashMap<>();
+        for (InventoryRow row : rows) {
+            double domestic = domesticBySku.getOrDefault(row.sku(), 0.0);
+            if (domestic > 0) {
+                String parent = (row.parentSku() == null || row.parentSku().isBlank())
+                        ? row.sku()
+                        : row.parentSku();
+                byParent.computeIfAbsent(parent, ignored -> new ArrayList<>()).add(row);
+            }
+        }
+        List<DomesticStockStyle> styles = new ArrayList<>();
+        long totalSkuCount = 0;
+        double grandTotal = 0;
+        for (Map.Entry<String, List<InventoryRow>> entry : byParent.entrySet()) {
+            String parentSku = entry.getKey();
+            List<InventoryRow> parentRows = entry.getValue();
+            // 二级：按颜色聚合 SKC（款 + 色）
+            Map<String, List<InventoryRow>> byColor = new LinkedHashMap<>();
+            for (InventoryRow row : parentRows) {
+                String color = row.color() == null ? "" : row.color();
+                byColor.computeIfAbsent(color, ignored -> new ArrayList<>()).add(row);
+            }
+            List<DomesticStockSkc> skcs = new ArrayList<>();
+            double styleSum = 0;
+            for (Map.Entry<String, List<InventoryRow>> ce : byColor.entrySet()) {
+                String color = ce.getKey();
+                List<InventoryRow> colorRows = ce.getValue();
+                List<DomesticStockSku> skus = new ArrayList<>();
+                double skcSum = 0;
+                for (InventoryRow row : colorRows) {
+                    double domestic = domesticBySku.getOrDefault(row.sku(), 0.0);
+                    skcSum += domestic;
+                    styleSum += domestic;
+                    grandTotal += domestic;
+                    skus.add(new DomesticStockSku(
+                            row.sku(),
+                            parentSku,
+                            row.color(),
+                            row.size(),
+                            row.imageUrl(),
+                            round(domestic)
+                    ));
+                }
+                skus.sort(Comparator.comparingDouble(DomesticStockSku::domesticUnits).reversed());
+                String skcImage = colorRows.stream()
+                        .map(InventoryRow::imageUrl)
+                        .filter(img -> img != null && !img.isBlank())
+                        .findFirst().orElse(null);
+                skcs.add(new DomesticStockSkc(parentSku, color, skcImage, round(skcSum), skus.size(), skus));
+            }
+            skcs.sort(Comparator.comparingDouble(DomesticStockSkc::domesticUnits).reversed());
+            String styleImage = parentRows.stream()
+                    .map(InventoryRow::imageUrl)
+                    .filter(img -> img != null && !img.isBlank())
+                    .findFirst().orElse(null);
+            totalSkuCount += parentRows.size();
+            styles.add(new DomesticStockStyle(
+                    parentSku, styleImage, round(styleSum), parentRows.size(), skcs.size(), skcs));
+        }
+        styles.sort(Comparator.comparingDouble(DomesticStockStyle::domesticUnits).reversed());
+        return new DomesticStock(Math.round(grandTotal), totalSkuCount, styles.size(), styles);
+    }
+
     private static InventoryPayload emptyPayload(int days, int targetDays) {
         return new InventoryPayload(
                 new Meta(null, null, null, 0, days, targetDays, 0, false),
@@ -481,7 +610,8 @@ public class InventoryDataService {
                 Map.of(),
                 List.of(),
                 List.of(),
-                new TransitInventoryService.TransitData(Map.of(), List.of(), List.of())
+                new TransitInventoryService.TransitData(Map.of(), List.of(), List.of()),
+                new DomesticStock(0, 0, 0, List.of())
         );
     }
 
@@ -551,7 +681,50 @@ public class InventoryDataService {
             Map<String, Integer> riskCounts,
             List<TrendRow> trend,
             List<InventoryRow> rows,
-            TransitInventoryService.TransitData transit
+            TransitInventoryService.TransitData transit,
+            DomesticStock domesticStock
+    ) {
+    }
+
+    /**
+     * 国内仓库存钻取数据：所有国内仓可用 > 0 的 SKU（= 0 视为缺货、不展示）。
+     * 三级结构：款号 → SKC(款+色) → SKU(款+色+码)，每层按国内仓可用件数降序。
+     */
+    public record DomesticStock(
+            long totalDomesticUnits,
+            long skuCount,
+            long styleCount,
+            List<DomesticStockStyle> styles
+    ) {
+    }
+
+    public record DomesticStockStyle(
+            String parentSku,
+            String imageUrl,
+            double domesticUnits,
+            int skuCount,
+            int skcCount,
+            List<DomesticStockSkc> skcs
+    ) {
+    }
+
+    public record DomesticStockSkc(
+            String parentSku,
+            String color,
+            String imageUrl,
+            double domesticUnits,
+            int skuCount,
+            List<DomesticStockSku> skus
+    ) {
+    }
+
+    public record DomesticStockSku(
+            String sku,
+            String parentSku,
+            String color,
+            String size,
+            String imageUrl,
+            double domesticUnits
     ) {
     }
 
@@ -614,7 +787,8 @@ public class InventoryDataService {
             Integer cuttingYield,
             double productionSuggestedUnits,
             double colorProductionSuggestedUnits,
-            String productionSuggestionStatus
+            String productionSuggestionStatus,
+            Double cumulativeRefundRate
     ) {
         InventoryRow withProductionPlan(
                 double skuProductionSuggestedUnits,
@@ -655,7 +829,8 @@ public class InventoryDataService {
                     cuttingYield,
                     round(skuProductionSuggestedUnits),
                     round(colorProductionSuggestedUnits),
-                    status.name()
+                    status.name(),
+                    cumulativeRefundRate
             );
         }
 
@@ -704,7 +879,8 @@ public class InventoryDataService {
                     cuttingYield,
                     round(plan.productionUnits()),
                     round(plan.colorProductionUnits()),
-                    plan.status()
+                    plan.status(),
+                    cumulativeRefundRate
             );
         }
 
@@ -745,7 +921,8 @@ public class InventoryDataService {
             String styleNo,
             String sku,
             double productionQty,
-            String shipDate
+            String shipDate,
+            String source
     ) {
     }
 

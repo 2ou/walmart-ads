@@ -66,18 +66,18 @@ public class TransitInventoryService {
     }
 
     /**
-     * 路途总件数（申收差异之和）达到阈值的货件编号集合。
-     * 少于阈值的货件视为拆单/噪音等“多余货件”，不参与货件明细、按 SKU 路途库存与补货供应的任何计算。
-     */
-    private static final double MIN_SHIPMENT_UNITS = 50.0;
-
+     * 计入在途的货件编号集合。
+     * 2026-10-06 起取消原「整单申收差异 ≥ 50 件」门槛：所有真实在途货件都参与货件明细、
+     * 按 SKU 路途库存与补货供应的计算，不再把碎片小货件（拆单、尾货、补发）当噪音剔除。
+     * 仅过滤申收差异合计为 0 的货件（无实际在途量，进表只会是空行）。
+ */
     private Set<String> keptShipmentNos() {
         Map<String, Double> unitsByShipment = new LinkedHashMap<>();
         for (ShipmentRecord record : shipmentRepository.findCurrentVersions()) {
             unitsByShipment.merge(record.getShipmentNo(), nonNegative(record.getReceiptDifference()), Double::sum);
         }
         return unitsByShipment.entrySet().stream()
-                .filter(entry -> entry.getValue() >= MIN_SHIPMENT_UNITS)
+                .filter(entry -> entry.getValue() > 0)
                 .map(java.util.Map.Entry::getKey)
                 .collect(Collectors.toCollection(LinkedHashSet::new));
     }

@@ -11,7 +11,9 @@ src/main/resources/application-local.yml
 .workbuddy/
 
 # --- local secrets override (external application.yml, keep key out of git) ---
-config/
+/config/
+!/src/main/java/com/ai/walmartads/config/
+!/src/main/java/com/ai/walmartads/config/LingXingProperties.java
 
 # --- AI config encryption key (generated at first boot, keep secret) ---
 .ai_enc_key

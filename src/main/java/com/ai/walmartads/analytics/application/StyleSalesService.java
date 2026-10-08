@@ -1,5 +1,6 @@
 package com.ai.walmartads.analytics.application;
 
+import com.ai.walmartads.common.UsBusinessDate;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Service;
 
@@ -24,28 +25,33 @@ public class StyleSalesService {
     private static final int TOP_STYLES = 12;
 
     private final NamedParameterJdbcTemplate jdbc;
+    private final ProductImageLookupService productImages;
 
-    public StyleSalesService(NamedParameterJdbcTemplate jdbc) {
+    public StyleSalesService(NamedParameterJdbcTemplate jdbc, ProductImageLookupService productImages) {
         this.jdbc = jdbc;
+        this.productImages = productImages;
     }
 
     public StyleSalesPayload load(int days) {
         int window = Math.max(1, Math.min(days, 365));
-        LocalDate end = latestOrderDate();
+        LocalDate orderLatest = latestOrderDate();
+        LocalDate adLatest = latestAdReportDate();
+        LocalDate end = comparableLatestDate(orderLatest, adLatest, UsBusinessDate.visibleSalesDate());
         LocalDate start = end.minusDays(window - 1L);
 
         Map<String, Object> params = new HashMap<>();
         params.put("start", start);
+        params.put("end", end);
 
         List<Map<String, Object>> rows = jdbc.queryForList("""
-                select o.report_date as report_date,
+                select o.order_date as report_date,
                        o.parent_sku as parent_sku,
                        sum(o.quantity) as qty
-                  from wm_ads_order_record o
+                  from wm_ads_order_record_valid o
                   join wm_ads_import_file f on f.id = o.import_file_id and f.active = true
-                 where o.report_date >= :start
+                 where o.order_date >= :start and o.order_date <= :end
                    and o.parent_sku is not null and o.parent_sku <> ''
-                 group by o.report_date, o.parent_sku
+                 group by o.order_date, o.parent_sku
                 """, params);
 
         TreeMap<LocalDate, Map<String, BigDecimal>> byDate = new TreeMap<>();
@@ -59,8 +65,9 @@ public class StyleSalesService {
         }
 
         List<LocalDate> dates = new ArrayList<>(byDate.keySet());
+        Map<String, String> imageByStyle = productImages.loadParentImages();
         List<StyleRank> ranking = totals.entrySet().stream()
-                .map(e -> new StyleRank(e.getKey(), e.getValue().doubleValue(), 0))
+                .map(e -> new StyleRank(e.getKey(), imageByStyle.getOrDefault(e.getKey(), ""), e.getValue().doubleValue(), 0))
                 .sorted(Comparator.comparingDouble(StyleRank::totalQty).reversed())
                 .toList();
         double grand = ranking.stream().mapToDouble(StyleRank::totalQty).sum();
@@ -78,7 +85,7 @@ public class StyleSalesService {
         }
 
         List<StyleRank> rankingWithShare = ranking.stream()
-                .map(r -> new StyleRank(r.style(), r.totalQty(), grand > 0 ? r.totalQty() / grand : 0))
+                .map(r -> new StyleRank(r.style(), r.imageUrl(), r.totalQty(), grand > 0 ? r.totalQty() / grand : 0))
                 .toList();
 
         return new StyleSalesPayload(
@@ -87,10 +94,27 @@ public class StyleSalesService {
                 rankingWithShare, topStyles, series, grand);
     }
 
+    /**
+     * 订单最新业务日：与经营驾驶舱 / 销量分析对齐，统一使用 order_date（T+1），
+     * 而非 report_date。子块与上方每日销售数量总览须保持同一 end 基准。
+     */
     private LocalDate latestOrderDate() {
         LocalDate latest = jdbc.getJdbcTemplate().queryForObject(
-                "select max(report_date) from wm_ads_order_record where report_date is not null", LocalDate.class);
-        return latest == null ? LocalDate.now() : latest;
+                "select max(order_date) from wm_ads_order_record_valid where order_date is not null", LocalDate.class);
+        return latest == null ? UsBusinessDate.usToday() : latest;
+    }
+
+    private LocalDate latestAdReportDate() {
+        LocalDate latest = jdbc.getJdbcTemplate().queryForObject(
+                "select max(report_date) from wm_ads_lx_ad_report_raw where report_level = 'AD_ITEM'", LocalDate.class);
+        return latest == null ? UsBusinessDate.usToday() : latest;
+    }
+
+    static LocalDate comparableLatestDate(LocalDate orderLatestDate, LocalDate adLatestDate, LocalDate usToday) {
+        return java.util.stream.Stream.of(orderLatestDate, adLatestDate, usToday)
+                .filter(java.util.Objects::nonNull)
+                .min(LocalDate::compareTo)
+                .orElse(usToday);
     }
 
     private static LocalDate date(Map<String, Object> row, String key) {
@@ -129,6 +153,7 @@ public class StyleSalesService {
 
     public record StyleRank(
             String style,
+            String imageUrl,
             double totalQty,
             double share
     ) {

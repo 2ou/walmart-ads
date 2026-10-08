@@ -16,7 +16,7 @@ import java.time.LocalDateTime;
 /** 货件列表中的有效路途库存行。 */
 @Entity
 @Table(name = "wm_ads_shipment_record")
-public class ShipmentRecord {
+public class ShipmentRecord extends com.ai.walmartads.workspace.WorkspaceOwnedEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

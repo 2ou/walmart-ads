@@ -9,7 +9,7 @@ import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "wm_ads_parent_lifecycle")
-public class ParentLifecycle {
+public class ParentLifecycle extends com.ai.walmartads.workspace.WorkspaceOwnedEntity {
 
     public static final String SEASONAL = "SEASONAL";
     public static final String SPRING_SUMMER = "SPRING_SUMMER";

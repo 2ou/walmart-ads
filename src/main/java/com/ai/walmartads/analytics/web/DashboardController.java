@@ -24,10 +24,15 @@ public class DashboardController {
         return dashboardDataService.load();
     }
 
+    @GetMapping("/bootstrap")
+    public DashboardDataService.DashboardPayload bootstrap() {
+        return dashboardDataService.bootstrap();
+    }
+
     @GetMapping("/recommendations")
     public ApiResponse<List<DashboardDataService.Recommendation>> recommendations(
             @RequestParam(defaultValue = "7") int days,
-            @RequestParam(defaultValue = "3.0") double targetRoas,
+            @RequestParam(defaultValue = "5.0") double targetRoas,
             @RequestParam(defaultValue = "1.5") double floorRoas,
             @RequestParam(defaultValue = "20") int minClicks,
             @RequestParam(defaultValue = "10") double minSpend

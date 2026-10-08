@@ -66,7 +66,7 @@ class ReplenishmentPlannerTest {
         // The 10-unit shortage is far below half a bed (25), so no whole bed is set up and the
         // SKU is flagged for a manual bed decision instead of being silently auto-produced.
         assertThat(plan.productionUnits()).isZero();
-        assertThat(plan.status()).isEqualTo(ReplenishmentPlanner.Status.BED_NOT_COVERED);
+        assertThat(plan.status()).isEqualTo(ReplenishmentPlanner.Status.DEFERRED_SMALL_SHORTAGE);
     }
 
     @Test
@@ -129,5 +129,53 @@ class ReplenishmentPlannerTest {
         assertThat(plan.productionUnits()).isZero();
         assertThat(plan.wipUnits()).isZero();
         assertThat(plan.wipAvailableDay()).isZero();
+    }
+
+    @Test
+    void sendsLowSampleDemandToManualReviewWithoutAutoFactoryProduction() {
+        ReplenishmentPlanner.ParentPlan result = ReplenishmentPlanner.plan(new ReplenishmentPlanner.ParentInput(
+                "PNK360368", LocalDate.of(2026, 8, 29), 60,
+                Collections.nCopies(60, 71d / 60d), Collections.nCopies(60, 71d / 60d), false,
+                List.of(new ReplenishmentPlanner.VariantInput("PNK360368-FP-Plaid-4X-WFS", "Plaid", "4X", 45, 17, 0, 0, 0, 0)),
+                true
+        ));
+
+        ReplenishmentPlanner.VariantPlan plan = result.variants().getFirst();
+        assertThat(plan.demandP90Units()).isEqualTo(71d);
+        assertThat(plan.rawProductionUnits()).isEqualTo(71d);
+        assertThat(plan.productionUnits()).isZero();
+        assertThat(plan.status()).isEqualTo(ReplenishmentPlanner.Status.LOW_SAMPLE_REVIEW);
+    }
+
+    @Test
+    void showsRecoveredStockoutDemandButKeepsFactoryProductionForManualReview() {
+        ReplenishmentPlanner.ParentPlan result = ReplenishmentPlanner.plan(new ReplenishmentPlanner.ParentInput(
+                "PNK360368", LocalDate.of(2026, 8, 29), 60,
+                Collections.nCopies(60, 1d), Collections.nCopies(60, 1d), false,
+                List.of(new ReplenishmentPlanner.VariantInput(
+                        "PNK360368-FP-Plaid-4X-WFS", "Plaid", "4X", 45, 9, 0, 0, 0, 0,
+                        List.of(), true
+                ))
+        ));
+
+        ReplenishmentPlanner.VariantPlan plan = result.variants().getFirst();
+        assertThat(plan.demandP90Units()).isEqualTo(60d);
+        assertThat(plan.rawProductionUnits()).isEqualTo(60d);
+        assertThat(plan.productionUnits()).isZero();
+        assertThat(plan.status()).isEqualTo(ReplenishmentPlanner.Status.STOCKOUT_HISTORY_REVIEW);
+    }
+
+    @Test
+    void defersProductionWhenAFullBedWouldExceedNinetyDaysOfDemand() {
+        ReplenishmentPlanner.ParentPlan result = ReplenishmentPlanner.plan(new ReplenishmentPlanner.ParentInput(
+                "PNK366066", LocalDate.of(2026, 8, 3), 60,
+                Collections.nCopies(60, .5d), Collections.nCopies(60, .5d), false,
+                List.of(new ReplenishmentPlanner.VariantInput("A", "Black", "L", 50, 90, 0, 0, 0, 0))
+        ));
+
+        ReplenishmentPlanner.VariantPlan plan = result.variants().getFirst();
+        assertThat(plan.rawProductionUnits()).isEqualTo(30d);
+        assertThat(plan.productionUnits()).isZero();
+        assertThat(plan.status()).isEqualTo(ReplenishmentPlanner.Status.DEFERRED_OVERSTOCK_RISK);
     }
 }

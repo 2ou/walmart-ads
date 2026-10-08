@@ -11,7 +11,7 @@ import java.time.LocalDateTime;
 /** 渠道到达时效：渠道由物流表登记，时效天数全部由用户人工维护。 */
 @Entity
 @Table(name = "wm_ads_transit_channel_lead_time")
-public class TransitChannelLeadTime {
+public class TransitChannelLeadTime extends com.ai.walmartads.workspace.WorkspaceOwnedEntity {
 
     @Id
     @Column(name = "channel_name", nullable = false, length = 300)

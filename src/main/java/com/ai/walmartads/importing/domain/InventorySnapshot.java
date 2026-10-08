@@ -15,8 +15,8 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "wm_ads_inventory_snapshot")
-public class InventorySnapshot {
+@Table(name = "_deprecated_wm_ads_inventory_snapshot")
+public class InventorySnapshot extends com.ai.walmartads.workspace.WorkspaceOwnedEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

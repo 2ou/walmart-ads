@@ -1,7 +1,6 @@
 package com.ai.walmartads.importing.application;
 
 import com.ai.walmartads.config.WalmartAdsProperties;
-import com.ai.walmartads.importing.domain.AdReportKind;
 import com.ai.walmartads.importing.domain.ImportFileType;
 import com.ai.walmartads.importing.parser.ImportValues;
 import org.springframework.stereotype.Component;
@@ -9,7 +8,6 @@ import org.springframework.stereotype.Component;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.attribute.FileTime;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -25,18 +23,9 @@ import java.util.stream.Stream;
 @Component
 public class SourceScanner {
 
-    private static final Pattern DATE_DIRECTORY = Pattern.compile("^(\\d{4})-(\\d{1,2})-(\\d{1,2})$");
     private static final Pattern DOMESTIC_INVENTORY_DATE = Pattern.compile(".*?(\\d{4})(\\d{2})(\\d{2}).*");
     private static final Pattern RETURN_ORDER_MONTH = Pattern.compile(
-            "^Return_Orders_(\\d{4})-(\\d{2})\\.xlsx$",
-            Pattern.CASE_INSENSITIVE
-    );
-    private static final Pattern WEEKLY_INVENTORY_DATE = Pattern.compile(
-            "^沃尔玛PNK周报\\s+(\\d{4})\\.(\\d{1,2})\\.(\\d{1,2})\\s*\\.xlsx$",
-            Pattern.CASE_INSENSITIVE
-    );
-    private static final Pattern ITEM_REPORT_DATE = Pattern.compile(
-            "^ItemReport_(\\d{4})(\\d{2})(\\d{2})\\.csv$",
+            "^Customer returns-(\\d{4})(\\d{2})\\.xlsx$",
             Pattern.CASE_INSENSITIVE
     );
 
@@ -52,14 +41,17 @@ public class SourceScanner {
             throw new IllegalArgumentException("数据目录不存在：" + root);
         }
         List<SourceFileCandidate> files = new ArrayList<>();
-        scanDailyDirectories(root, files);
-        scanWeeklyInventory(files);
+        // 扫描入口 = 6 类：产品资料 / 月度退款 / 生产订单 / 货件 / 物流信息登记 / 国内仓库存。
+        //
+        // 已退役（不再扫描，ImportFileType 枚举保留仅为读回历史 import_file 行）：
+        //   • SKU_MAPPING —— WFS 上传模板（2026-09-28 移出）。数据源换成领星 MCP 在线商品，
+        //     由 WalmartListingSyncService 每小时顺带写入，见 SkuMappingSyncService。
+        //   • HISTORY —— PNK 每日销售数据统计.xlsx（2026-09-28 移出）
+        //   • DEMAND_FORECAST —— source/demand-forecast/ 目录已不存在（死链路）
+        //   • ORDER / AD_* / INVENTORY / WEEKLY_INVENTORY / WALMART_LISTING / CAMPAIGN_SNAPSHOT
+        //     —— 分别由领星 MCP 在线同步或已下线（见 FileImportProcessor 注册表注释）
         scanProducts(root, files);
-        scanItemReports(root, files);
         scanReturnOrders(root, files);
-        scanSkuMappingWorkbook(files);
-        scanHistoricalWorkbook(files);
-        scanDemandForecast(root, files);
         scanProductionOrder(root, files);
         scanShipments(root, files);
         scanDomesticInventory(root, files);
@@ -69,38 +61,30 @@ public class SourceScanner {
         return files;
     }
 
-    private void scanDailyDirectories(Path root, List<SourceFileCandidate> files) throws IOException {
-        Path configuredDailyRoot = root.resolve("date");
-        Path dailyRoot = Files.isDirectory(configuredDailyRoot) ? configuredDailyRoot : root;
-        try (Stream<Path> directories = Files.list(dailyRoot)) {
-            for (Path directory : directories.filter(Files::isDirectory).toList()) {
-                LocalDate reportDate = directoryDate(directory.getFileName().toString());
-                if (reportDate == null) {
-                    continue;
-                }
-                try (Stream<Path> contents = Files.list(directory)) {
-                    for (Path path : contents.filter(Files::isRegularFile).toList()) {
-                        if (path.getFileName().toString().startsWith("~$")) {
-                            continue;
-                        }
-                        DailyFileDescriptor descriptor = dailyFile(path.getFileName().toString());
-                        if (descriptor != null) {
-                            LocalDateTime snapshotAt = descriptor.fileType() == ImportFileType.INVENTORY
-                                    ? reportDate.atTime(LocalTime.NOON)
-                                    : null;
-                            files.add(new SourceFileCandidate(
-                                    path,
-                                    root.relativize(path),
-                                    descriptor.fileType(),
-                                    descriptor.reportKind(),
-                                    reportDate,
-                                    snapshotAt
-                            ));
-                        }
-                    }
-                }
-            }
+    /** Classifies one browser-uploaded workbook without scanning the shared server directory. */
+    public SourceFileCandidate uploadedCandidate(Path path, ImportSource source) throws IOException {
+        if (path == null || source == null || !Files.isRegularFile(path)) {
+            throw new IllegalArgumentException("上传文件或导入类型无效");
         }
+        String name = path.getFileName().toString();
+        if (name.startsWith("~$") || !name.toLowerCase(Locale.ROOT).endsWith(".xlsx")) {
+            throw new IllegalArgumentException("仅支持 .xlsx 工作簿");
+        }
+        LocalDate reportDate = null;
+        LocalDateTime snapshotAt = ImportValues.fileTime(Files.getLastModifiedTime(path).toInstant());
+        if (source == ImportSource.RETURN_ORDER) {
+            Matcher matcher = RETURN_ORDER_MONTH.matcher(name);
+            if (!matcher.matches()) {
+                throw new IllegalArgumentException("退款文件名必须为 Customer returns-YYYYMM.xlsx");
+            }
+            reportDate = YearMonth.of(Integer.parseInt(matcher.group(1)), Integer.parseInt(matcher.group(2))).atDay(1);
+            snapshotAt = null;
+        } else if (source == ImportSource.DOMESTIC_INVENTORY) {
+            snapshotAt = domesticInventorySnapshotAt(name, path);
+            reportDate = snapshotAt.toLocalDate();
+        }
+        return new SourceFileCandidate(path, Path.of("workspace-upload").resolve(name), source.fileType(),
+                null, reportDate, snapshotAt);
     }
 
     private void scanProducts(Path root, List<SourceFileCandidate> files) throws IOException {
@@ -121,33 +105,6 @@ public class SourceScanner {
                         null,
                         null,
                         ImportValues.fileTime(Files.getLastModifiedTime(path).toInstant())
-                ));
-            }
-        }
-    }
-
-    private void scanItemReports(Path root, List<SourceFileCandidate> files) throws IOException {
-        Path itemReportRoot = root.resolve("source").resolve("ItemReport");
-        if (!Files.isDirectory(itemReportRoot)) {
-            return;
-        }
-        try (Stream<Path> paths = Files.list(itemReportRoot)) {
-            for (Path path : paths.filter(Files::isRegularFile).toList()) {
-                String name = path.getFileName().toString();
-                if (name.startsWith("~$")) {
-                    continue;
-                }
-                LocalDate reportDate = itemReportDate(name);
-                if (reportDate == null) {
-                    continue;
-                }
-                files.add(new SourceFileCandidate(
-                        path,
-                        root.relativize(path),
-                        ImportFileType.ITEM_REPORT,
-                        null,
-                        reportDate,
-                        null
                 ));
             }
         }
@@ -186,106 +143,6 @@ public class SourceScanner {
                         null
                 ));
             }
-        }
-    }
-
-    private void scanWeeklyInventory(List<SourceFileCandidate> files) throws IOException {
-        Path configured = properties.weeklyReportsRoot();
-        if (configured == null) {
-            return;
-        }
-        Path weeklyRoot = configured.toAbsolutePath().normalize();
-        if (!Files.isDirectory(weeklyRoot)) {
-            return;
-        }
-        try (Stream<Path> paths = Files.walk(weeklyRoot)) {
-            for (Path path : paths.filter(Files::isRegularFile).toList()) {
-                String name = path.getFileName().toString();
-                if (name.startsWith("~$")) {
-                    continue;
-                }
-                LocalDate reportDate = weeklyInventoryDate(name);
-                if (reportDate == null) {
-                    continue;
-                }
-                files.add(new SourceFileCandidate(
-                        path,
-                        Path.of("weekly-inventory").resolve(weeklyRoot.relativize(path)),
-                        ImportFileType.WEEKLY_INVENTORY,
-                        null,
-                        reportDate,
-                        reportDate.atTime(LocalTime.NOON)
-                ));
-            }
-        }
-    }
-
-    private void scanHistoricalWorkbook(List<SourceFileCandidate> files) {
-        Path configured = properties.historicalWorkbook();
-        if (configured == null) {
-            return;
-        }
-        Path path = configured.toAbsolutePath().normalize();
-        if (!Files.isRegularFile(path) || path.getFileName().toString().startsWith("~$")) {
-            return;
-        }
-        files.add(new SourceFileCandidate(
-                path,
-                Path.of("history").resolve(path.getFileName()),
-                ImportFileType.HISTORY,
-                AdReportKind.ITEM_PERFORMANCE,
-                null,
-                null
-        ));
-    }
-
-    private void scanSkuMappingWorkbook(List<SourceFileCandidate> files) {
-        Path configured = properties.skuMappingWorkbook();
-        if (configured == null) {
-            return;
-        }
-        Path path = configured.toAbsolutePath().normalize();
-        if (!Files.isRegularFile(path) || path.getFileName().toString().startsWith("~$")) {
-            return;
-        }
-        files.add(new SourceFileCandidate(
-                path,
-                Path.of("sku-mapping").resolve(path.getFileName()),
-                ImportFileType.SKU_MAPPING,
-                null,
-                null,
-                ImportValues.fileTime(lastModified(path).toInstant())
-        ));
-    }
-
-    private void scanDemandForecast(Path root, List<SourceFileCandidate> files) throws IOException {
-        Path demandRoot = root.resolve("source").resolve("demand-forecast");
-        if (!Files.isDirectory(demandRoot)) {
-            return;
-        }
-        try (Stream<Path> paths = Files.list(demandRoot)) {
-            for (Path path : paths.filter(Files::isRegularFile).toList()) {
-                String name = path.getFileName().toString();
-                if (name.startsWith("~$") || !name.toLowerCase(Locale.ROOT).endsWith(".xlsx")) {
-                    continue;
-                }
-                files.add(new SourceFileCandidate(
-                        path,
-                        root.relativize(path),
-                        ImportFileType.DEMAND_FORECAST,
-                        null,
-                        null,
-                        ImportValues.fileTime(Files.getLastModifiedTime(path).toInstant())
-                ));
-            }
-        }
-    }
-
-    private static FileTime lastModified(Path path) {
-        try {
-            return Files.getLastModifiedTime(path);
-        } catch (IOException exception) {
-            throw new IllegalArgumentException("无法读取 SKU 映射表修改时间：" + path, exception);
         }
     }
 
@@ -368,74 +225,6 @@ public class SourceScanner {
         }
     }
 
-    private static DailyFileDescriptor dailyFile(String fileName) {
-        String lower = fileName.toLowerCase(Locale.ROOT);
-        if (lower.startsWith("itemkeywordperformance") && lower.endsWith(".csv")) {
-            return new DailyFileDescriptor(ImportFileType.AD_REPORT, AdReportKind.ITEM_KEYWORD_PERFORMANCE);
-        }
-        if (lower.startsWith("itemperformance") && lower.endsWith(".csv")) {
-            return new DailyFileDescriptor(ImportFileType.AD_REPORT, AdReportKind.ITEM_PERFORMANCE);
-        }
-        if (lower.startsWith("keywordperformance") && lower.endsWith(".csv")) {
-            return new DailyFileDescriptor(ImportFileType.AD_REPORT, AdReportKind.KEYWORD_PERFORMANCE);
-        }
-        if (lower.startsWith("po_data") && lower.endsWith(".xlsx")) {
-            return new DailyFileDescriptor(ImportFileType.ORDER, null);
-        }
-        if (lower.startsWith("inventory") && lower.endsWith(".xlsx")) {
-            return new DailyFileDescriptor(ImportFileType.INVENTORY, null);
-        }
-        return null;
-    }
-
-    private static LocalDate directoryDate(String name) {
-        Matcher matcher = DATE_DIRECTORY.matcher(name);
-        if (!matcher.matches()) {
-            return null;
-        }
-        try {
-            return LocalDate.of(
-                    Integer.parseInt(matcher.group(1)),
-                    Integer.parseInt(matcher.group(2)),
-                    Integer.parseInt(matcher.group(3))
-            );
-        } catch (RuntimeException exception) {
-            return null;
-        }
-    }
-
-    private static LocalDate weeklyInventoryDate(String fileName) {
-        Matcher matcher = WEEKLY_INVENTORY_DATE.matcher(fileName);
-        if (!matcher.matches()) {
-            return null;
-        }
-        try {
-            return LocalDate.of(
-                    Integer.parseInt(matcher.group(1)),
-                    Integer.parseInt(matcher.group(2)),
-                    Integer.parseInt(matcher.group(3))
-            );
-        } catch (RuntimeException exception) {
-            return null;
-        }
-    }
-
-    private static LocalDate itemReportDate(String fileName) {
-        Matcher matcher = ITEM_REPORT_DATE.matcher(fileName);
-        if (!matcher.matches()) {
-            return null;
-        }
-        try {
-            return LocalDate.of(
-                    Integer.parseInt(matcher.group(1)),
-                    Integer.parseInt(matcher.group(2)),
-                    Integer.parseInt(matcher.group(3))
-            );
-        } catch (RuntimeException exception) {
-            return null;
-        }
-    }
-
     private static LocalDateTime domesticInventorySnapshotAt(String fileName, Path path) {
         Matcher matcher = DOMESTIC_INVENTORY_DATE.matcher(fileName);
         if (matcher.matches()) {
@@ -462,18 +251,18 @@ public class SourceScanner {
             case INVENTORY -> 1;
             case WEEKLY_INVENTORY -> 2;
             case PRODUCT -> 3;
-            case ITEM_REPORT -> 3;
             case DEMAND_FORECAST -> 3;
+            case WALMART_LISTING -> 3;
             case PRODUCTION_ORDER -> 3;
             case SHIPMENT, SHIPMENT_LOGISTICS -> 3;
             case DOMESTIC_INVENTORY -> 3;
+            case CAMPAIGN_SNAPSHOT -> 3;
             case HISTORY -> 4;
             case ORDER -> 5;
             case AD_REPORT, AD_AUTO, AD_MANUAL -> 6;
             case RETURN_ORDER -> 7;
+            // 领星 MCP 同步产物，不经文件扫描进来（扫描结果里不会出现），给最低优先级仅为穷尽枚举。
+            case LINGXING_ORDER -> 9;
         };
-    }
-
-    private record DailyFileDescriptor(ImportFileType fileType, AdReportKind reportKind) {
     }
 }

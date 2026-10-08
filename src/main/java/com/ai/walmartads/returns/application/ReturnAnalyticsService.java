@@ -1,5 +1,7 @@
 package com.ai.walmartads.returns.application;
 
+import com.ai.walmartads.common.WalmartImageUrl;
+import com.ai.walmartads.product.application.ProfitAssumptionRepository;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -22,19 +24,8 @@ import java.util.Set;
 @Service
 public class ReturnAnalyticsService {
 
-    private static final String RETURN_CTE = """
-            with ranked_returns as (
-                select returns.*,
-                       row_number() over (
-                           partition by returns.business_key
-                           order by file.created_at desc, returns.id desc
-                       ) as version_rank
-                  from wm_ads_return_order returns
-                  join wm_ads_import_file file
-                    on file.id = returns.import_file_id
-                   and file.active = true
-            ),
-            current_mapping as (
+    private static final String RETURN_CTE = ReturnQuerySupport.ACTIVE_RETURN_CTE + """
+            , current_mapping as (
                 select mapping.item_id,
                        max(mapping.sku) as sku,
                        max(mapping.parent_sku) as parent_sku
@@ -49,9 +40,8 @@ public class ReturnAnalyticsService {
                 select returns.*,
                        coalesce(returns.sku, mapping.sku) as resolved_sku,
                        coalesce(returns.parent_sku, mapping.parent_sku) as resolved_parent_sku
-                  from ranked_returns returns
+                  from active_return_rows returns
                   left join current_mapping mapping on mapping.item_id = returns.item_id
-                 where returns.version_rank = 1
             ),
             current_products as (
                 select product.sku,
@@ -70,9 +60,14 @@ public class ReturnAnalyticsService {
             """;
 
     private final NamedParameterJdbcTemplate jdbc;
+    private final ProfitAssumptionRepository profitAssumptionRepository;
 
-    public ReturnAnalyticsService(NamedParameterJdbcTemplate jdbc) {
+    public ReturnAnalyticsService(
+            NamedParameterJdbcTemplate jdbc,
+            ProfitAssumptionRepository profitAssumptionRepository
+    ) {
         this.jdbc = jdbc;
+        this.profitAssumptionRepository = profitAssumptionRepository;
     }
 
     public ReturnPayload load(String requestedMonth) {
@@ -91,10 +86,11 @@ public class ReturnAnalyticsService {
         List<ParentMonthlyRow> parentTrend = loadParentTrend(bounds);
         Set<String> catalogParents = new LinkedHashSet<>();
         parentTrend.forEach(row -> catalogParents.add(row.parentSku()));
-        List<SkuRow> skuRows = loadSkuRows(window).stream()
+        Map<String, SkuTotal> skuTotals = loadSkuTotals(bounds);
+        List<SkuRow> skuRows = withSkuTotals(loadSkuRows(window), skuTotals).stream()
                 .filter(row -> catalogParents.contains(row.parentSku()))
                 .toList();
-        Map<String, ParentTotal> parentTotals = parentTotals(bounds.reportMonths(), parentTrend);
+        Map<String, ParentTotal> parentTotals = loadParentTotals(bounds);
         List<ParentRow> parentRows = parentRows(skuRows, parentTotals);
         List<ParentBreakdown> parentBreakdowns = parentBreakdowns(skuRows);
         List<DetailRow> details = loadDetails(window).stream()
@@ -106,7 +102,8 @@ public class ReturnAnalyticsService {
         List<BreakdownRow> refundModes = breakdown(details, DetailRow::refundMode);
         List<BreakdownRow> coveredBy = breakdown(details, DetailRow::refundCoveredBy);
         List<MonthlyRow> trend = loadTrend(bounds);
-        AccountSummary accountSummary = accountSummary(bounds.reportMonths(), trend);
+        AccountSummary accountSummary = loadAccountSummary(bounds);
+        Map<String, BigDecimal> manualRefundRates = manualRefundRates();
 
         return new ReturnPayload(
                 new Meta(
@@ -118,8 +115,9 @@ public class ReturnAnalyticsService {
                         end,
                         bounds.reportMonths(),
                         "USD",
-                        "退款件数 ÷ 同月订单销售件数",
-                        "CURRENT_STATUS 以 Refunded 开头"
+                        "退款件数 ÷ 退款报表导入时间范围内的订单销量（" + bounds.reportStartMonth()
+                                + " 至 " + bounds.reportEndMonth() + "，按款号汇总）",
+                        "Return Invoice Status = RETURN_INVOICED"
                 ),
                 summary,
                 accountSummary,
@@ -133,27 +131,72 @@ public class ReturnAnalyticsService {
                 channels,
                 refundModes,
                 coveredBy,
-                details
+                details,
+                manualRefundRates
+        );
+    }
+
+    /**
+     * 产品库手填的「手工退款率」，按 parentSku 维度（wm_ads_profit_assumption.refund_rate）。
+     * 仅取非空值，供退款率下钻的「预估退款率」列展示。
+     */
+    private Map<String, BigDecimal> manualRefundRates() {
+        Map<String, BigDecimal> result = new LinkedHashMap<>();
+        for (var entity : profitAssumptionRepository.findAll()) {
+            if (entity.getRefundRate() != null) {
+                result.put(entity.getParentSku(), entity.getRefundRate());
+            }
+        }
+        return result;
+    }
+
+    private AccountSummary loadAccountSummary(Bounds bounds) {
+        MapSqlParameterSource period = new MapSqlParameterSource()
+                .addValue("reportStart", bounds.reportStartMonth().atDay(1))
+                .addValue("reportEnd", bounds.reportEndMonth().atEndOfMonth());
+        Map<String, Object> returns = jdbc.queryForMap(
+                RETURN_CTE + """
+                        select coalesce(sum(quantity), 0) as requested_units,
+                               coalesce(sum(case when current_status = 'RETURN_INVOICED'
+                                                 then quantity else 0 end), 0) as completed_units,
+                               coalesce(sum(case when current_status = 'RETURN_INVOICED'
+                                                 then total_refund_amount else 0 end), 0) as refund_amount
+                          from return_rows
+                         where report_month between :reportStart and :reportEnd
+                        """,
+                period
+        );
+        Map<String, Object> sales = jdbc.queryForMap("""
+                select coalesce(sum(orders.quantity), 0) as sold_units,
+                       coalesce(sum(orders.quantity * orders.item_cost), 0) as sales_revenue
+                  from wm_ads_order_record_valid orders
+                  join wm_ads_import_file file
+                    on file.id = orders.import_file_id
+                   and file.active = true
+                 where orders.order_date between :reportStart and :reportEnd
+                """, period);
+        return accountSummary(
+                bounds.reportMonths(),
+                number(returns, "requested_units"),
+                number(returns, "completed_units"),
+                number(sales, "sold_units"),
+                number(returns, "refund_amount"),
+                number(sales, "sales_revenue")
         );
     }
 
     static AccountSummary accountSummary(
             List<String> reportMonths,
-            List<MonthlyRow> trend
+            double requested,
+            double completed,
+            double sold,
+            double refundAmount,
+            double salesRevenue
     ) {
         List<String> includedMonths = reportMonths.stream()
                 .distinct()
                 .sorted()
                 .toList();
-        Set<String> included = new LinkedHashSet<>(includedMonths);
-        List<MonthlyRow> rows = trend.stream()
-                .filter(row -> included.contains(row.month()))
-                .toList();
-        double requested = rows.stream().mapToDouble(MonthlyRow::requestedUnits).sum();
-        double completed = rows.stream().mapToDouble(MonthlyRow::completedUnits).sum();
-        double sold = rows.stream().mapToDouble(MonthlyRow::soldUnits).sum();
-        double refundAmount = rows.stream().mapToDouble(MonthlyRow::refundAmount).sum();
-        double salesRevenue = rows.stream().mapToDouble(MonthlyRow::salesRevenue).sum();
         return new AccountSummary(
                 includedMonths.isEmpty() ? null : includedMonths.getFirst(),
                 includedMonths.isEmpty() ? null : includedMonths.getLast(),
@@ -175,6 +218,8 @@ public class ReturnAnalyticsService {
                         select min(request_date) as first_date,
                                max(request_date) as latest_date,
                                max(report_month) as latest_report_month,
+                               min(report_month) as report_start_month,
+                               max(report_month) as report_end_month,
                                group_concat(distinct date_format(report_month, '%Y-%m')
                                             order by report_month separator ',') as report_months
                           from return_rows
@@ -184,7 +229,9 @@ public class ReturnAnalyticsService {
         LocalDate first = localDate(row.get("first_date"));
         LocalDate latest = localDate(row.get("latest_date"));
         LocalDate latestReport = localDate(row.get("latest_report_month"));
-        if (first == null || latest == null || latestReport == null) {
+        LocalDate reportStart = localDate(row.get("report_start_month"));
+        LocalDate reportEnd = localDate(row.get("report_end_month"));
+        if (first == null || latest == null || latestReport == null || reportStart == null || reportEnd == null) {
             return null;
         }
         List<String> reportMonths = text(row, "report_months") == null
@@ -194,27 +241,189 @@ public class ReturnAnalyticsService {
                 YearMonth.from(first),
                 YearMonth.from(latest),
                 YearMonth.from(latestReport),
-                reportMonths
+                reportMonths,
+                YearMonth.from(reportStart),
+                YearMonth.from(reportEnd)
         );
+    }
+
+    /**
+     * 款号累计总退款率始终以退款导入文件的 report_month 首末月份为统计区间。
+     * 退款分子只计算该区间内实际已退款件数，销量分母只计算同一区间内的订单。
+     */
+    private Map<String, ParentTotal> loadParentTotals(Bounds bounds) {
+        MapSqlParameterSource period = new MapSqlParameterSource()
+                .addValue("reportStart", bounds.reportStartMonth().atDay(1))
+                .addValue("reportEnd", bounds.reportEndMonth().atEndOfMonth());
+        Map<String, ParentTotal> result = new LinkedHashMap<>();
+        jdbc.queryForList(
+                RETURN_CTE + """
+                        , return_by_parent as (
+                            select coalesce(returns.resolved_parent_sku, product.parent_sku) as parent_sku,
+                                   sum(case when returns.current_status = 'RETURN_INVOICED'
+                                            then returns.quantity else 0 end) as completed_units
+                              from return_rows returns
+                              left join current_products product on product.sku = returns.resolved_sku
+                             where returns.report_month between :reportStart and :reportEnd
+                             group by coalesce(returns.resolved_parent_sku, product.parent_sku)
+                        ),
+                        sales_by_parent as (
+                            select product.parent_sku,
+                                   sum(orders.quantity) as sold_units
+                              from wm_ads_order_record_valid orders
+                              join wm_ads_import_file file
+                                on file.id = orders.import_file_id
+                               and file.active = true
+                              join current_products product on product.sku = orders.sku
+                             where orders.order_date between :reportStart and :reportEnd
+                               and nullif(trim(product.parent_sku), '') is not null
+                             group by product.parent_sku
+                        )
+                        select returned.parent_sku,
+                               coalesce(returned.completed_units, 0) as completed_units,
+                               coalesce(sales.sold_units, 0) as sold_units
+                          from return_by_parent returned
+                          left join sales_by_parent sales on sales.parent_sku = returned.parent_sku
+                         where nullif(trim(returned.parent_sku), '') is not null
+                        """,
+                period
+        ).forEach(row -> {
+            String parentSku = text(row, "parent_sku");
+            double completed = number(row, "completed_units");
+            double sold = number(row, "sold_units");
+            result.put(parentSku, new ParentTotal(
+                    parentSku,
+                    round(completed),
+                    round(sold),
+                    ratio(completed, sold)
+            ));
+        });
+        return result;
+    }
+
+    /**
+     * SKU 累计退款口径与款号累计口径一致：退款文件 report_month 首末月份内的已退款件数，
+     * 除以该区间内同一 SKU 的订单销量。groupKey 同时兼容未映射 SKU 的 ITEM:xxx 记录。
+     */
+    private Map<String, SkuTotal> loadSkuTotals(Bounds bounds) {
+        MapSqlParameterSource period = new MapSqlParameterSource()
+                .addValue("reportStart", bounds.reportStartMonth().atDay(1))
+                .addValue("reportEnd", bounds.reportEndMonth().atEndOfMonth());
+        Map<String, SkuTotal> result = new LinkedHashMap<>();
+        jdbc.queryForList(
+                RETURN_CTE + """
+                        , return_by_sku as (
+                            select coalesce(returns.resolved_sku, concat('ITEM:', returns.item_id)) as group_key,
+                                   sum(case when returns.current_status = 'RETURN_INVOICED'
+                                            then returns.quantity else 0 end) as completed_units
+                              from return_rows returns
+                             where returns.report_month between :reportStart and :reportEnd
+                             group by coalesce(returns.resolved_sku, concat('ITEM:', returns.item_id))
+                        ),
+                        sales_by_sku as (
+                            select orders.sku as group_key,
+                                   sum(orders.quantity) as sold_units
+                              from wm_ads_order_record_valid orders
+                              join wm_ads_import_file file
+                                on file.id = orders.import_file_id
+                               and file.active = true
+                             where orders.order_date between :reportStart and :reportEnd
+                             group by orders.sku
+                        ),
+                        sku_universe as (
+                            select group_key from return_by_sku
+                            union
+                            select group_key from sales_by_sku
+                        )
+                        select universe.group_key,
+                               coalesce(returned.completed_units, 0) as completed_units,
+                               coalesce(sales.sold_units, 0) as sold_units
+                          from sku_universe universe
+                          left join return_by_sku returned on returned.group_key = universe.group_key
+                          left join sales_by_sku sales on sales.group_key = universe.group_key
+                        """,
+                period
+        ).forEach(row -> {
+            String groupKey = text(row, "group_key");
+            double completed = number(row, "completed_units");
+            double sold = number(row, "sold_units");
+            result.put(groupKey, new SkuTotal(
+                    groupKey,
+                    round(completed),
+                    round(sold),
+                    ratio(completed, sold),
+                    refundRisk(completed, sold)
+            ));
+        });
+        return result;
+    }
+
+    private static List<SkuRow> withSkuTotals(List<SkuRow> rows, Map<String, SkuTotal> totals) {
+        return rows.stream().map(row -> {
+            SkuTotal total = totals.get(row.groupKey());
+            return new SkuRow(
+                    row.groupKey(),
+                    row.sku(),
+                    row.parentSku(),
+                    row.itemId(),
+                    row.itemName(),
+                    row.imageUrl(),
+                    row.color(),
+                    row.size(),
+                    row.requestedUnits(),
+                    row.completedUnits(),
+                    row.cancelledUnits(),
+                    row.pendingUnits(),
+                    row.soldUnits(),
+                    row.requestRate(),
+                    row.completedRate(),
+                    row.refundAmount(),
+                    row.salesRevenue(),
+                    row.refundAmountRate(),
+                    row.reasonSummary(),
+                    row.risk(),
+                    total == null ? 0 : total.completedUnits(),
+                    total == null ? 0 : total.soldUnits(),
+                    total == null ? 0 : total.completedRate(),
+                    total == null ? "NO_SALES_DENOMINATOR" : total.risk()
+            );
+        }).toList();
+    }
+
+    /**
+     * 累计款号退款率（退款率分析口径）：以退款导入文件 report_month 首末月份为统计区间，
+     * 分子=区间内 RETURN_INVOICED 件数，分母=同区间内订单销量，按 parentSku 返回。
+     * 无退款记录的款号不出现在结果中（调用方按 0.0 兜底）；
+     * 系统完全没有退款数据时返回 null（用于前端区分「无数据」与「0%」）。
+     */
+    public Map<String, Double> cumulativeRefundRateByParent() {
+        Bounds bounds = loadBounds();
+        if (bounds == null) {
+            return null;
+        }
+        Map<String, Double> result = new LinkedHashMap<>();
+        loadParentTotals(bounds).forEach((parentSku, total) ->
+                result.put(parentSku, total.completedRate()));
+        return result;
     }
 
     private Summary loadSummary(MapSqlParameterSource window) {
         Map<String, Object> returns = jdbc.queryForMap(
                 RETURN_CTE + """
                         select coalesce(sum(quantity), 0) as requested_units,
-                               coalesce(sum(case when current_status like 'Refunded:%'
+                               coalesce(sum(case when current_status = 'RETURN_INVOICED'
                                                  then quantity else 0 end), 0) as completed_units,
-                               coalesce(sum(case when current_status like 'Cancelled:%'
+                               coalesce(sum(case when current_status = 'CANCELLED'
                                                  then quantity else 0 end), 0) as cancelled_units,
-                               coalesce(sum(case when current_status not like 'Refunded:%'
-                                                  and current_status not like 'Cancelled:%'
+                               coalesce(sum(case when current_status <> 'RETURN_INVOICED'
+                                                  and current_status <> 'CANCELLED'
                                                  then quantity else 0 end), 0) as pending_units,
-                               coalesce(sum(case when current_status like 'Refunded:%'
+                               coalesce(sum(case when current_status = 'RETURN_INVOICED'
                                                  then total_refund_amount else 0 end), 0) as refund_amount,
-                               coalesce(sum(case when current_status like 'Refunded:%'
+                               coalesce(sum(case when current_status = 'RETURN_INVOICED'
                                                   and refund_covered_by like 'Seller%'
                                                  then total_refund_amount else 0 end), 0) as seller_amount,
-                               coalesce(sum(case when current_status like 'Refunded:%'
+                               coalesce(sum(case when current_status = 'RETURN_INVOICED'
                                                   and refund_covered_by like 'Walmart%'
                                                  then total_refund_amount else 0 end), 0) as walmart_amount,
                                coalesce(sum(case when keep_it then quantity else 0 end), 0) as keep_it_units,
@@ -230,7 +439,7 @@ public class ReturnAnalyticsService {
         Map<String, Object> sales = jdbc.queryForMap("""
                 select coalesce(sum(orders.quantity), 0) as sold_units,
                        coalesce(sum(orders.quantity * orders.item_cost), 0) as sales_revenue
-                  from wm_ads_order_record orders
+                  from wm_ads_order_record_valid orders
                   join wm_ads_import_file file
                     on file.id = orders.import_file_id
                    and file.active = true
@@ -269,14 +478,14 @@ public class ReturnAnalyticsService {
                 RETURN_CTE + """
                         select date_format(request_date, '%Y-%m') as month,
                                sum(quantity) as requested_units,
-                               sum(case when current_status like 'Refunded:%'
+                               sum(case when current_status = 'RETURN_INVOICED'
                                         then quantity else 0 end) as completed_units,
-                               sum(case when current_status like 'Cancelled:%'
+                               sum(case when current_status = 'CANCELLED'
                                         then quantity else 0 end) as cancelled_units,
-                               sum(case when current_status not like 'Refunded:%'
-                                         and current_status not like 'Cancelled:%'
+                               sum(case when current_status <> 'RETURN_INVOICED'
+                                         and current_status <> 'CANCELLED'
                                         then quantity else 0 end) as pending_units,
-                               sum(case when current_status like 'Refunded:%'
+                               sum(case when current_status = 'RETURN_INVOICED'
                                         then total_refund_amount else 0 end) as refund_amount
                           from return_rows
                          group by date_format(request_date, '%Y-%m')
@@ -301,7 +510,7 @@ public class ReturnAnalyticsService {
                 select date_format(orders.order_date, '%Y-%m') as month,
                        sum(orders.quantity) as sold_units,
                        sum(orders.quantity * orders.item_cost) as sales_revenue
-                  from wm_ads_order_record orders
+                  from wm_ads_order_record_valid orders
                  join wm_ads_import_file file
                     on file.id = orders.import_file_id
                    and file.active = true
@@ -323,7 +532,7 @@ public class ReturnAnalyticsService {
         MapSqlParameterSource range = new MapSqlParameterSource()
                 .addValue("trendStart", bounds.firstMonth().atDay(1))
                 .addValue("trendEnd", bounds.latestMonth().atEndOfMonth());
-        return jdbc.queryForList(
+        List<Map<String, Object>> raw = jdbc.queryForList(
                 RETURN_CTE + """
                         , catalog_parents as (
                             select product.parent_sku,
@@ -337,14 +546,14 @@ public class ReturnAnalyticsService {
                                    catalog.parent_sku,
                                    max(catalog.item_name) as item_name,
                                    sum(returns.quantity) as requested_units,
-                                   sum(case when returns.current_status like 'Refunded:%'
+                                   sum(case when returns.current_status = 'RETURN_INVOICED'
                                             then returns.quantity else 0 end) as completed_units,
-                                   sum(case when returns.current_status like 'Cancelled:%'
+                                   sum(case when returns.current_status = 'CANCELLED'
                                             then returns.quantity else 0 end) as cancelled_units,
-                                   sum(case when returns.current_status not like 'Refunded:%'
-                                             and returns.current_status not like 'Cancelled:%'
+                                   sum(case when returns.current_status <> 'RETURN_INVOICED'
+                                             and returns.current_status <> 'CANCELLED'
                                             then returns.quantity else 0 end) as pending_units,
-                                   sum(case when returns.current_status like 'Refunded:%'
+                                   sum(case when returns.current_status = 'RETURN_INVOICED'
                                             then returns.total_refund_amount else 0 end) as refund_amount
                               from return_rows returns
                               join current_products product on product.sku = returns.resolved_sku
@@ -358,7 +567,7 @@ public class ReturnAnalyticsService {
                                    product.parent_sku,
                                    sum(orders.quantity) as sold_units,
                                    sum(orders.quantity * orders.item_cost) as sales_revenue
-                              from wm_ads_order_record orders
+                              from wm_ads_order_record_valid orders
                               join wm_ads_import_file file
                                 on file.id = orders.import_file_id
                                and file.active = true
@@ -373,7 +582,7 @@ public class ReturnAnalyticsService {
                              where returns.request_date between :trendStart and :trendEnd
                             union
                             select distinct date_format(orders.order_date, '%Y-%m') as month
-                              from wm_ads_order_record orders
+                              from wm_ads_order_record_valid orders
                               join wm_ads_import_file file
                                 on file.id = orders.import_file_id
                                and file.active = true
@@ -407,7 +616,8 @@ public class ReturnAnalyticsService {
                          order by series.parent_sku, series.month
                         """,
                 range
-        ).stream().map(row -> {
+        ).stream().toList();
+        return raw.stream().map(row -> {
             double requested = number(row, "requested_units");
             double completed = number(row, "completed_units");
             double sold = number(row, "sold_units");
@@ -442,14 +652,14 @@ public class ReturnAnalyticsService {
                                    max(returns.resolved_parent_sku) as resolved_parent_sku,
                                    max(returns.item_name) as return_item_name,
                                    sum(returns.quantity) as requested_units,
-                                   sum(case when returns.current_status like 'Refunded:%'
+                                   sum(case when returns.current_status = 'RETURN_INVOICED'
                                             then returns.quantity else 0 end) as completed_units,
-                                   sum(case when returns.current_status like 'Cancelled:%'
+                                   sum(case when returns.current_status = 'CANCELLED'
                                             then returns.quantity else 0 end) as cancelled_units,
-                                   sum(case when returns.current_status not like 'Refunded:%'
-                                             and returns.current_status not like 'Cancelled:%'
+                                   sum(case when returns.current_status <> 'RETURN_INVOICED'
+                                             and returns.current_status <> 'CANCELLED'
                                             then returns.quantity else 0 end) as pending_units,
-                                   sum(case when returns.current_status like 'Refunded:%'
+                                   sum(case when returns.current_status = 'RETURN_INVOICED'
                                             then returns.total_refund_amount else 0 end) as refund_amount,
                                    group_concat(distinct returns.return_reason
                                                 order by returns.return_reason separator ' · ') as reason_summary
@@ -461,11 +671,11 @@ public class ReturnAnalyticsService {
                             select orders.sku,
                                    sum(orders.quantity) as sold_units,
                                    sum(orders.quantity * orders.item_cost) as sales_revenue
-                              from wm_ads_order_record orders
+                              from wm_ads_order_record_valid orders
                               join wm_ads_import_file file
                                 on file.id = orders.import_file_id
                                and file.active = true
-                              where orders.order_date between :start and :end
+                             where orders.order_date between :start and :end
                               group by orders.sku
                         ),
                         affected_parents as (
@@ -520,7 +730,7 @@ public class ReturnAnalyticsService {
                     text(row, "parent_sku"),
                     text(row, "item_id"),
                     text(row, "item_name"),
-                    text(row, "image_url"),
+                    WalmartImageUrl.thumb(text(row, "image_url")),
                     text(row, "color"),
                     text(row, "size"),
                     round(requested),
@@ -534,9 +744,11 @@ public class ReturnAnalyticsService {
                     round(revenue),
                     ratio(refundAmount, revenue),
                     text(row, "reason_summary"),
-                    sold <= 0 ? "NO_SALES_DENOMINATOR"
-                            : ratio(requested, sold) >= 0.15 ? "HIGH"
-                            : ratio(requested, sold) >= 0.08 ? "WATCH" : "NORMAL"
+                    refundRisk(completed, sold),
+                    0,
+                    0,
+                    0,
+                    "NO_SALES_DENOMINATOR"
             ));
         });
         return result;
@@ -603,7 +815,7 @@ public class ReturnAnalyticsService {
                 text(row, "sku"),
                 text(row, "parent_sku"),
                 text(row, "item_name"),
-                text(row, "image_url"),
+                WalmartImageUrl.thumb(text(row, "image_url")),
                 text(row, "color"),
                 text(row, "size"),
                 text(row, "condition_name"),
@@ -628,23 +840,6 @@ public class ReturnAnalyticsService {
                 text(row, "return_ship_from"),
                 text(row, "return_ship_to")
         )));
-        return result;
-    }
-
-    static Map<String, ParentTotal> parentTotals(
-            List<String> reportMonths,
-            List<ParentMonthlyRow> trend
-    ) {
-        Set<String> included = new LinkedHashSet<>(reportMonths);
-        Map<String, ParentTotalAccumulator> totals = new LinkedHashMap<>();
-        trend.stream()
-                .filter(row -> included.contains(row.month()))
-                .forEach(row -> totals.computeIfAbsent(
-                        row.parentSku(),
-                        ignored -> new ParentTotalAccumulator(row.parentSku())
-                ).add(row));
-        Map<String, ParentTotal> result = new LinkedHashMap<>();
-        totals.forEach((parentSku, total) -> result.put(parentSku, total.row()));
         return result;
     }
 
@@ -674,7 +869,9 @@ public class ReturnAnalyticsService {
         });
         return groups.values().stream()
                 .map(item -> item.row(parentCompleted))
-                .sorted(Comparator.comparingDouble(DimensionRow::completedUnits).reversed()
+                .sorted(Comparator.comparingInt((DimensionRow row) -> refundRiskPriority(row.totalRisk())).reversed()
+                        .thenComparing(Comparator.comparingDouble(DimensionRow::totalCompletedUnits).reversed())
+                        .thenComparing(Comparator.comparingDouble(DimensionRow::totalCompletedRate).reversed())
                         .thenComparing(DimensionRow::label))
                 .toList();
     }
@@ -737,16 +934,35 @@ public class ReturnAnalyticsService {
     private static ReturnPayload emptyPayload() {
         return new ReturnPayload(
                 new Meta(null, null, null, null, null, null, List.of(), "USD",
-                        "退款件数 ÷ 同月订单销售件数", "CURRENT_STATUS 以 Refunded 开头"),
+                        "退款件数 ÷ 全量订单销售件数(已导入所有月份, 去重后)", "Return Invoice Status = RETURN_INVOICED"),
                 new Summary(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
                 new AccountSummary(null, null, 0, 0, 0, 0, 0, 0, 0, 0, 0),
                 List.of(), List.of(), List.of(), List.of(), List.of(),
-                List.of(), List.of(), List.of(), List.of(), List.of(), List.of()
+                List.of(), List.of(), List.of(), List.of(), List.of(), List.of(),
+                Map.of()
         );
     }
 
     private static double ratio(double numerator, double denominator) {
         return Math.abs(denominator) < 0.000001 ? 0 : round(numerator / denominator);
+    }
+
+    static String refundRisk(double completedUnits, double soldUnits) {
+        if (soldUnits <= 0) {
+            return "NO_SALES_DENOMINATOR";
+        }
+        double completedRate = ratio(completedUnits, soldUnits);
+        return completedRate >= 0.15 ? "HIGH"
+                : completedRate >= 0.08 ? "WATCH" : "NORMAL";
+    }
+
+    private static int refundRiskPriority(String risk) {
+        return switch (risk) {
+            case "HIGH" -> 3;
+            case "WATCH" -> 2;
+            case "NORMAL" -> 1;
+            default -> 0;
+        };
     }
 
     private static double round(double value) {
@@ -836,7 +1052,8 @@ public class ReturnAnalyticsService {
             List<BreakdownRow> channels,
             List<BreakdownRow> refundModes,
             List<BreakdownRow> coveredBy,
-            List<DetailRow> details
+            List<DetailRow> details,
+            Map<String, BigDecimal> manualRefundRates
     ) {
     }
 
@@ -950,7 +1167,11 @@ public class ReturnAnalyticsService {
             double salesRevenue,
             double refundAmountRate,
             String reasonSummary,
-            String risk
+            String risk,
+            double totalCompletedUnits,
+            double totalSoldUnits,
+            double totalCompletedRate,
+            String totalRisk
     ) {
     }
 
@@ -974,7 +1195,8 @@ public class ReturnAnalyticsService {
             double totalCompletedUnits,
             double totalSoldUnits,
             double totalCompletedRate,
-            String risk
+            String risk,
+            String totalRisk
     ) {
     }
 
@@ -992,6 +1214,19 @@ public class ReturnAnalyticsService {
             double salesRevenue,
             double refundAmountRate,
             double shareOfParentCompletedRefunds,
+            String risk,
+            double totalCompletedUnits,
+            double totalSoldUnits,
+            double totalCompletedRate,
+            String totalRisk
+    ) {
+    }
+
+    public record SkuTotal(
+            String groupKey,
+            double completedUnits,
+            double soldUnits,
+            double completedRate,
             String risk
     ) {
     }
@@ -1059,7 +1294,9 @@ public class ReturnAnalyticsService {
             YearMonth firstMonth,
             YearMonth latestMonth,
             YearMonth latestReportMonth,
-            List<String> reportMonths
+            List<String> reportMonths,
+            YearMonth reportStartMonth,
+            YearMonth reportEndMonth
     ) {
     }
 
@@ -1100,6 +1337,14 @@ public class ReturnAnalyticsService {
 
         private String month() {
             return month;
+        }
+
+        private double sold() {
+            return sold;
+        }
+
+        private double salesRevenue() {
+            return salesRevenue;
         }
 
         private MonthlyRow row() {
@@ -1159,6 +1404,10 @@ public class ReturnAnalyticsService {
 
         private ParentRow row(ParentTotal total) {
             double requestRate = ratio(requested, sold);
+            double completedRate = ratio(completed, sold);
+            String totalRisk = total == null
+                    ? "NO_SALES_DENOMINATOR"
+                    : refundRisk(total.completedUnits(), total.soldUnits());
             return new ParentRow(
                     parentSku,
                     firstText(itemName, parentSku),
@@ -1172,40 +1421,15 @@ public class ReturnAnalyticsService {
                     round(pending),
                     round(sold),
                     requestRate,
-                    ratio(completed, sold),
+                    completedRate,
                     round(refundAmount),
                     round(salesRevenue),
                     ratio(refundAmount, salesRevenue),
                     total == null ? 0 : total.completedUnits(),
                     total == null ? 0 : total.soldUnits(),
                     total == null ? 0 : total.completedRate(),
-                    sold <= 0 ? "NO_SALES_DENOMINATOR"
-                            : requestRate >= 0.15 ? "HIGH"
-                            : requestRate >= 0.08 ? "WATCH" : "NORMAL"
-            );
-        }
-    }
-
-    private static final class ParentTotalAccumulator {
-        private final String parentSku;
-        private double completed;
-        private double sold;
-
-        private ParentTotalAccumulator(String parentSku) {
-            this.parentSku = parentSku;
-        }
-
-        private void add(ParentMonthlyRow row) {
-            completed += row.completedUnits();
-            sold += row.soldUnits();
-        }
-
-        private ParentTotal row() {
-            return new ParentTotal(
-                    parentSku,
-                    round(completed),
-                    round(sold),
-                    ratio(completed, sold)
+                    refundRisk(completed, sold),
+                    totalRisk
             );
         }
     }
@@ -1220,6 +1444,8 @@ public class ReturnAnalyticsService {
         private double sold;
         private double refundAmount;
         private double salesRevenue;
+        private double totalCompleted;
+        private double totalSold;
 
         private DimensionAccumulator(String label) {
             this.label = label;
@@ -1234,6 +1460,8 @@ public class ReturnAnalyticsService {
             sold += row.soldUnits();
             refundAmount += row.refundAmount();
             salesRevenue += row.salesRevenue();
+            totalCompleted += row.totalCompletedUnits();
+            totalSold += row.totalSoldUnits();
         }
 
         private DimensionRow row(double parentCompleted) {
@@ -1253,9 +1481,11 @@ public class ReturnAnalyticsService {
                     round(salesRevenue),
                     ratio(refundAmount, salesRevenue),
                     ratio(completed, parentCompleted),
-                    sold <= 0 ? "NO_SALES_DENOMINATOR"
-                            : completedRate >= 0.15 ? "HIGH"
-                            : completedRate >= 0.08 ? "WATCH" : "NORMAL"
+                    refundRisk(completed, sold),
+                    round(totalCompleted),
+                    round(totalSold),
+                    ratio(totalCompleted, totalSold),
+                    refundRisk(totalCompleted, totalSold)
             );
         }
     }

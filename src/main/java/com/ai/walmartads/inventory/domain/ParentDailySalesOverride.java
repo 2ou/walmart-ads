@@ -17,7 +17,7 @@ import java.time.LocalDateTime;
  */
 @Entity
 @Table(name = "wm_ads_forecast_factor_daily_parent")
-public class ParentDailySalesOverride {
+public class ParentDailySalesOverride extends com.ai.walmartads.workspace.WorkspaceOwnedEntity {
 
     @Id
     @Column(name = "parent_sku", length = 180, nullable = false)

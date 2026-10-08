@@ -8,6 +8,7 @@
     search: "",
     detailSearch: "",
     trendSelectedParents: new Set(),
+    trendShowOverall: true,
     trendSearch: "",
     selectedParentSku: null,
     selectedColor: null,
@@ -46,7 +47,7 @@
   const dateTime = (value) => value ? String(value).replace("T", " ").slice(0, 16) : "未填写";
 
   const riskCopy = {
-    HIGH: { label: "高退款率", className: "high" },
+    HIGH: { label: "高已退款率", className: "high" },
     WATCH: { label: "观察", className: "watch" },
     NORMAL: { label: "正常", className: "normal" },
     NO_SALES_DENOMINATOR: { label: "缺少销量分母", className: "no-sales-denominator" },
@@ -56,8 +57,8 @@
     <section class="view" id="view-returns" aria-labelledby="pageTitle">
       <div class="section-intro">
         <div>
-          <h2>按退款发生月追踪款、颜色与尺码问题</h2>
-          <p>申请件数与已完成退款分开统计。退款率使用同月订单销售件数作为分母，报表月份和实际申请月份同时保留。</p>
+          <h2>按退款发生月追踪款、SKC（颜色）与尺码问题</h2>
+          <p>申请件数与已完成退款分开统计。款号累计总退款率的销量分母仅取退款文件首月至末月内的订单销量，报表月份和实际申请月份同时保留。</p>
         </div>
         <label class="return-month-control" for="returnMonthSelect">查看月份
           <select id="returnMonthSelect" aria-label="选择退款月份"></select>
@@ -136,11 +137,11 @@
       </section>
       <div class="return-dimension-layout">
         <section class="panel" aria-labelledby="returnColorTitle">
-          <div class="panel-header"><div><h2 class="panel-title" id="returnColorTitle">该款颜色实际退款表现</h2><p class="panel-subtitle" id="returnColorSubtitle">实际退款件数除以该款各颜色的同月销量</p></div></div>
+          <div class="panel-header"><div><h2 class="panel-title" id="returnColorTitle">该款 SKC（颜色）退款表现</h2><p class="panel-subtitle" id="returnColorSubtitle">显示本月和累计退款率</p></div></div>
           <div class="return-dimension-list" id="returnColorList"></div>
         </section>
         <section class="panel" aria-labelledby="returnSizeTitle">
-          <div class="panel-header"><div><h2 class="panel-title" id="returnSizeTitle">该款尺码实际退款表现</h2><p class="panel-subtitle" id="returnSizeSubtitle">实际退款件数除以该款各尺码的同月销量</p></div></div>
+          <div class="panel-header"><div><h2 class="panel-title" id="returnSizeTitle">该款尺码退款表现</h2><p class="panel-subtitle" id="returnSizeSubtitle">显示本月和累计退款率</p></div></div>
           <div class="return-dimension-list" id="returnSizeList"></div>
         </section>
       </div>
@@ -160,7 +161,7 @@
             </div>
             <div class="sales-toolbar-group" id="returnRiskFilters" role="group" aria-label="退款风险筛选">
               <button class="filter-button active" type="button" data-return-risk="all">全部</button>
-              <button class="filter-button" type="button" data-return-risk="HIGH">高退款率</button>
+              <button class="filter-button" type="button" data-return-risk="HIGH">高已退款率</button>
               <button class="filter-button" type="button" data-return-risk="WATCH">观察</button>
               <button class="filter-button" type="button" data-return-risk="NO_SALES_DENOMINATOR">缺少分母</button>
             </div>
@@ -168,7 +169,7 @@
         </div>
         <div class="table-scroll">
           <table class="return-table">
-            <thead><tr><th>商品与维度</th><th>风险</th><th class="num">申请件数</th><th class="num">已退款</th><th class="num">已取消</th><th class="num">处理中</th><th class="num">同月销量</th><th class="num">本月退款率</th><th class="num" id="returnTotalRateHeader">款号累计总退款率</th><th class="num">退款金额</th><th class="num">金额退款率</th></tr></thead>
+            <thead><tr><th>商品与维度</th><th class="num">本月退款率</th><th class="num">预估退款率</th><th class="num" id="returnTotalRateHeader">款号累计总退款率</th><th>风险</th><th class="num">申请件数</th><th class="num">已退款</th><th class="num">已取消</th><th class="num">处理中</th><th class="num">当月销量</th><th class="num">退款金额</th><th class="num">金额退款率</th></tr></thead>
             <tbody id="returnOverviewBody"></tbody>
           </table>
         </div>
@@ -184,7 +185,7 @@
         </div>
         <div class="table-scroll">
           <table class="return-table">
-            <thead><tr><th>申请时间与订单</th><th>商品</th><th>原因</th><th>当前状态</th><th class="num">数量</th><th class="num">订单金额</th><th class="num">退款金额</th><th>退款方式</th><th>承担方</th><th>渠道</th><th>其他字段</th></tr></thead>
+            <thead><tr><th>申请时间与订单</th><th>商品</th><th>原因</th><th class="num">数量</th><th class="num">订单金额</th><th class="num">退款金额</th><th>退款方式</th><th>承担方</th><th>渠道</th><th>其他字段</th></tr></thead>
             <tbody id="returnDetailBody"></tbody>
           </table>
         </div>
@@ -355,8 +356,8 @@
       return;
     }
     $("#returnStatusHeadline").textContent = summary.soldUnits > 0
-      ? `${meta.selectedMonth} 退款率已按真实订单销量计算`
-      : `${meta.selectedMonth} 缺少同月订单销量分母`;
+      ? `${meta.selectedMonth} 退款率已按当月真实订单销量计算`
+      : `${meta.selectedMonth} 缺少当月订单销量分母`;
     const completeMonth = (meta.reportMonths || []).includes(meta.selectedMonth);
     $("#returnStatusDetail").textContent = completeMonth
       ? `已映射 ${percent(summary.mappingRate)} 的退款件数。已完成退款以 ${meta.completedDefinition} 判断。`
@@ -397,7 +398,7 @@
       return;
     }
     rate.textContent = account.soldUnits > 0 ? percent(account.completedRate) : "缺少分母";
-    note.textContent = `${integer(account.monthCount)} 个已导入月份按累计件数计算，不取各月退款率的平均值。`;
+    note.textContent = `${integer(account.monthCount)} 个已导入月份：退款分子按报表月份，销量分母按同一首末月份范围累计，不取各月退款率的平均值。`;
     units.textContent = `${integer(account.completedUnits)} / ${integer(account.soldUnits)}`;
     refundAmount.textContent = money(account.refundAmount);
     months.textContent = account.firstMonth === account.lastMonth
@@ -547,6 +548,7 @@
       <option value="${escapeHtml(row.parentSku)}" ${row.parentSku === state.selectedParentSku ? "selected" : ""}>
         ${escapeHtml(row.parentSku)} · 本月 ${percent(row.completedRate)} · 累计 ${row.totalSoldUnits > 0 ? percent(row.totalCompletedRate) : "缺少分母"}
       </option>`).join("");
+    select.value = state.selectedParentSku || "";
   }
 
   function renderScopeContext() {
@@ -558,11 +560,11 @@
       ? `${row.parentSku} 共 ${integer(row.completedUnits)} 件已退款，颜色和尺码均按实际退款件数计算。`
       : "只统计已完成退款，申请中和已取消不进入退款率。";
     $("#returnColorSubtitle").textContent = row
-      ? `${row.parentSku} · 每个颜色的实际退款件数 ÷ 该颜色销量`
-      : "实际退款件数除以该款各颜色的同月销量";
+      ? `${row.parentSku} · SKC（颜色）显示本月退款率和退款导入范围内的累计退款率`
+      : "实际退款件数除以该款各 SKC（颜色）的当月销量，并显示累计口径";
     $("#returnSizeSubtitle").textContent = row
-      ? `${row.parentSku} · 每个尺码的实际退款件数 ÷ 该尺码销量`
-      : "实际退款件数除以该款各尺码的同月销量";
+      ? `${row.parentSku} · 尺码显示本月退款率和退款导入范围内的累计退款率`
+      : "实际退款件数除以该款各尺码的当月销量，并显示累计口径";
     $("#returnScopeClear").hidden = !state.selectedColor && !state.selectedSize;
   }
 
@@ -634,9 +636,10 @@
     ));
     const parents = trendParents();
     const visibleParents = parents.filter((row) => state.trendSelectedParents.has(row.parentSku));
+    const showOverall = state.trendShowOverall;
     $("#returnTrendSubtitle").textContent = visibleParents.length
-      ? `店铺总体与 ${visibleParents.length} 个已选款号对比`
-      : "店铺总体已完成退款率，使用全部订单销量作为分母";
+      ? (showOverall ? `店铺总体与 ${visibleParents.length} 个已选款号对比` : `已隐藏店铺总体，对比 ${visibleParents.length} 个款号`)
+      : (showOverall ? "店铺总体已完成退款率，分母为当月订单销量" : "已隐藏店铺总体，勾选款号以对比，或点击上方「店铺总体」重新显示");
     if (!accountRows.length) {
       chart.innerHTML = `<div class="empty-state"><strong>没有月度趋势</strong>当前退款明细还不能形成月份序列。</div>`;
       return;
@@ -658,14 +661,36 @@
         }),
       };
     });
-    const series = [{
+    const overallSeries = showOverall ? [{
       label: "店铺总体",
       color: "var(--walmart-blue)",
       dash: "none",
       dashClass: "",
       account: true,
       rows: accountRows,
-    }, ...parentSeries];
+    }] : [];
+    const series = [...overallSeries, ...parentSeries];
+    const overallLegend = `
+      <button type="button" class="return-trend-active-item is-toggle" data-toggle-overall
+        aria-pressed="${showOverall}" title="点击显示 / 隐藏店铺总体折线">
+        <i style="--series-color:var(--walmart-blue)" aria-hidden="true"></i>
+        店铺总体
+      </button>`;
+    const parentLegend = parentSeries.map((item) => `
+      <button type="button" class="return-trend-active-item is-toggle" data-trend-legend-toggle="${escapeHtml(item.label)}"
+        aria-pressed="true" title="点击取消 ${escapeHtml(item.label)} 折线显示">
+        <i class="${item.dashClass}" style="--series-color:${item.color}" aria-hidden="true"></i>
+        ${escapeHtml(item.label)}
+      </button>`).join("");
+    const legend = overallLegend + parentLegend;
+    if (!series.length) {
+      chart.innerHTML = `
+        <div class="return-trend-active-series" aria-label="当前显示的趋势">${overallLegend}</div>
+        <div class="empty-state"><strong>没有可显示的折线</strong>已隐藏店铺总体，勾选款号以叠加对比，或点击上方「店铺总体」重新显示。</div>`;
+      const emptyToggle = chart.querySelector("[data-toggle-overall]");
+      if (emptyToggle) emptyToggle.addEventListener("click", () => { state.trendShowOverall = !state.trendShowOverall; renderTrend(); });
+      return;
+    }
     const compact = chart.clientWidth > 0 && chart.clientWidth < 520;
     const width = compact ? Math.max(320, Math.round(chart.clientWidth - 20)) : 900;
     const height = compact ? 220 : 284;
@@ -719,11 +744,6 @@
       const labelY = Math.max(top + 9, Math.min(top + plotHeight + 15, y + offset));
       return `<text class="return-chart-value ${item.account ? "account" : ""}" x="${x.toFixed(1)}" y="${labelY.toFixed(1)}" text-anchor="middle" style="--series-color:${item.color}" aria-hidden="true">${percent(row.completedRate)}</text>`;
     }).join("")).join("");
-    const legend = series.map((item) => `
-      <span class="return-trend-active-item">
-        <i class="${item.dashClass}" style="--series-color:${item.color}" aria-hidden="true"></i>
-        ${escapeHtml(item.label)}
-      </span>`).join("");
     chart.innerHTML = `
       <div class="return-trend-active-series" aria-label="当前显示的趋势">${legend}</div>
       <svg viewBox="0 0 ${width} ${height}" style="height:${height}px" role="img"
@@ -735,6 +755,21 @@
           x="${left}" y="${top}" width="${plotWidth}" height="${plotHeight}" aria-hidden="true"></rect>
       </svg>
       <div class="return-chart-point-tooltip" id="returnTrendPointTooltip" role="tooltip" hidden></div>`;
+    const overallToggle = chart.querySelector("[data-toggle-overall]");
+    if (overallToggle) {
+      overallToggle.addEventListener("click", () => {
+        state.trendShowOverall = !state.trendShowOverall;
+        renderTrend();
+      });
+    }
+    chart.querySelectorAll("[data-trend-legend-toggle]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const parentSku = button.dataset.trendLegendToggle;
+        state.trendSelectedParents.delete(parentSku);
+        renderTrendSeriesControl();
+        renderTrend();
+      });
+    });
     const tooltip = $("#returnTrendPointTooltip");
     const svg = chart.querySelector("svg");
     const axis = $("#returnTrendHoverAxis");
@@ -849,9 +884,10 @@
         data-return-dimension-key="${key}" data-return-dimension-label="${escapeHtml(row.label)}"
         aria-pressed="${row.label === selectedLabel}">
         <strong title="${escapeHtml(row.label)}">${escapeHtml(row.label)}</strong>
-        <span><b>${integer(row.completedUnits)} / ${integer(row.soldUnits)}</b><small>已退款 / 销量</small></span>
-        <span><b>${percent(row.completedRate)}</b><small>实际退款率</small></span>
-        <span><b>${percent(row.shareOfParentCompletedRefunds)}</b><small>占本款已退款</small></span>
+        <span class="return-dimension-units"><b>${integer(row.completedUnits)} / ${integer(row.soldUnits)}</b><small>已退款 / 当月销量</small></span>
+        <span class="return-dimension-current"><b>${percent(row.completedRate)}</b><small>本月实际退款率</small></span>
+        ${cumulativeDimensionMarkup(row)}
+        <span class="return-dimension-share"><b>${percent(row.shareOfParentCompletedRefunds)}</b><small>占本款已退款</small></span>
       </button>`).join("");
     container.querySelectorAll("[data-return-dimension-key]").forEach((button) => {
       button.addEventListener("click", () => selectDimension(
@@ -865,14 +901,51 @@
     if (!state.data) return [];
     if (state.group === "parent") return [...(state.data.parentRows || [])]
       .sort((a, b) => compareStyleNo(a.parentSku, b.parentSku));
-    return scopedSkuRows();
+    return scopedSkuRows().sort(compareCumulativePriority);
+  }
+
+  function cumulativeRiskPriority(row) {
+    return ({ HIGH: 3, WATCH: 2, NORMAL: 1, NO_SALES_DENOMINATOR: 0 })[row.totalRisk] ?? 0;
+  }
+
+  function compareCumulativePriority(left, right) {
+    return cumulativeRiskPriority(right) - cumulativeRiskPriority(left)
+      || number(right.totalCompletedUnits) - number(left.totalCompletedUnits)
+      || number(right.totalCompletedRate) - number(left.totalCompletedRate)
+      || text(left.sku || left.groupKey).localeCompare(text(right.sku || right.groupKey), "en", { numeric: true });
+  }
+
+  function cumulativeDimensionMarkup(row) {
+    const risk = riskCopy[row.totalRisk] || riskCopy.NO_SALES_DENOMINATOR;
+    const sold = number(row.totalSoldUnits);
+    if (sold <= 0) {
+      return `<span class="return-dimension-cumulative"><b class="return-cumulative-rate no-sales-denominator">缺少分母</b><small>累计无销量</small></span>`;
+    }
+    return `<span class="return-dimension-cumulative"><b class="return-cumulative-rate ${risk.className}">${risk.label} ${percent(row.totalCompletedRate)}</b><small>累计 ${integer(row.totalCompletedUnits)} / ${integer(sold)}</small></span>`;
+  }
+
+  function cumulativeRateMarkup(row) {
+    const risk = riskCopy[row.totalRisk] || riskCopy.NO_SALES_DENOMINATOR;
+    const sold = number(row.totalSoldUnits);
+    if (sold <= 0) {
+      return `<span class="return-total-rate"><strong class="return-rate-missing">-</strong></span>`;
+    }
+    return `<span class="return-total-rate"><strong class="return-cumulative-table-rate ${risk.className}">${percent(row.totalCompletedRate)}</strong><small>${integer(row.totalCompletedUnits)} / ${integer(sold)}</small></span>`;
+  }
+
+  function estimatedRate(parentSku) {
+    const rate = state.data?.manualRefundRates?.[parentSku];
+    if (rate == null) return `<span class="return-rate-missing">-</span>`;
+    return `<strong>${percent(Number(rate))}</strong>`;
   }
 
   function renderOverview() {
     const body = $("#returnOverviewBody");
     if (!body) return;
     const showParentTotal = state.group === "parent";
-    $("#returnTotalRateHeader").hidden = !showParentTotal;
+    const totalRateHeader = $("#returnTotalRateHeader");
+    totalRateHeader.hidden = false;
+    totalRateHeader.textContent = showParentTotal ? "款号累计总退款率" : "SKU 累计总退款率";
     let rows = overviewRows();
     if (state.risk !== "all") rows = rows.filter((row) => row.risk === state.risk);
     if (state.search) {
@@ -884,39 +957,38 @@
     state.overviewPage = Math.min(state.overviewPage, pages - 1);
     const pageRows = rows.slice(state.overviewPage * state.pageSize, (state.overviewPage + 1) * state.pageSize);
     $("#returnOverviewSubtitle").textContent = state.group === "parent"
-      ? "本月退款率用于定位当月问题，款号累计总退款率按全部完整导入月份加权计算。"
-      : `${state.selectedParentSku || "未选择款号"} 的 SKU，本月退款率按 SKU 计算。`;
+      ? "本月退款率和风险均按当月已完成退款件数 ÷ 当月订单销量计算；款号累计总退款率仅按退款文件首末月份内的销量加权计算。"
+      : `${state.selectedParentSku || "未选择款号"} 的 SKU，本月退款率与风险均按当月订单销量计算。`;
     if (!pageRows.length) {
-      body.innerHTML = `<tr><td colspan="${showParentTotal ? 11 : 10}"><div class="empty-state"><strong>没有符合条件的退款记录</strong>调整月份、维度、风险或搜索条件后重试。</div></td></tr>`;
+      body.innerHTML = `<tr><td colspan="12"><div class="empty-state"><strong>没有符合条件的退款记录</strong>调整月份、维度、风险或搜索条件后重试。</div></td></tr>`;
     } else {
       body.innerHTML = pageRows.map((row) => {
         const key = text(row.parentSku || row.sku || row.label || row.itemId, "未映射");
         const detail = state.group === "parent"
           ? `${integer(row.skuCount)} 个 SKU · ${integer(row.colorCount)} 色 · ${integer(row.sizeCount)} 码`
           : state.group === "sku"
-            ? `${text(row.color)} · ${text(row.size)} · Item ${text(row.itemId)}`
+            ? `${text(row.color)} · ${text(row.size)} · Item ${text(row.itemId, row.sku)}`
             : `${integer(row.skuCount)} 个 SKU`;
         const image = row.imageUrl
-          ? `<img class="return-product-thumb" src="${escapeHtml(row.imageUrl)}" alt="" loading="lazy">`
+          ? `<img class="return-product-thumb" src="${escapeHtml(row.imageUrl)}" alt="" width="40" height="48" loading="lazy" data-style-code="${escapeHtml(row.parentSku || row.sku || "")}" data-thumb-stage="remote" onerror="window.thumbFallback(this)">`
           : `<span class="return-product-thumb" aria-hidden="true"></span>`;
         const risk = riskCopy[row.risk] || riskCopy.NORMAL;
-        const totalRate = number(row.totalSoldUnits) > 0
-          ? `<strong>${percent(row.totalCompletedRate)}</strong><small>${integer(row.totalCompletedUnits)} / ${integer(row.totalSoldUnits)}</small>`
-          : `<strong class="return-rate-missing">缺少分母</strong><small>完整导入月份无销量</small>`;
+        const totalRate = cumulativeRateMarkup(row);
         const selected = state.group === "parent" && row.parentSku === state.selectedParentSku;
         const keyMarkup = state.group === "parent"
           ? `<button class="return-parent-button" type="button" data-return-parent="${escapeHtml(row.parentSku)}" aria-current="${selected ? "true" : "false"}" title="查看 ${escapeHtml(key)} 的款内色码分析">${escapeHtml(key)}</button>`
           : `<strong title="${escapeHtml(key)}">${escapeHtml(key)}</strong>`;
         return `<tr class="${selected ? "return-selected-row" : ""}">
           <td><div class="return-product-cell">${image}<div>${keyMarkup}<span>${escapeHtml(detail)}</span></div></div></td>
+          <td class="num"><span class="return-current-rate" title="已退款 ${integer(row.completedUnits)} 件 / 当月销量 ${integer(row.soldUnits)} 件"><strong>${percent(row.completedRate)}</strong><small>${integer(row.completedUnits)} / ${integer(row.soldUnits)} 件</small></span></td>
+          <td class="num"><span class="return-estimated-rate">${estimatedRate(row.parentSku)}</span></td>
+          <td class="num">${totalRate}</td>
           <td><span class="return-risk ${risk.className}">${risk.label}</span></td>
           <td class="num">${integer(row.requestedUnits)}</td>
           <td class="num">${integer(row.completedUnits)}</td>
           <td class="num">${integer(row.cancelledUnits)}</td>
           <td class="num">${integer(row.pendingUnits)}</td>
           <td class="num">${integer(row.soldUnits)}</td>
-          <td class="num">${percent(row.completedRate)}</td>
-          ${showParentTotal ? `<td class="num"><span class="return-total-rate">${totalRate}</span></td>` : ""}
           <td class="num">${money(row.refundAmount)}</td>
           <td class="num">${percent(row.refundAmountRate)}</td>
         </tr>`;
@@ -929,13 +1001,6 @@
     $("#returnOverviewPage").textContent = `${state.overviewPage + 1} / ${pages}`;
     $("#returnOverviewPrev").disabled = state.overviewPage === 0;
     $("#returnOverviewNext").disabled = state.overviewPage >= pages - 1;
-  }
-
-  function detailStatus(status) {
-    const value = String(status || "");
-    if (value.startsWith("Refunded:")) return { label: "已退款", className: "scale" };
-    if (value.startsWith("Cancelled:")) return { label: "已取消", className: "collect" };
-    return { label: "处理中", className: "optimize" };
   }
 
   function renderDetails() {
@@ -957,23 +1022,21 @@
     state.detailPage = Math.min(state.detailPage, pages - 1);
     const pageRows = rows.slice(state.detailPage * state.pageSize, (state.detailPage + 1) * state.pageSize);
     if (!pageRows.length) {
-      body.innerHTML = `<tr><td colspan="11"><div class="empty-state"><strong>当前款内范围没有退款订单明细</strong>清除颜色、尺码或搜索条件后重试。</div></td></tr>`;
+      body.innerHTML = `<tr><td colspan="10"><div class="empty-state"><strong>当前款内范围没有退款订单明细</strong>清除颜色、尺码或搜索条件后重试。</div></td></tr>`;
     } else {
       body.innerHTML = pageRows.map((row) => {
-        const status = detailStatus(row.currentStatus);
         const image = row.imageUrl
-          ? `<img class="return-product-thumb" src="${escapeHtml(row.imageUrl)}" alt="" loading="lazy">`
+          ? `<img class="return-product-thumb" src="${escapeHtml(row.imageUrl)}" alt="" width="40" height="48" loading="lazy" data-style-code="${escapeHtml(row.parentSku || row.sku || "")}" data-thumb-stage="remote" onerror="window.thumbFallback(this)">`
           : `<span class="return-product-thumb" aria-hidden="true"></span>`;
         const sku = text(row.sku, `Item ${text(row.itemId)}`);
         return `<tr>
           <td><div class="return-detail-meta"><strong>${escapeHtml(dateTime(row.requestAt))}</strong><span>订单 ${escapeHtml(row.customerOrderNo)}</span><span>RMA ${escapeHtml(row.rmaNo)}</span></div></td>
           <td><div class="return-product-cell">${image}<div><strong title="${escapeHtml(sku)}">${escapeHtml(sku)}</strong><span>${escapeHtml(text(row.parentSku))} · ${escapeHtml(text(row.color))} · ${escapeHtml(text(row.size))}</span><span title="${escapeHtml(row.itemName)}">${escapeHtml(text(row.itemName))}</span></div></div></td>
           <td title="${escapeHtml(row.returnReason)}">${escapeHtml(text(row.returnReason))}</td>
-          <td><span class="status-badge ${status.className}">${status.label}</span><div class="mono" style="margin-top:5px;color:var(--steel-copy);font-size:10px">${escapeHtml(text(row.currentStatus))}</div></td>
           <td class="num">${integer(row.quantity)}</td>
           <td class="num">${money(row.orderAmount)}</td>
           <td class="num">${money(row.totalRefundAmount)}</td>
-          <td>${escapeHtml(text(row.refundMode))}</td>
+          <td>${escapeHtml(text(row.refundMode, "—"))}</td>
           <td>${escapeHtml(text(row.refundCoveredBy))}</td>
           <td>${escapeHtml(text(row.channel))}</td>
           <td><details class="return-more"><summary>查看字段</summary><div>

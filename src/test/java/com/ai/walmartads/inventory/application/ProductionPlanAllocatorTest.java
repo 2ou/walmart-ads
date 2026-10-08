@@ -18,12 +18,14 @@ class ProductionPlanAllocatorTest {
 
         // rawTotal 41 crosses the 50% (22.5) partial-bed threshold, so a whole extra bed
         // (45) is cut even though the unrounded remainder is 41.
-        assertThat(result.status()).isEqualTo(ProductionPlanAllocator.Status.ALLOCATED);
+        assertThat(result.status()).isEqualTo(ProductionPlanAllocator.Status.PARTIALLY_COVERED);
         assertThat(result.colorTotalUnits()).isEqualTo(45);
-        assertThat(result.unitsByKey()).containsEntry("1X", 5d)
+        assertThat(result.unitsByKey()).containsEntry("1X", 0d)
                 .containsEntry("2X", 5d)
-                .containsEntry("3X", 35d);
-        assertThat(result.unitsByKey().values()).allMatch(value -> value >= 5d);
+                .containsEntry("3X", 40d);
+        assertThat(result.unitsByKey().values())
+                .allMatch(value -> value == 0 || value >= 5d)
+                .allMatch(value -> value % 5d == 0d);
     }
 
     @Test
@@ -36,6 +38,8 @@ class ProductionPlanAllocatorTest {
         // 91 = 2 full beds (90) + remainder 1, which is below the 50% threshold and deferred.
         assertThat(result.colorTotalUnits()).isEqualTo(90);
         assertThat(result.unitsByKey().values().stream().mapToDouble(Double::doubleValue).sum()).isEqualTo(90d);
+        assertThat(result.unitsByKey().values()).allMatch(value -> value % 5d == 0d);
+        assertThat(result.status()).isEqualTo(ProductionPlanAllocator.Status.PARTIALLY_COVERED);
     }
 
     @Test
@@ -47,7 +51,7 @@ class ProductionPlanAllocatorTest {
         // 1 piece is far below the 50% (5 piece) partial-bed threshold, so nothing is cut
         // this cycle and the need is deferred instead of forcing a 10-piece bed.
         assertThat(result.colorTotalUnits()).isZero();
-        assertThat(result.status()).isEqualTo(ProductionPlanAllocator.Status.PARTIALLY_COVERED);
+        assertThat(result.status()).isEqualTo(ProductionPlanAllocator.Status.DEFERRED_BELOW_BED_THRESHOLD);
         assertThat(result.unitsByKey()).containsEntry("3X", 0d);
     }
 
@@ -77,7 +81,7 @@ class ProductionPlanAllocatorTest {
     }
 
     @Test
-    void onlyRejectsMissingCuttingYieldBecauseBedQuantityNeedNotBeAMultipleOfFive() {
+    void requiresCuttingYieldToBeAMultipleOfFiveToProtectSkuPackRule() {
         List<ProductionPlanAllocator.Requirement> requirements = List.of(
                 new ProductionPlanAllocator.Requirement("3X", 24)
         );
@@ -85,7 +89,46 @@ class ProductionPlanAllocatorTest {
         assertThat(ProductionPlanAllocator.allocate(requirements, null).status())
                 .isEqualTo(ProductionPlanAllocator.Status.MISSING_CUTTING_YIELD);
         assertThat(ProductionPlanAllocator.allocate(requirements, 1).status())
-                .isEqualTo(ProductionPlanAllocator.Status.ALLOCATED);
+                .isEqualTo(ProductionPlanAllocator.Status.INCOMPATIBLE_CUTTING_YIELD);
+    }
+
+    @Test
+    void allocatesOnlyFivePiecePacksWhenRawShortagesHaveSinglePieceTails() {
+        ProductionPlanAllocator.Allocation result = ProductionPlanAllocator.allocate(List.of(
+                new ProductionPlanAllocator.Requirement("1X", 26.0929),
+                new ProductionPlanAllocator.Requirement("2X", 10.1348)
+        ), 45);
+
+        // A 45-piece colour bed must not surface as 31 + 14. Round the two SKU
+        // quantities to 30 + 15, which still covers each shortage and preserves the bed total.
+        assertThat(result.colorTotalUnits()).isEqualTo(45d);
+        assertThat(result.unitsByKey()).containsEntry("1X", 30d).containsEntry("2X", 15d);
+        assertThat(result.unitsByKey().values()).allMatch(value -> value % 5d == 0d);
+    }
+
+    @Test
+    void defersAColourWhenAWholeBedWouldBreakTheNinetyDayStockCeiling() {
+        ProductionPlanAllocator.Allocation result = ProductionPlanAllocator.allocate(List.of(
+                new ProductionPlanAllocator.Requirement("3X", 24, 30, null, 90)
+        ), 45);
+
+        assertThat(result.status()).isEqualTo(ProductionPlanAllocator.Status.DEFERRED_OVERSTOCK_RISK);
+        assertThat(result.colorTotalUnits()).isZero();
+        assertThat(result.unitsByKey()).containsEntry("3X", 0d);
+    }
+
+    @Test
+    void protectsCoreSizesWithoutForcingEveryLongTailSizeIntoTheBed() {
+        ProductionPlanAllocator.Allocation result = ProductionPlanAllocator.allocate(List.of(
+                new ProductionPlanAllocator.Requirement("core-top", 2, null, 80),
+                new ProductionPlanAllocator.Requirement("core-second", 12, null, 15),
+                new ProductionPlanAllocator.Requirement("long-tail", 4, null, 5)
+        ), 20);
+
+        assertThat(result.status()).isEqualTo(ProductionPlanAllocator.Status.PARTIALLY_COVERED);
+        assertThat(result.unitsByKey()).containsEntry("core-top", 5d)
+                .containsEntry("core-second", 15d)
+                .containsEntry("long-tail", 0d);
     }
 
     @Test

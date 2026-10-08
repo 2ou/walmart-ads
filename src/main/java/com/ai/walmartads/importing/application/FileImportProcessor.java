@@ -1,29 +1,19 @@
 package com.ai.walmartads.importing.application;
 
-import com.ai.walmartads.importing.domain.AdPerformance;
-import com.ai.walmartads.importing.domain.AdCampaignItemSnapshot;
-import com.ai.walmartads.importing.domain.AdCampaignSnapshot;
 import com.ai.walmartads.importing.domain.DemandForecastRecord;
 import com.ai.walmartads.importing.domain.DomesticInventorySnapshot;
 import com.ai.walmartads.importing.domain.ImportFile;
 import com.ai.walmartads.importing.domain.ImportFileType;
-import com.ai.walmartads.importing.domain.InventorySnapshot;
-import com.ai.walmartads.importing.domain.OrderRecord;
 import com.ai.walmartads.importing.domain.ProductRecord;
 import com.ai.walmartads.importing.domain.ProductionOrderRecord;
 import com.ai.walmartads.importing.domain.ReturnOrderRecord;
 import com.ai.walmartads.importing.domain.SkuMapping;
 import com.ai.walmartads.importing.domain.ShipmentLogisticsRecord;
 import com.ai.walmartads.importing.domain.ShipmentRecord;
-import com.ai.walmartads.importing.parser.AdCsvParser;
-import com.ai.walmartads.importing.parser.CampaignSnapshotJsonParser;
-import com.ai.walmartads.importing.parser.CampaignSnapshotRows;
 import com.ai.walmartads.importing.parser.DemandForecastParser;
 import com.ai.walmartads.importing.parser.DomesticInventoryWorkbookParser;
 import com.ai.walmartads.importing.parser.HistoricalWorkbookParser;
 import com.ai.walmartads.importing.parser.HistoricalWorkbookRows;
-import com.ai.walmartads.importing.parser.InventoryWorkbookParser;
-import com.ai.walmartads.importing.parser.OrderWorkbookParser;
 import com.ai.walmartads.importing.parser.ParsedRows;
 import com.ai.walmartads.importing.parser.ProductWorkbookParser;
 import com.ai.walmartads.importing.parser.ProductionOrderParser;
@@ -33,14 +23,9 @@ import com.ai.walmartads.importing.parser.ShipmentLogisticsWorkbookParser;
 import com.ai.walmartads.importing.parser.ShipmentWorkbookParser;
 import com.ai.walmartads.importing.parser.WalmartListingParser;
 import com.ai.walmartads.importing.parser.WalmartListingRow;
-import com.ai.walmartads.importing.parser.WeeklyInventoryWorkbookParser;
-import com.ai.walmartads.importing.repository.AdPerformanceRepository;
-import com.ai.walmartads.importing.repository.AdCampaignItemSnapshotRepository;
-import com.ai.walmartads.importing.repository.AdCampaignSnapshotRepository;
 import com.ai.walmartads.importing.repository.DemandForecastRepository;
 import com.ai.walmartads.importing.repository.DomesticInventorySnapshotRepository;
 import com.ai.walmartads.importing.repository.ImportFileRepository;
-import com.ai.walmartads.importing.repository.InventorySnapshotRepository;
 import com.ai.walmartads.importing.repository.OrderRecordRepository;
 import com.ai.walmartads.importing.repository.ProductRecordRepository;
 import com.ai.walmartads.importing.repository.ProductionOrderRepository;
@@ -77,18 +62,9 @@ public class FileImportProcessor {
 
     private final ImportFileRepository fileRepository;
     private final OrderRecordRepository orderRepository;
-    private final AdPerformanceRepository adRepository;
-    private final AdCampaignSnapshotRepository campaignSnapshotRepository;
-    private final AdCampaignItemSnapshotRepository campaignItemSnapshotRepository;
-    private final InventorySnapshotRepository inventoryRepository;
     private final ProductRecordRepository productRepository;
     private final SkuMappingRepository mappingRepository;
     private final ReturnOrderRecordRepository returnOrderRepository;
-    private final OrderWorkbookParser orderParser;
-    private final AdCsvParser adParser;
-    private final CampaignSnapshotJsonParser campaignSnapshotParser;
-    private final InventoryWorkbookParser inventoryParser;
-    private final WeeklyInventoryWorkbookParser weeklyInventoryParser;
     private final ProductWorkbookParser productParser;
     private final HistoricalWorkbookParser historicalParser;
     private final SkuMappingWorkbookParser mappingParser;
@@ -112,18 +88,9 @@ public class FileImportProcessor {
     public FileImportProcessor(
             ImportFileRepository fileRepository,
             OrderRecordRepository orderRepository,
-            AdPerformanceRepository adRepository,
-            AdCampaignSnapshotRepository campaignSnapshotRepository,
-            AdCampaignItemSnapshotRepository campaignItemSnapshotRepository,
-            InventorySnapshotRepository inventoryRepository,
             ProductRecordRepository productRepository,
             SkuMappingRepository mappingRepository,
             ReturnOrderRecordRepository returnOrderRepository,
-            OrderWorkbookParser orderParser,
-            AdCsvParser adParser,
-            CampaignSnapshotJsonParser campaignSnapshotParser,
-            InventoryWorkbookParser inventoryParser,
-            WeeklyInventoryWorkbookParser weeklyInventoryParser,
             ProductWorkbookParser productParser,
             HistoricalWorkbookParser historicalParser,
             SkuMappingWorkbookParser mappingParser,
@@ -144,18 +111,9 @@ public class FileImportProcessor {
     ) {
         this.fileRepository = fileRepository;
         this.orderRepository = orderRepository;
-        this.adRepository = adRepository;
-        this.campaignSnapshotRepository = campaignSnapshotRepository;
-        this.campaignItemSnapshotRepository = campaignItemSnapshotRepository;
-        this.inventoryRepository = inventoryRepository;
         this.productRepository = productRepository;
         this.mappingRepository = mappingRepository;
         this.returnOrderRepository = returnOrderRepository;
-        this.orderParser = orderParser;
-        this.adParser = adParser;
-        this.campaignSnapshotParser = campaignSnapshotParser;
-        this.inventoryParser = inventoryParser;
-        this.weeklyInventoryParser = weeklyInventoryParser;
         this.productParser = productParser;
         this.historicalParser = historicalParser;
         this.mappingParser = mappingParser;
@@ -175,24 +133,8 @@ public class FileImportProcessor {
         this.replenishmentPlanCache = replenishmentPlanCache;
         this.tools = new EnumMap<>(ImportFileType.class);
         this.toolVersions = new EnumMap<>(ImportFileType.class);
-        register("legacy", (path, file) -> saveOrders(orderParser.parse(path, file)), ImportFileType.ORDER);
-        register(
-                "legacy",
-                (path, file) -> saveAds(adParser.parse(path, file)),
-                ImportFileType.AD_REPORT,
-                ImportFileType.AD_AUTO,
-                ImportFileType.AD_MANUAL
-        );
-        register(
-                "legacy",
-                (path, file) -> saveInventory(inventoryParser.parse(path, file)),
-                ImportFileType.INVENTORY
-        );
-        register(
-                "legacy",
-                (path, file) -> saveInventory(weeklyInventoryParser.parse(path, file)),
-                ImportFileType.WEEKLY_INVENTORY
-        );
+        // ORDER（PO_Data 每日订单明细）已由领星 MCP 接管：不再扫描、不再注册处理工具。
+        // ImportFileType.ORDER 枚举保留，仅为读回历史 import_file 行。
         register(
                 "legacy",
                 (path, file) -> saveProducts(productParser.parse(path, file)),
@@ -220,11 +162,6 @@ public class FileImportProcessor {
         );
         register(
                 "1",
-                (path, file) -> saveWalmartListings(walmartListingParser.parse(path, file)),
-                ImportFileType.WALMART_LISTING
-        );
-        register(
-                "1",
                 (path, file) -> saveDomesticInventory(domesticInventoryParser.parse(path, file)),
                 ImportFileType.DOMESTIC_INVENTORY
         );
@@ -242,11 +179,6 @@ public class FileImportProcessor {
                 "1",
                 (path, file) -> saveShipmentLogistics(shipmentLogisticsParser.parse(path, file), file),
                 ImportFileType.SHIPMENT_LOGISTICS
-        );
-        register(
-                "1",
-                (path, file) -> saveCampaignSnapshot(campaignSnapshotParser.parse(path, file)),
-                ImportFileType.CAMPAIGN_SNAPSHOT
         );
     }
 
@@ -274,8 +206,7 @@ public class FileImportProcessor {
                 || file.getFileType() == ImportFileType.SKU_MAPPING
                 || file.getFileType() == ImportFileType.PRODUCTION_ORDER
                 || file.getFileType() == ImportFileType.SHIPMENT
-                || file.getFileType() == ImportFileType.SHIPMENT_LOGISTICS
-                || file.getFileType() == ImportFileType.CAMPAIGN_SNAPSHOT) {
+                || file.getFileType() == ImportFileType.SHIPMENT_LOGISTICS) {
             fileRepository.deactivateFileTypeVersions(file.getFileType(), file.getId());
         }
         try {
@@ -288,6 +219,63 @@ public class FileImportProcessor {
 
     public Set<ImportFileType> supportedTypes() {
         return Set.copyOf(tools.keySet());
+    }
+
+    /**
+     * 把某个「整类型替换」类型的当前数据整体置空 —— 源目录为空时的落地动作。
+     *
+     * <p>与 {@code saveProductionOrders} / {@code saveShipments} / {@code saveShipmentLogistics}
+     * 里的「整类型作废」互补：那三条只在真拿到文件时触发，源目录空了它们一次都不会跑，
+     * 于是上一次导入的明细会永远以 {@code current_version = true} 挂着，做货量 / 在途量
+     * 一直按陈旧值计算。本方法补上「没有文件 = 这次的结果就是空」这一半。
+     *
+     * <p>做法与 {@code fe16533} 一致：<b>物理删除</b>明细行，而不只是翻停用标记 ——
+     * 读取端只认 {@code current_version}，删行后所有读取端零改动立刻正确；
+     * 同时把该类型全部 {@code import_file} 停用，让判重口径（按 active）认得「现在没有生效版本」。
+     *
+     * <p>可恢复：原始文件仍留在 {@code archive/} 批次目录里，放回源目录重新扫描即可重新导入生效。
+     *
+     * @return 被物理删除的明细行数
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public int clearFullReplaceType(ImportFileType type) {
+        if (!type.fullReplace()) {
+            throw new IllegalArgumentException("该类型不是整类型替换口径，不支持源空置空：" + type);
+        }
+        List<Long> fileIds = fileRepository.findIdsByFileType(type);
+        int deleted = fileIds.isEmpty() ? 0 : switch (type) {
+            case PRODUCTION_ORDER -> productionOrderRepository.deleteByImportFileIdIn(fileIds);
+            case SHIPMENT -> shipmentRepository.deleteByImportFileIdIn(fileIds);
+            case SHIPMENT_LOGISTICS -> shipmentLogisticsRepository.deleteByImportFileIdIn(fileIds);
+            default -> 0;
+        };
+        fileRepository.deactivateAllFileTypeVersions(type);
+        if (type == ImportFileType.SHIPMENT_LOGISTICS) {
+            // 物流行整体消失后，渠道主数据可能失去来源，与导入路径保持同一收尾动作。
+            transitInventoryService.syncChannelsForManualMaintenance();
+        }
+        log.warn(
+                "{} 源目录为空：整类型置空，物理删除 {} 条明细并停用该类型全部导入版本",
+                type,
+                deleted
+        );
+        try {
+            replenishmentPlanCache.refreshAfterSuccessfulImport(type);
+        } catch (RuntimeException exception) {
+            log.warn("Replenishment forecast refresh failed after clearing {}: {}", type, exception.getMessage());
+        }
+        return deleted;
+    }
+
+    /** 某「整类型替换」类型当前生效的明细行数（置空预检用）。 */
+    @Transactional(readOnly = true)
+    public long countCurrentRows(ImportFileType type) {
+        return switch (type) {
+            case PRODUCTION_ORDER -> productionOrderRepository.findCurrentVersions().size();
+            case SHIPMENT -> shipmentRepository.findCurrentVersions().size();
+            case SHIPMENT_LOGISTICS -> shipmentLogisticsRepository.findCurrentVersions().size();
+            default -> 0L;
+        };
     }
 
     public String toolVersion(ImportFileType type) {
@@ -316,21 +304,6 @@ public class FileImportProcessor {
         }
     }
 
-    private DocumentImportTool.ImportOutcome saveOrders(ParsedRows<OrderRecord> parsed) {
-        orderRepository.saveAll(parsed.rows());
-        return new DocumentImportTool.ImportOutcome(parsed.sourceRowCount(), parsed.rows().size());
-    }
-
-    private DocumentImportTool.ImportOutcome saveAds(ParsedRows<AdPerformance> parsed) {
-        adRepository.saveAll(parsed.rows());
-        return new DocumentImportTool.ImportOutcome(parsed.sourceRowCount(), parsed.rows().size());
-    }
-
-    private DocumentImportTool.ImportOutcome saveInventory(ParsedRows<InventorySnapshot> parsed) {
-        inventoryRepository.saveAll(parsed.rows());
-        return new DocumentImportTool.ImportOutcome(parsed.sourceRowCount(), parsed.rows().size());
-    }
-
     private DocumentImportTool.ImportOutcome saveProducts(ParsedRows<ProductRecord> parsed) {
         List<String> skus = parsed.rows().stream()
                 .map(ProductRecord::getSku)
@@ -347,11 +320,26 @@ public class FileImportProcessor {
             ProductRecord old = previous.get(record.getSku());
             if (old != null) {
                 if (record.getPrice() == null) record.setPrice(old.getPrice());
+                if (record.getStrikethroughPrice() == null) record.setStrikethroughPrice(old.getStrikethroughPrice());
                 if (record.getUpc() == null) record.setUpc(old.getUpc());
                 if (record.getGtin() == null) record.setGtin(old.getGtin());
                 if (record.getListingStatus() == null) record.setListingStatus(old.getListingStatus());
                 if (record.getStore() == null) record.setStore(old.getStore());
                 if (record.getProductId() == null) record.setProductId(old.getProductId());
+                // 保留由领星 MCP 每小时同步回写的实时运营列，避免重新导入产品资料时被空值覆盖。
+                if (record.getWfsAvailable() == null) record.setWfsAvailable(old.getWfsAvailable());
+                if (record.getNonWfsAvailable() == null) record.setNonWfsAvailable(old.getNonWfsAvailable());
+                if (record.getBuyBoxPrice() == null) record.setBuyBoxPrice(old.getBuyBoxPrice());
+                if (record.getReviewCount() == null) record.setReviewCount(old.getReviewCount());
+                if (record.getAverageRating() == null) record.setAverageRating(old.getAverageRating());
+                if (record.getCompetitorPrice() == null) record.setCompetitorPrice(old.getCompetitorPrice());
+                if (record.getFulfillmentType() == null) record.setFulfillmentType(old.getFulfillmentType());
+                if (record.getFulfillmentTypeName() == null) record.setFulfillmentTypeName(old.getFulfillmentTypeName());
+                if (record.getListingStartTime() == null) record.setListingStartTime(old.getListingStartTime());
+                if (record.getOfferEndDate() == null) record.setOfferEndDate(old.getOfferEndDate());
+                if (record.getItemUrl() == null) record.setItemUrl(old.getItemUrl());
+                if (record.getPromotionJson() == null) record.setPromotionJson(old.getPromotionJson());
+                if (record.getLastSyncedAt() == null) record.setLastSyncedAt(old.getLastSyncedAt());
             }
         }
         productRepository.saveAll(parsed.rows());
@@ -361,29 +349,16 @@ public class FileImportProcessor {
     private DocumentImportTool.ImportOutcome saveHistory(HistoricalWorkbookRows parsed, ImportFile file) {
         deleteSupersededHistoryRows(file);
         orderRepository.saveAll(parsed.orders());
-        adRepository.saveAll(parsed.ads());
         return new DocumentImportTool.ImportOutcome(
                 parsed.sourceRowCount(),
-                parsed.orders().size() + parsed.ads().size()
+                parsed.orders().size()
         );
     }
 
     /**
-     * HISTORY 报表「整类型快照替换」：写入当前版本前，先物理删除该类型所有历史版本（含已停用版本
-     * 遗留的死行）关联的广告与订单明细，使历史区间数据恒等于本次文件内容的精确快照。
-     *
-     * <p>HISTORY 一份文件覆盖整个历史区间、{@code reportDate} 为 NULL，故按类型整体定位旧版本，
-     * 不能用退货那种按报表月的 {@code findOtherVersionIds}。
-     *
-     * <p>此前 process() 只对 HISTORY 调用 {@code deactivateFileTypeVersions} 把旧 import_file 置
-     * active=0，从不删明细，于是每重导一次就多留一份完整副本 —— 2026-09 排查时发现库内滞留 5 份
-     * 逐字段完全相同的副本（广告 206,155 行 / 订单 71,315 行，均为生效版本的 5 整倍）。
-     *
-     * <p>与 {@code process()} 里的 {@code deactivateFileTypeVersions} 配合：本方法与其处于同一个
-     * {@code REQUIRES_NEW} 事务内，中途失败会整体回滚，不会出现「旧行已删、新行未进」的空窗。
-     *
-     * <p>只按「该类型此前贡献过的行」删除（以 import_file 定位），不按行内业务日期删除 ——
-     * 后者会误删仍生效的版本或其他类型报表的行。
+     * Replaces only the order rows contributed by an older HISTORY workbook.
+     * HISTORY 现在只贡献订单明细：历史广告曾落在 {@code wm_ads_ad_performance}，该表与解析器
+     * 已在领星切换后退役（V48 归档重命名为 {@code _deprecated_wm_ads_ad_performance}），不再读写。
      */
     private void deleteSupersededHistoryRows(ImportFile file) {
         List<Long> supersededIds = fileRepository.findOtherVersionIdsByType(
@@ -393,13 +368,11 @@ public class FileImportProcessor {
         if (supersededIds.isEmpty()) {
             return;
         }
-        int ads = adRepository.deleteByImportFileIdIn(supersededIds);
         int orders = orderRepository.deleteByImportFileIdIn(supersededIds);
         log.info(
-                "HISTORY {} 整类型快照替换：清理历史版本 id={} 的 {} 条广告明细 + {} 条订单明细",
+                "HISTORY {} 整类型快照替换：清理历史版本 id={} 的 {} 条订单明细（广告历史已由领星接管）",
                 file.getFileName(),
                 supersededIds,
-                ads,
                 orders
         );
     }
@@ -444,7 +417,6 @@ public class FileImportProcessor {
         deleteSupersededRowsByType(file, "SKU映射", mappingRepository::deleteByImportFileIdIn);
         mappingRepository.deactivateCurrentVersions();
         mappingRepository.saveAllAndFlush(parsed.rows());
-        adRepository.backfillSkuFromCurrentMappings();
         orderRepository.backfillUpcFromCurrentMappings();
         return new DocumentImportTool.ImportOutcome(parsed.sourceRowCount(), parsed.rows().size());
     }
@@ -508,6 +480,7 @@ public class FileImportProcessor {
                 continue;
             }
             product.setPrice(row.price());
+            product.setStrikethroughPrice(row.strikethroughPrice());
             product.setUpc(row.upc());
             product.setGtin(row.gtin());
             product.setListingStatus(row.listingStatus());
@@ -562,14 +535,4 @@ public class FileImportProcessor {
         return new DocumentImportTool.ImportOutcome(parsed.sourceRowCount(), parsed.rows().size());
     }
 
-    private DocumentImportTool.ImportOutcome saveCampaignSnapshot(CampaignSnapshotRows parsed) {
-        campaignSnapshotRepository.deactivateAllCurrentVersions();
-        campaignItemSnapshotRepository.deactivateAllCurrentVersions();
-        campaignSnapshotRepository.saveAll(parsed.campaigns());
-        campaignItemSnapshotRepository.saveAll(parsed.items());
-        return new DocumentImportTool.ImportOutcome(
-                parsed.sourceRowCount(),
-                parsed.campaigns().size() + parsed.items().size()
-        );
-    }
 }

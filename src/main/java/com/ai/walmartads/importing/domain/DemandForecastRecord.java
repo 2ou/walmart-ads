@@ -20,7 +20,7 @@ import java.time.LocalDateTime;
  */
 @Entity
 @Table(name = "wm_ads_demand_forecast")
-public class DemandForecastRecord {
+public class DemandForecastRecord extends com.ai.walmartads.workspace.WorkspaceOwnedEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

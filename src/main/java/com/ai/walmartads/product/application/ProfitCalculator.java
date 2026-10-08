@@ -8,7 +8,7 @@ import java.math.RoundingMode;
 /**
  * 依据 PNK 毛利估算表（工具表）的公式计算单 SKU 的测试毛利与测试毛利率。
  *
- * 输入：售价 B、单件配送费 F（来自 ItemReport 重量推算）、采购成本 G、头程 H、销量 C、
+ * 输入：售价 B、单件配送费 F（缺省按 ProfitAssumption.delivery_fee 兜底）、采购成本 G、头程 H、销量 C、
  *       总广告费 I、退款率 D、汇率 Q（默认 7，原币→人民币）。
  * 派生：佣金 J = ROUND(B × 档位, 2)，档位 B≥20→15% / 15≤B<20→10% / B<15→5%；仓储 K = B × 3%。
  * 输出：测试毛利(¥) L = (B − B·D − F − J − K)·Q·C − I·Q − (G+H)·C + C·D·0.7·(G+H)

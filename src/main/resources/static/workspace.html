@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>店铺与同步 · 沃尔玛工作台</title>
+  <link rel="stylesheet" href="workspace.css?v=20261008-workspace">
+</head>
+<body>
+  <div class="settings-shell">
+    <aside class="settings-sidebar">
+      <a class="settings-brand" href="/"><span>W</span><strong>沃尔玛工作台</strong></a>
+      <nav>
+        <button class="is-active" data-tab="store" type="button"><i>01</i><span>店铺与领星</span></button>
+        <button data-tab="sync" type="button"><i>02</i><span>同步计划</span></button>
+        <button data-tab="security" type="button"><i>03</i><span>账号安全</span></button>
+        <button data-tab="audit" type="button"><i>04</i><span>运行审计</span></button>
+      </nav>
+      <div class="sidebar-account"><span class="status-dot"></span><div><strong id="sideStore">读取中…</strong><small id="sideUser"></small></div></div>
+    </aside>
+
+    <main class="settings-main">
+      <header class="settings-topbar">
+        <div><p>自动化准备 / 店铺与同步</p><h1>店铺工作区</h1></div>
+        <div class="topbar-actions"><a id="backWorkbench" href="/">返回工作台</a><button id="logoutButton" type="button">退出登录</button></div>
+      </header>
+
+      <div id="pageError" class="notice error" role="alert" hidden></div>
+      <div id="pendingNotice" class="notice pending" hidden><strong>这个账号还没有绑定店铺</strong><span>完成领星连接与店铺确认后，商品、广告、销量等业务页面才会解锁。</span></div>
+
+      <section class="settings-tab is-active" data-panel="store">
+        <div class="identity-hero">
+          <div><span class="kicker">CURRENT WORKSPACE</span><h2 id="heroStore">读取中…</h2><p id="heroMeta">正在确认店铺身份</p></div>
+          <div class="identity-state"><span id="heroStatus">—</span><small id="heroInit">—</small></div>
+        </div>
+
+        <div class="settings-grid">
+          <form id="bindingForm" class="settings-card wide">
+            <div class="card-heading"><div><span class="card-index">01</span><h3>领星 MCP 连接</h3><p>此连接决定整个账号的数据边界。Key 只用于服务端同步，不作为登录凭证。</p></div><span class="key-state" id="keyState">未配置</span></div>
+            <div class="form-grid">
+              <label class="full">X-Mcp-Key
+                <div class="secret-control"><input id="mcpKey" type="password" autocomplete="off" placeholder="保留为空表示继续使用当前 Key"><button id="revealKey" type="button">查看</button><button id="copyKey" type="button">复制</button></div>
+                <small id="keyHint">数据库中未配置</small>
+              </label>
+              <label class="full advanced-field">MCP 地址<input id="mcpBaseUrl" type="url"></label>
+              <div class="connection-action full"><button class="secondary" id="testMcp" type="button">测试连接并读取店铺</button><span id="testMcpResult">保存前必须确认 Key 能访问目标店铺</span></div>
+              <label>绑定店铺<select id="storeSelect" required><option value="">测试连接后选择</option></select></label>
+              <label>店铺缩写<input id="storeAbbreviation" maxlength="12" readonly title="创建后不可修改"></label>
+              <label>广告账号 ID<input id="advertiserIds" placeholder="多个用逗号分隔"></label>
+              <label>SKU / 款号前缀<input id="skuPrefixes" placeholder="多个用逗号分隔"></label>
+            </div>
+            <div class="card-actions"><span>Store ID 与广告账号不可被其他工作区重复绑定。</span><button class="primary" type="submit">保存并启动初始化</button></div>
+          </form>
+
+          <section class="settings-card">
+            <div class="card-heading"><div><span class="card-index">02</span><h3>账号身份</h3><p>登录账号就是领星真实店铺名，店铺名和缩写创建后均不可修改。</p></div></div>
+            <dl class="identity-list"><div><dt>登录店铺名</dt><dd id="accountUsername">—</dd></div><div><dt>店铺缩写</dt><dd id="accountAbbreviation">—</dd></div><div><dt>Store ID</dt><dd id="accountStoreId">—</dd></div><div><dt>供应链权限</dt><dd id="accountSupplyChain">—</dd></div></dl>
+          </section>
+
+          <section class="settings-card wide">
+            <div class="card-heading"><div><span class="card-index">03</span><h3>新增店铺账号</h3><p>直接连接领星并创建独立店铺空间；登录账号自动使用所选店铺的真实名称。</p></div></div>
+            <form id="createAccountForm" class="form-grid">
+              <label class="full">新店铺 X-Mcp-Key<input id="newMcpKey" type="password" required autocomplete="off"></label>
+              <label class="full advanced-field">MCP 地址<input id="newMcpBaseUrl" type="url" value="https://openmcp.lingxing.com/mcp-servers/lingxing-mcp"></label>
+              <div class="connection-action full"><button class="secondary" id="discoverNewStore" type="button">测试连接并读取店铺</button><span id="newStoreStatus">选择店铺后自动确定登录账号</span></div>
+              <label>领星店铺<select id="newStoreSelect" required disabled><option value="">请先测试连接</option></select></label>
+              <label>店铺缩写<input id="newStoreAbbreviation" required minlength="2" maxlength="12" pattern="[A-Za-z0-9]{2,12}" placeholder="例如 ABC"></label>
+              <label>初始密码<input id="newPassword" type="password" autocomplete="new-password" required minlength="8"></label>
+              <label>确认密码<input id="newPasswordConfirm" type="password" autocomplete="new-password" required minlength="8"></label>
+              <label class="full">广告账号 ID（可选）<input id="newAdvertiserIds" placeholder="多个用逗号分隔；留空时广告同步显示未配置"></label>
+              <div class="card-actions full"><span>店铺名、Store ID 和店铺缩写创建后不可修改。</span><button class="primary" type="submit">创建并绑定店铺</button></div>
+            </form>
+          </section>
+          <section class="settings-card wide" id="managedAccountsCard" hidden>
+            <div class="card-heading"><div><span class="card-index">PINKSIR</span><h3>账号管理</h3><p>仅 PINKSIR 可查看其他店铺并重置密码；重置后现有会话继续有效。</p></div><button class="secondary small" id="refreshManagedAccounts" type="button">刷新</button></div>
+            <div id="managedAccountList" class="list-stack"></div>
+          </section>
+        </div>
+      </section>
+
+      <section class="settings-tab" data-panel="sync">
+        <div class="section-heading"><div><span class="kicker">SYNC ORCHESTRATION</span><h2>同步计划</h2><p>各工作区错峰运行。只能启停同步类别，不开放原始 Cron，避免高峰碰撞。</p></div><button class="secondary" id="refreshSync" type="button">刷新状态</button></div>
+        <div id="syncCards" class="sync-grid"><div class="settings-card loading-card">正在读取同步计划…</div></div>
+        <section class="settings-card init-card"><div><span class="card-index">初始化进度</span><h3 id="initHeadline">等待读取</h3><p id="initMessage">新店铺先同步商品与当前库存，再在后台补齐历史销量、广告和评价。</p></div><div class="init-track"><span id="initTrack"></span></div></section>
+      </section>
+
+      <section class="settings-tab" data-panel="security">
+        <div class="section-heading"><div><span class="kicker">ACCOUNT SECURITY</span><h2>账号安全</h2><p>修改密码只需输入两次新密码；已登录浏览器会话继续有效。</p></div></div>
+        <div class="settings-grid">
+          <form id="passwordForm" class="settings-card"><div class="card-heading"><div><span class="card-index">01</span><h3>修改密码</h3></div></div><div class="compact-form"><label>新密码<input id="newPasswordOwn" type="password" autocomplete="new-password" required minlength="8"></label><label>确认新密码<input id="confirmPasswordOwn" type="password" autocomplete="new-password" required minlength="8"></label><button class="primary" type="submit">确认修改密码</button></div></form>
+          <section class="settings-card wide"><div class="card-heading"><div><span class="card-index">02</span><h3>有效会话</h3><p>可撤销当前账号在其他浏览器中的登录。</p></div><button class="secondary small" id="refreshSessions" type="button">刷新</button></div><div id="sessionList" class="list-stack"></div></section>
+        </div>
+      </section>
+
+      <section class="settings-tab" data-panel="audit">
+        <div class="section-heading"><div><span class="kicker">SECURITY AUDIT</span><h2>当前账号审计</h2><p>只显示本账号的登录、密钥、绑定、同步与安全操作；敏感值永不进入日志。</p></div><button class="secondary" id="refreshAudit" type="button">刷新</button></div>
+        <section class="settings-card"><div id="auditList" class="audit-list"></div></section>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="managedPasswordDialog"><form id="managedPasswordForm" class="dialog-card"><span class="kicker">PINKSIR ACCOUNT ADMIN</span><h2>重置店铺密码</h2><p id="managedPasswordTarget">—</p><input id="managedWorkspaceId" type="hidden"><div class="compact-form"><label>新密码<input id="managedNewPassword" type="password" autocomplete="new-password" required minlength="8"></label><label>确认密码<input id="managedConfirmPassword" type="password" autocomplete="new-password" required minlength="8"></label></div><div><button class="secondary" id="cancelManagedPassword" type="button">取消</button><button class="primary" type="submit">确认重置</button></div></form></dialog>
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+  <script src="workspace.js?v=20261008-workspace"></script>
+</body>
+</html>

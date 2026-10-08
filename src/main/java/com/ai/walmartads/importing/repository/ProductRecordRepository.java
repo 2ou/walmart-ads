@@ -8,6 +8,7 @@ import org.springframework.data.repository.query.Param;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 
 public interface ProductRecordRepository extends JpaRepository<ProductRecord, Long> {
 
@@ -16,4 +17,10 @@ public interface ProductRecordRepository extends JpaRepository<ProductRecord, Lo
     int deactivateCurrentVersions(@Param("skus") Collection<String> skus);
 
     List<ProductRecord> findByParentSku(String parentSku);
+
+    List<ProductRecord> findAllBySkuInAndCurrentVersionTrue(Collection<String> skus);
+
+    Optional<ProductRecord> findFirstByProductIdAndCurrentVersionTrueOrderBySourceUpdatedAtDesc(String productId);
+
+    Optional<ProductRecord> findFirstBySkuAndCurrentVersionTrueOrderBySourceUpdatedAtDesc(String sku);
 }

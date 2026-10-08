@@ -1,9 +1,7 @@
 package com.ai.walmartads.importing.parser;
 
 import com.ai.walmartads.config.WalmartAdsProperties;
-import com.ai.walmartads.importing.domain.AdPerformance;
 import com.ai.walmartads.importing.domain.ImportFile;
-import com.ai.walmartads.importing.domain.ImportFileType;
 import com.ai.walmartads.importing.domain.OrderRecord;
 import org.apache.poi.openxml4j.opc.OPCPackage;
 import org.apache.poi.openxml4j.opc.PackageAccess;
@@ -23,7 +21,6 @@ import org.xml.sax.XMLReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.nio.file.Path;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
@@ -40,7 +37,6 @@ import java.util.Set;
 public class HistoricalWorkbookParser {
 
     private static final String ORDER_SHEET = "当天销量";
-    private static final String AD_SHEET = "当天广告数据";
     private static final Set<String> PRIVATE_FIELDS = Set.of(
             "Customer Name",
             "Customer Shipping Address",
@@ -65,6 +61,12 @@ public class HistoricalWorkbookParser {
         this.properties = properties;
     }
 
+    /**
+     * 只读「当天销量」工作表。
+     *
+     * <p>历史广告（原「当天广告数据」工作表）已由领星 MCP 的 {@code wm_ads_lx_ad_report} 接管，
+     * 解析与落库整段移除 —— 既不再写入 {@code wm_ads_ad_performance}，解析结果也不再进内存。
+     */
     public HistoricalWorkbookRows parse(Path path, ImportFile importFile) throws IOException {
         LocalDate endDateExclusive = properties.historicalEndDateExclusive();
         if (endDateExclusive == null) {
@@ -72,9 +74,7 @@ public class HistoricalWorkbookParser {
         }
 
         OrderSheetHandler orderHandler = new OrderSheetHandler(importFile, endDateExclusive);
-        AdSheetHandler adHandler = new AdSheetHandler(importFile, endDateExclusive);
         boolean ordersFound = false;
-        boolean adsFound = false;
 
         try (OPCPackage pkg = OPCPackage.open(path.toFile(), PackageAccess.READ)) {
             ReadOnlySharedStringsTable strings = new ReadOnlySharedStringsTable(pkg);
@@ -83,13 +83,9 @@ public class HistoricalWorkbookParser {
             XSSFReader.SheetIterator sheets = (XSSFReader.SheetIterator) reader.getSheetsData();
             while (sheets.hasNext()) {
                 try (InputStream input = sheets.next()) {
-                    String sheetName = sheets.getSheetName();
-                    if (ORDER_SHEET.equals(sheetName)) {
+                    if (ORDER_SHEET.equals(sheets.getSheetName())) {
                         parseSheet(input, styles, strings, orderHandler);
                         ordersFound = true;
-                    } else if (AD_SHEET.equals(sheetName)) {
-                        parseSheet(input, styles, strings, adHandler);
-                        adsFound = true;
                     }
                 }
             }
@@ -103,14 +99,7 @@ public class HistoricalWorkbookParser {
         if (!ordersFound) {
             throw new IllegalArgumentException("历史统计表缺少工作表：" + ORDER_SHEET);
         }
-        if (!adsFound) {
-            throw new IllegalArgumentException("历史统计表缺少工作表：" + AD_SHEET);
-        }
-        return new HistoricalWorkbookRows(
-                orderHandler.sourceRows + adHandler.sourceRows,
-                orderHandler.records,
-                adHandler.records
-        );
+        return new HistoricalWorkbookRows(orderHandler.sourceRows, orderHandler.records);
     }
 
     private static void parseSheet(
@@ -234,89 +223,6 @@ public class HistoricalWorkbookParser {
         }
     }
 
-    private final class AdSheetHandler extends StreamingSheetHandler {
-
-        private final ImportFile importFile;
-        private final LocalDate endDateExclusive;
-        private final List<AdPerformance> records = new ArrayList<>();
-        private Map<Integer, String> columnNames;
-        private int sourceRows;
-
-        private AdSheetHandler(ImportFile importFile, LocalDate endDateExclusive) {
-            this.importFile = importFile;
-            this.endDateExclusive = endDateExclusive;
-        }
-
-        @Override
-        protected void acceptRow(int rowNum, Map<Integer, String> values) {
-            if (rowNum == 0) {
-                columnNames = Map.copyOf(values);
-                requireColumn(values, 0, "广告活动名称");
-                requireColumn(values, 4, "产品ID");
-                requireColumn(values, 8, "展示次数");
-                requireColumn(values, 11, "广告支出");
-                requireColumn(values, 32, "日期");
-                return;
-            }
-            sourceRows++;
-            LocalDate reportDate = date(values.get(32));
-            if (reportDate == null || !reportDate.isBefore(endDateExclusive)) {
-                return;
-            }
-            String campaignName = values.get(0);
-            if (campaignName == null) {
-                return;
-            }
-
-            String parentSku = firstNonBlank(
-                    values.get(34),
-                    values.get(33),
-                    ImportValues.parentSku(campaignName)
-            );
-            BigDecimal spend = ImportValues.decimal(values.get(11));
-            BigDecimal sales = ImportValues.decimal(values.get(15));
-            BigDecimal roas = ImportValues.decimal(values.get(30));
-            if (roas.signum() == 0 && spend.signum() > 0) {
-                roas = sales.divide(spend, 8, RoundingMode.HALF_UP);
-            }
-
-            records.add(new AdPerformance(
-                    importFile,
-                    reportDate,
-                    ImportFileType.AD_AUTO,
-                    campaignName,
-                    values.get(1),
-                    "Sponsored Products (Auto)",
-                    null,
-                    BigDecimal.ZERO,
-                    values.get(2),
-                    values.get(3),
-                    values.get(4),
-                    null,
-                    parentSku,
-                    values.get(5),
-                    null,
-                    null,
-                    null,
-                    ImportValues.decimal(values.get(6)),
-                    ImportValues.decimal(values.get(7)),
-                    ImportValues.whole(values.get(8)),
-                    ImportValues.whole(values.get(9)),
-                    ImportValues.decimal(values.get(10)),
-                    spend,
-                    ImportValues.decimal(values.get(13)),
-                    ImportValues.decimal(values.get(14)),
-                    sales,
-                    ImportValues.decimal(values.get(16)),
-                    ImportValues.decimal(values.get(17)),
-                    ImportValues.decimal(values.get(18)),
-                    roas,
-                    BigDecimal.ZERO,
-                    json.write(rawPayload(values, columnNames, Set.of()))
-            ));
-        }
-    }
-
     private static Map<String, Object> rawPayload(
             Map<Integer, String> values,
             Map<Integer, String> columnNames,
@@ -337,15 +243,6 @@ public class HistoricalWorkbookParser {
             if (!headers.containsKey(name)) {
                 throw new IllegalArgumentException("历史订单工作表缺少字段：" + name);
             }
-        }
-    }
-
-    private static void requireColumn(Map<Integer, String> headers, int column, String expected) {
-        String actual = headers.get(column);
-        if (!expected.equals(actual)) {
-            throw new IllegalArgumentException(
-                    "历史广告工作表第 " + (column + 1) + " 列应为 " + expected + "，实际为 " + actual
-            );
         }
     }
 
@@ -380,15 +277,6 @@ public class HistoricalWorkbookParser {
             }
         } catch (NumberFormatException ignored) {
             // Not an Excel serial date.
-        }
-        return null;
-    }
-
-    private static String firstNonBlank(String... values) {
-        for (String value : values) {
-            if (value != null && !value.isBlank() && !value.startsWith("#")) {
-                return value;
-            }
         }
         return null;
     }

@@ -9,6 +9,10 @@ spring:
     url: ${WALMART_ADS_DB_URL:jdbc:mysql://127.0.0.1:3306/walmart_ads?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true}
     username: ${WALMART_ADS_DB_USERNAME:root}
     password: ${WALMART_ADS_DB_PASSWORD:root}
+  servlet:
+    multipart:
+      max-file-size: 100MB
+      max-request-size: 105MB
   jpa:
     open-in-view: false
     hibernate:
@@ -29,10 +33,14 @@ walmart:
   ads:
     data-root: ${WALMART_ADS_DATA_ROOT:D:/PNK/17DATA}
     archive-root: ${WALMART_ADS_ARCHIVE_ROOT:D:/PNK/17DATA/archive}
+    # 已退役（2026-09-28）：早期销售历史已退出文件扫描链路，SourceScanner 不再读取此路径。
+    # 配置保留仅作历史留档；historical-end-date-exclusive 仍被 HistoricalWorkbookParser 使用。
     historical-workbook: ${WALMART_ADS_HISTORICAL_WORKBOOK:D:/PNK/12每日销售数量统计/PNK 每日销售数据统计.xlsx}
     historical-end-date-exclusive: ${WALMART_ADS_HISTORICAL_END_DATE_EXCLUSIVE:2026-07-21}
+    # 已退役（2026-09-28）：SKU 映射已改由领星 MCP 在线商品每小时自动同步
+    # （SkuMappingSyncService，源 platform_listing_walmart_list），SourceScanner 不再读取此路径。
+    # 配置保留仅作历史留档，同时避免删字段破坏 WalmartAdsProperties（record）的构造签名。
     sku-mapping-workbook: ${WALMART_ADS_SKU_MAPPING_WORKBOOK:D:/PNK/02后台文件/01 WFS发货计划/WFS上传模板.xlsx}
-    weekly-reports-root: ${WALMART_ADS_WEEKLY_REPORTS_ROOT:D:/PNK/13周报表}
     forecast-service-url: ${WALMART_ADS_FORECAST_SERVICE_URL:http://127.0.0.1:8091}
     # AI / KIE 配置：也可用外部 config/application.yml（已 gitignore）覆盖，重启生效。
     ai:
@@ -45,6 +53,28 @@ walmart:
         read-timeout-seconds: ${KIE_READ_TIMEOUT_SECONDS:120}
         max-campaigns: ${KIE_MAX_CAMPAIGNS:25}
         max-skus: ${KIE_MAX_SKUS:20}
+    # 价格监控：复用已有 product_record.price（每小时由领星 MCP 回写），独立快照比对，不新增领星调用。
+    # 变动阈值默认 1%（过滤 $0.01 噪声）；异常阈值默认 ±20%（超出标红，需手动「标记已处理」）。
+    price-monitor:
+      enabled: ${WALMART_ADS_PRICE_MONITOR_ENABLED:true}
+      change-threshold-percent: ${WALMART_ADS_PRICE_CHANGE_THRESHOLD:1.0}
+      abnormal-percent: ${WALMART_ADS_PRICE_ABNORMAL:20.0}
+      retention-days: ${WALMART_ADS_PRICE_RETENTION:180}
+      display-window-days: ${WALMART_ADS_PRICE_DISPLAY_WINDOW:30}
+      cron: ${WALMART_ADS_PRICE_CRON:0 0 * * * *}
+    # 穿针引线供应链：每天北京时间 08:00 同步“生产中订单 + 生产发货单”。
+    # 凭据只从部署环境注入，不使用浏览器 Cookie，也不写入代码仓库。
+    supply-chain:
+      enabled: ${SUPPLY_CHAIN_SYNC_ENABLED:false}
+      base-url: ${SUPPLY_CHAIN_BASE_URL:https://czyxgyl.shangyiku.top/prod-api}
+      token: ${SUPPLY_CHAIN_TOKEN:}
+      username: ${SUPPLY_CHAIN_USERNAME:}
+      password: ${SUPPLY_CHAIN_PASSWORD:}
+      cron: ${SUPPLY_CHAIN_SYNC_CRON:0 0 8 * * *}
+      zone: ${SUPPLY_CHAIN_SYNC_ZONE:Asia/Shanghai}
+      page-size: ${SUPPLY_CHAIN_PAGE_SIZE:200}
+      connect-timeout-seconds: ${SUPPLY_CHAIN_CONNECT_TIMEOUT_SECONDS:10}
+      read-timeout-seconds: ${SUPPLY_CHAIN_READ_TIMEOUT_SECONDS:60}
 
 logging:
   level:

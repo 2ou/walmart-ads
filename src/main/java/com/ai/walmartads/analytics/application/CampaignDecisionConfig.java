@@ -13,7 +13,7 @@ import jakarta.persistence.Table;
  */
 @Entity
 @Table(name = "wm_ads_campaign_decision_config")
-public class CampaignDecisionConfig {
+public class CampaignDecisionConfig extends com.ai.walmartads.workspace.WorkspaceOwnedEntity {
 
     @Id
     @Column(name = "campaign_type", length = 20, nullable = false)

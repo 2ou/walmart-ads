@@ -17,7 +17,7 @@ import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "wm_ads_import_file")
-public class ImportFile {
+public class ImportFile extends com.ai.walmartads.workspace.WorkspaceOwnedEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -136,6 +136,46 @@ public class ImportFile {
         this.status = ImportFileStatus.FAILED;
         this.active = false;
         this.errorMessage = message;
+    }
+
+    /**
+     * 「持续同步」载体复用：把本行重新指向最新一次同步的源标识与统计，**不新增** {@code import_file} 行。
+     *
+     * <p>供领星在线商品（{@code platform_listing_walmart_list}）同步 SKU 映射使用：该同步每小时一次，
+     * 若每次都新建 import_file 行，一年将累积 8,760 行噪音记录（且 batch 表同样膨胀）。
+     * 复用同一行可保持 {@code wm_ads_sku_mapping.import_file_id} 外键语义不变，
+     * 也让 {@code ReturnAnalyticsService} 里 {@code join import_file on active = true} 天然成立。
+     *
+     * @param sourcePath       新的源标识（如 {@code lingxing://platform_listing_walmart_list}）
+     * @param sourceModifiedAt 本次同步时间
+     * @param sha256           本次数据集的内容指纹（用于「无变化则跳过重写」）
+     * @param sourceRows       源行数
+     * @param importedRows     写入行数
+     */
+    public void refreshFromSync(
+            String sourcePath,
+            LocalDateTime sourceModifiedAt,
+            String sha256,
+            int sourceRows,
+            int importedRows
+    ) {
+        if (sourcePath != null && !sourcePath.isBlank()) {
+            this.originalPath = sourcePath;
+            this.fileName = lastSegment(sourcePath);
+        }
+        this.sourceModifiedAt = sourceModifiedAt;
+        this.sha256 = sha256;
+        this.sourceRowCount = sourceRows;
+        this.importedRowCount = importedRows;
+        this.status = ImportFileStatus.IMPORTED;
+        this.active = true;
+        this.errorMessage = null;
+    }
+
+    private static String lastSegment(String path) {
+        int slash = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'));
+        String name = slash >= 0 ? path.substring(slash + 1) : path;
+        return name.isBlank() ? path : name;
     }
 
     public Long getId() {

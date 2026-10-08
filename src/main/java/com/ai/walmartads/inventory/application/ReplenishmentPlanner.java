@@ -16,6 +16,7 @@ public final class ReplenishmentPlanner {
     public static final int DEFAULT_HORIZON_DAYS = 60;
     public static final int DOMESTIC_SHIPMENT_LEAD_DAYS = 30;
     public static final int FACTORY_TO_SELLABLE_DAYS = 60;
+    public static final int MAX_AUTO_COVERAGE_BUFFER_DAYS = 30;
     private static final double MAX_AUTO_CUTTING_SURPLUS_RATIO = 1d;
 
     private ReplenishmentPlanner() {
@@ -48,6 +49,15 @@ public final class ReplenishmentPlanner {
             double rawProduction = manualNoReplenish
                     ? 0
                     : Math.max(0, demandP90 - nonNegative(variant.wfsUnits()) - domesticShipment - scheduledSupplyUnits);
+            double maxAutoProduction = manualNoReplenish
+                    ? 0
+                    : Math.max(
+                            rawProduction,
+                            demandP90 * (horizon + MAX_AUTO_COVERAGE_BUFFER_DAYS) / horizon
+                                    - nonNegative(variant.wfsUnits())
+                                    - domesticShipment
+                                    - scheduledSupplyUnits
+                    );
             LocalDate p50Stockout = stockoutDate(
                     input.snapshotDate(),
                     p50,
@@ -69,11 +79,13 @@ public final class ReplenishmentPlanner {
                     demandP90,
                     domesticShipment,
                     rawProduction,
+                    maxAutoProduction,
                     p50Stockout,
                     p90Stockout,
                     retired,
                     share <= 0,
-                    input.clearance()
+                    input.clearance(),
+                    input.lowSampleManualReview()
             ));
         }
         allocateProduction(plans, input.snapshotDate());
@@ -141,7 +153,12 @@ public final class ReplenishmentPlanner {
     private static void allocateProduction(List<MutablePlan> plans, LocalDate snapshotDate) {
         Map<String, List<MutablePlan>> byColor = new LinkedHashMap<>();
         for (MutablePlan plan : plans) {
-            if (plan.rawProduction <= 0 || plan.retired || plan.clearance || plan.noHistory) {
+            if (plan.rawProduction <= 0
+                    || plan.retired
+                    || plan.clearance
+                    || plan.noHistory
+                    || plan.lowSampleManualReview
+                    || plan.input.stockoutHistoryReview()) {
                 continue;
             }
             if (plan.input.color() == null || plan.input.color().isBlank()) {
@@ -164,7 +181,8 @@ public final class ReplenishmentPlanner {
                     .map(plan -> new ProductionPlanAllocator.Requirement(
                             plan.input.sku(),
                             plan.rawProduction,
-                            plan.p50Stockout,
+                            plan.maxAutoProduction,
+                            plan.p90Stockout,
                             plan.input.trailing90Sales()
                     ))
                     .toList();
@@ -189,23 +207,34 @@ public final class ReplenishmentPlanner {
             colorPlans.forEach(plan -> {
                 plan.colorProduction = allocation.colorTotalUnits();
                 plan.production = allocation.unitsByKey().getOrDefault(plan.input.sku(), 0d);
-                plan.status = allocation.uncoveredKeys().contains(plan.input.sku())
-                        ? Status.BED_NOT_COVERED
-                        : switch (allocation.status()) {
-                            case ALLOCATED -> lateArrival ? Status.PLANNED_LATE : Status.PLANNED;
-                            case PARTIALLY_COVERED -> Status.PARTIALLY_COVERED;
-                            case MISSING_CUTTING_YIELD -> Status.MISSING_CUTTING_YIELD;
-                            default -> Status.NOT_NEEDED;
-                        };
+                if (allocation.status() == ProductionPlanAllocator.Status.DEFERRED_BELOW_BED_THRESHOLD) {
+                    plan.status = Status.DEFERRED_SMALL_SHORTAGE;
+                } else if (allocation.status() == ProductionPlanAllocator.Status.DEFERRED_OVERSTOCK_RISK) {
+                    plan.status = Status.DEFERRED_OVERSTOCK_RISK;
+                } else if (allocation.uncoveredKeys().contains(plan.input.sku())) {
+                    plan.status = Status.BED_NOT_COVERED;
+                } else {
+                    plan.status = switch (allocation.status()) {
+                        case ALLOCATED -> lateArrival ? Status.PLANNED_LATE : Status.PLANNED;
+                        case PARTIALLY_COVERED -> Status.PARTIALLY_COVERED;
+                        case MISSING_CUTTING_YIELD -> Status.MISSING_CUTTING_YIELD;
+                        case INCOMPATIBLE_CUTTING_YIELD -> Status.MANUAL_REVIEW;
+                        default -> Status.NOT_NEEDED;
+                    };
+                }
             });
         });
         for (MutablePlan plan : plans) {
-            if (plan.retired) {
+            if (plan.lowSampleManualReview) {
+                plan.status = Status.LOW_SAMPLE_REVIEW;
+            } else if (plan.retired) {
                 plan.status = Status.RETIRED;
             } else if (plan.clearance) {
                 plan.status = Status.CLEARANCE;
             } else if (plan.noHistory) {
                 plan.status = Status.NEW_NO_HISTORY;
+            } else if (plan.input.stockoutHistoryReview()) {
+                plan.status = Status.STOCKOUT_HISTORY_REVIEW;
             } else if (plan.rawProduction <= 0 && plan.status == null) {
                 plan.status = Status.NOT_NEEDED;
             }
@@ -233,7 +262,8 @@ public final class ReplenishmentPlanner {
             List<Double> p50Daily,
             List<Double> p90Daily,
             boolean clearance,
-            List<VariantInput> variants
+            List<VariantInput> variants,
+            boolean lowSampleManualReview
     ) {
         public ParentInput {
             snapshotDate = snapshotDate == null ? LocalDate.now() : snapshotDate;
@@ -241,6 +271,18 @@ public final class ReplenishmentPlanner {
             p50Daily = p50Daily == null ? List.of() : List.copyOf(p50Daily);
             p90Daily = p90Daily == null ? List.of() : List.copyOf(p90Daily);
             variants = variants == null ? List.of() : List.copyOf(variants);
+        }
+
+        public ParentInput(
+                String parentSku,
+                LocalDate snapshotDate,
+                int horizonDays,
+                List<Double> p50Daily,
+                List<Double> p90Daily,
+                boolean clearance,
+                List<VariantInput> variants
+        ) {
+            this(parentSku, snapshotDate, horizonDays, p50Daily, p90Daily, clearance, variants, false);
         }
     }
 
@@ -254,7 +296,8 @@ public final class ReplenishmentPlanner {
             double domesticUnits,
             double wipUnits,
             int wipAvailableDay,
-            List<ScheduledSupply> additionalSupplies
+            List<ScheduledSupply> additionalSupplies,
+            boolean stockoutHistoryReview
     ) {
         public VariantInput {
             additionalSupplies = additionalSupplies == null ? List.of() : List.copyOf(additionalSupplies);
@@ -269,9 +312,26 @@ public final class ReplenishmentPlanner {
                 double wfsUnits,
                 double domesticUnits,
                 double wipUnits,
+                int wipAvailableDay,
+                List<ScheduledSupply> additionalSupplies
+        ) {
+            this(sku, color, size, cuttingYield, trailing90Sales, wfsUnits, domesticUnits, wipUnits, wipAvailableDay,
+                    additionalSupplies, false);
+        }
+
+        public VariantInput(
+                String sku,
+                String color,
+                String size,
+                Integer cuttingYield,
+                double trailing90Sales,
+                double wfsUnits,
+                double domesticUnits,
+                double wipUnits,
                 int wipAvailableDay
         ) {
-            this(sku, color, size, cuttingYield, trailing90Sales, wfsUnits, domesticUnits, wipUnits, wipAvailableDay, List.of());
+            this(sku, color, size, cuttingYield, trailing90Sales, wfsUnits, domesticUnits, wipUnits, wipAvailableDay,
+                    List.of(), false);
         }
     }
 
@@ -313,12 +373,16 @@ public final class ReplenishmentPlanner {
         PARTIALLY_COVERED,
         BED_NOT_COVERED,
         MANUAL_REVIEW,
+        DEFERRED_SMALL_SHORTAGE,
+        DEFERRED_OVERSTOCK_RISK,
         NOT_NEEDED,
         NEW_NO_HISTORY,
         CLEARANCE,
         RETIRED,
         MISSING_COLOR,
-        MISSING_CUTTING_YIELD
+        MISSING_CUTTING_YIELD,
+        LOW_SAMPLE_REVIEW,
+        STOCKOUT_HISTORY_REVIEW
     }
 
     private static final class MutablePlan {
@@ -326,11 +390,13 @@ public final class ReplenishmentPlanner {
         private final double demandP90;
         private final double domesticShipment;
         private final double rawProduction;
+        private final double maxAutoProduction;
         private final LocalDate p50Stockout;
         private final LocalDate p90Stockout;
         private final boolean retired;
         private final boolean noHistory;
         private final boolean clearance;
+        private final boolean lowSampleManualReview;
         private double production;
         private double colorProduction;
         private Status status;
@@ -340,21 +406,25 @@ public final class ReplenishmentPlanner {
                 double demandP90,
                 double domesticShipment,
                 double rawProduction,
+                double maxAutoProduction,
                 LocalDate p50Stockout,
                 LocalDate p90Stockout,
                 boolean retired,
                 boolean noHistory,
-                boolean clearance
+                boolean clearance,
+                boolean lowSampleManualReview
         ) {
             this.input = input;
             this.demandP90 = demandP90;
             this.domesticShipment = domesticShipment;
             this.rawProduction = rawProduction;
+            this.maxAutoProduction = maxAutoProduction;
             this.p50Stockout = p50Stockout;
             this.p90Stockout = p90Stockout;
             this.retired = retired;
             this.noHistory = noHistory;
             this.clearance = clearance;
+            this.lowSampleManualReview = lowSampleManualReview;
         }
 
         private VariantPlan toImmutable() {

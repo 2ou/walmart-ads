@@ -19,6 +19,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.HexFormat;
@@ -27,25 +28,35 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+/**
+ * 解析沃尔玛「Customer Returns」退货模板（Customer returns-YYYYMM.xlsx）。
+ *
+ * <p>与旧版 Return_Orders 模板的关键差异：
+ * <ul>
+ *   <li>直接带 {@code Seller SKU}（与产品库 sku 完全一致，含 -WFS 后缀），
+ *       不再依赖 ITEM_ID → sku_mapping 反查，归因更稳、不丢数据。</li>
+ *   <li>状态字段为 {@code Return Invoice Status}（如 RETURN_INVOICED），
+ *       无旧版的 Refunded:/Cancelled: 前缀，退款率判定改为等于 RETURN_INVOICED。</li>
+ *   <li>退货运费单列 {@code WFS Return Processing Fee}；退款承担方用 {@code Fault}(SELLER/WFS)。</li>
+ * </ul>
+ */
 @Component
 public class ReturnOrderWorkbookParser {
 
-    private static final String SHEET_NAME = "Return Order Details";
+    private static final String SHEET_NAME = "Customer Returns";
     private static final ZoneId BUSINESS_ZONE = ZoneId.of("Asia/Shanghai");
     private static final Set<String> REQUIRED_HEADERS = Set.of(
-            "CUSTOMER_ORDER_NO",
-            "RMA_NO",
-            "QUANTITY",
-            "REQUEST_DATE",
-            "ITEM_ID"
+            "CUSTOMERORDERID",
+            "RMANUMBER",
+            "SELLERSKU",
+            "QTYRETURNED",
+            "RETURNINITIATIONDATE"
     );
 
     private final JsonPayloadWriter json;
-    private final SkuResolver skuResolver;
 
-    public ReturnOrderWorkbookParser(JsonPayloadWriter json, SkuResolver skuResolver) {
+    public ReturnOrderWorkbookParser(JsonPayloadWriter json) {
         this.json = json;
-        this.skuResolver = skuResolver;
     }
 
     public ParsedRows<ReturnOrderRecord> parse(Path path, ImportFile importFile) throws IOException {
@@ -54,7 +65,6 @@ public class ReturnOrderWorkbookParser {
             throw new IllegalArgumentException("退款报表缺少文件月份：" + path);
         }
         List<ReturnOrderRecord> records = new ArrayList<>();
-        Map<String, SkuResolver.ResolvedSku> skuCache = new LinkedHashMap<>();
         int sourceRows = 0;
         try (InputStream input = Files.newInputStream(path);
              Workbook workbook = WorkbookFactory.create(input)) {
@@ -75,33 +85,39 @@ public class ReturnOrderWorkbookParser {
                     continue;
                 }
                 sourceRows++;
-                String customerOrderNo = values.get("CUSTOMER_ORDER_NO");
-                String rmaNo = values.get("RMA_NO");
-                String itemId = values.get("ITEM_ID");
-                LocalDateTime requestAt = dateTime(values.get("REQUEST_DATE"));
-                if (customerOrderNo == null || rmaNo == null || itemId == null || requestAt == null) {
+                String customerOrderNo = values.get("CUSTOMERORDERID");
+                String rmaNo = values.get("RMANUMBER");
+                String sellerSku = values.get("SELLERSKU");
+                LocalDateTime requestAt = dateTime(values.get("RETURNINITIATIONDATE"));
+                if (customerOrderNo == null || customerOrderNo.isBlank()
+                        || rmaNo == null || rmaNo.isBlank()
+                        || sellerSku == null || sellerSku.isBlank()
+                        || requestAt == null) {
                     continue;
                 }
                 LocalDate requestMonth = requestAt.toLocalDate().withDayOfMonth(1);
-                SkuResolver.ResolvedSku resolved = skuCache.computeIfAbsent(
-                        itemId,
-                        key -> skuResolver.resolve(key, null)
-                );
+                String parentSku = parentSkuOf(sellerSku);
                 records.add(new ReturnOrderRecord(
                         importFile,
                         rowIndex + 1,
                         businessKey(values),
                         requestMonth,
                         requestAt,
-                        dateTime(values.get("CURRENT_STATUS_TIME")),
-                        resolved.sku(),
-                        resolved.parentSku(),
+                        dateTime(values.get("DATEPROCESSEDINRC")),
+                        sellerSku,
+                        parentSku,
                         values,
                         json.write(values)
                 ));
             }
         }
         return new ParsedRows<>(sourceRows, records);
+    }
+
+    /** Seller SKU 形如 PNK0079-C-Beige-M-WFS，父款 = 首个 '-' 之前的一段。 */
+    private static String parentSkuOf(String sellerSku) {
+        int cut = sellerSku.indexOf('-');
+        return cut > 0 ? sellerSku.substring(0, cut) : sellerSku;
     }
 
     private static Map<String, Integer> headers(Row row) {
@@ -112,10 +128,15 @@ public class ReturnOrderWorkbookParser {
         row.forEach(cell -> {
             String name = ImportValues.text(cell);
             if (name != null) {
-                result.put(name.trim().toUpperCase(), cell.getColumnIndex());
+                result.put(normalizeHeader(name), cell.getColumnIndex());
             }
         });
         return result;
+    }
+
+    /** 归一化表头：去空格/连字符/括号/下划线，仅保留 A-Z0-9，便于稳定取列。 */
+    private static String normalizeHeader(String name) {
+        return name.trim().toUpperCase().replaceAll("[^A-Z0-9]", "");
     }
 
     private static Map<String, String> values(Row row, Map<String, Integer> headers) {
@@ -141,25 +162,35 @@ public class ReturnOrderWorkbookParser {
         if (value == null || value.isBlank()) {
             return null;
         }
+        String v = value.trim();
         try {
-            return OffsetDateTime.parse(value.trim())
-                    .atZoneSameInstant(BUSINESS_ZONE)
-                    .toLocalDateTime();
+            return OffsetDateTime.parse(v).atZoneSameInstant(BUSINESS_ZONE).toLocalDateTime();
         } catch (DateTimeParseException ignored) {
-            try {
-                return LocalDateTime.parse(value.trim());
-            } catch (DateTimeParseException exception) {
-                return null;
-            }
+            // fall through
+        }
+        try {
+            return LocalDateTime.parse(v.replace(' ', 'T'));
+        } catch (DateTimeParseException ignored) {
+            // fall through
+        }
+        try {
+            return LocalDate.parse(v).atStartOfDay();
+        } catch (DateTimeParseException ignored) {
+            // fall through
+        }
+        try {
+            return LocalDateTime.parse(v.replace(' ', 'T'),
+                    DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"));
+        } catch (DateTimeParseException exception) {
+            return null;
         }
     }
 
     private static String businessKey(Map<String, String> values) {
         String source = String.join("|",
-                text(values, "RMA_NO"),
-                text(values, "RETURN_ORDER_LINE_NO"),
-                text(values, "ITEM_ID"),
-                text(values, "CUSTOMER_ORDER_NO")
+                text(values, "CUSTOMERORDERID"),
+                text(values, "RMANUMBER"),
+                text(values, "RMALINENUMBER")
         );
         try {
             byte[] digest = MessageDigest.getInstance("SHA-256")
@@ -171,6 +202,7 @@ public class ReturnOrderWorkbookParser {
     }
 
     private static String text(Map<String, String> values, String key) {
-        return values.getOrDefault(key, "");
+        String value = values.get(key);
+        return value == null ? "" : value;
     }
 }

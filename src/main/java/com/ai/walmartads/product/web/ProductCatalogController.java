@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.math.BigDecimal;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -69,6 +70,21 @@ public class ProductCatalogController {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("parentSku", parentSku);
         result.put("cuttingYield", cuttingYield);
+        return ApiResponse.ok(result);
+    }
+
+    @PatchMapping("/parent/{parentSku}/refund-rate")
+    public ApiResponse<Map<String, Object>> updateRefundRate(
+            @PathVariable String parentSku,
+            @RequestBody Map<String, Object> body
+    ) {
+        Object value = body.get("refundRate");
+        BigDecimal refundRate = value == null ? null
+                : (value instanceof BigDecimal decimal ? decimal : new BigDecimal(String.valueOf(value).trim()));
+        productCatalogService.updateRefundRate(parentSku, refundRate);
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("parentSku", parentSku);
+        result.put("refundRate", refundRate);
         return ApiResponse.ok(result);
     }
 

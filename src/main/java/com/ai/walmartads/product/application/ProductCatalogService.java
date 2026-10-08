@@ -1,5 +1,6 @@
 package com.ai.walmartads.product.application;
 
+import com.ai.walmartads.common.WalmartImageUrl;
 import com.ai.walmartads.importing.domain.ProductRecord;
 import com.ai.walmartads.importing.repository.ProductRecordRepository;
 import com.ai.walmartads.inventory.application.ParentLifecycleService;
@@ -12,6 +13,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.sql.Timestamp;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -35,6 +37,8 @@ public class ProductCatalogService {
             "4XL", "4X", "5XL", "5X", "6XL", "6X", "ONE SIZE", "OS"
     );
     private static final BigDecimal EXCHANGE_RATE = new BigDecimal("7");
+    /** 款级划线价的认同阈值：同一链接内该值须占有值变体的 80% 以上才认定为「统一划线价」。 */
+    private static final BigDecimal STRIKETHROUGH_CONSENSUS_RATIO = new BigDecimal("0.80");
     private static final TypeReference<List<String>> STRING_LIST = new TypeReference<>() {
     };
     private static final TypeReference<LinkedHashMap<String, Object>> OBJECT_MAP = new TypeReference<>() {
@@ -115,7 +119,8 @@ public class ProductCatalogService {
         Map<String, BigDecimal> historyRates = refundRateService.ratesByParent();
         ParentLifecycleService.LifecycleView lifecycle = lifecycleService.viewFor(safeParentSku);
         SourceProduct representative = representative(rows);
-        ProfitView representativeProfit = computeProfit(representative, historyRates, profitCalculator);
+        BigDecimal effectiveDeliveryFee = representative.manualDeliveryFee() != null ? representative.manualDeliveryFee() : representative.deliveryFee();
+        ProfitView representativeProfit = computeProfit(representative, historyRates, profitCalculator, effectiveDeliveryFee);
         List<String> images = distinctStrings(rows.stream()
                 .flatMap(row -> {
                     List<String> rowImages = new ArrayList<>();
@@ -135,7 +140,9 @@ public class ProductCatalogService {
                 representative.firstLeg(),
                 representative.salesQty(),
                 representative.adCost(),
-                representative.manualRefundRate()
+                representative.manualRefundRate(),
+                representative.preferManualRefundRate(),
+                representative.manualDeliveryFee()
         );
         return new ProductDetail(
                 safeParentSku,
@@ -158,6 +165,7 @@ public class ProductCatalogService {
                 assumptionView,
                 representativeProfit.refundRate(),
                 representativeProfit.refundRateSource(),
+                representativeProfit.historicalRefundRate(),
                 lifecycle.clearance(),
                 lifecycle.allSeason(),
                 lifecycle.seasonType()
@@ -190,12 +198,40 @@ public class ProductCatalogService {
         productRecordRepository.saveAll(records);
     }
 
+    /**
+     * 只更新整款级手工预估退款率（null 表示清除）。
+     * 独立方法的原因：saveProfitAssumption 对 deliveryFee 采用「直接覆盖」语义（允许清空），
+     * 若走通用保存接口只传 refundRate，会把该款手工配送费连带清空。
+     */
+    @Transactional
+    public void updateRefundRate(String parentSku, BigDecimal refundRate) {
+        String safeParentSku = parentSku == null ? "" : parentSku.trim();
+        if (safeParentSku.isEmpty()) {
+            throw new IllegalArgumentException("父 SKU 不能为空。");
+        }
+        if (refundRate != null
+                && (refundRate.compareTo(BigDecimal.ZERO) < 0 || refundRate.compareTo(BigDecimal.ONE) > 0)) {
+            throw new IllegalArgumentException("退款率需在 0 ~ 1 之间（小数）。");
+        }
+        ProfitAssumption entity = profitAssumptionRepository.findById(safeParentSku)
+                .orElseGet(() -> new ProfitAssumption(safeParentSku));
+        entity.setRefundRate(refundRate);
+        entity.setUpdatedAt(LocalDateTime.now());
+        if (entity.getCreatedAt() == null) {
+            entity.setCreatedAt(LocalDateTime.now());
+        }
+        profitAssumptionRepository.save(entity);
+    }
+
     private static void validateCuttingYield(Integer cuttingYield) {
         if (cuttingYield == null) {
             return;
         }
         if (cuttingYield < 0) {
             throw new IllegalArgumentException("裁床数必须是非负整数；0 表示淘汰款，不维护时请留空。");
+        }
+        if (cuttingYield > 0 && cuttingYield % 5 != 0) {
+            throw new IllegalArgumentException("裁床数必须是 5 的倍数，才能保证每个 SKU 的做货数量均为 5 的倍数。");
         }
     }
 
@@ -208,7 +244,7 @@ public class ProductCatalogService {
         List<Map<String, Object>> firstSales = jdbc.queryForList("""
                 select o.parent_sku as parent_sku,
                        min(coalesce(o.order_date, o.report_date)) as first_sale
-                  from wm_ads_order_record o
+                  from wm_ads_order_record_valid o
                   join wm_ads_import_file f
                     on f.id = o.import_file_id
                    and f.active = true
@@ -243,11 +279,15 @@ public class ProductCatalogService {
         }
         ProfitAssumption entity = profitAssumptionRepository.findById(parentSku.trim())
                 .orElseGet(() -> new ProfitAssumption(parentSku.trim()));
-        entity.setPurchaseCost(request.purchaseCost());
-        entity.setFirstLeg(request.firstLeg());
-        entity.setSalesQty(request.salesQty());
-        entity.setAdCost(request.adCost());
-        entity.setRefundRate(request.refundRate());
+        if (request.purchaseCost() != null) entity.setPurchaseCost(request.purchaseCost());
+        if (request.firstLeg() != null) entity.setFirstLeg(request.firstLeg());
+        if (request.salesQty() != null) entity.setSalesQty(request.salesQty());
+        if (request.adCost() != null) entity.setAdCost(request.adCost());
+        if (request.refundRate() != null) entity.setRefundRate(request.refundRate());
+        if (request.preferManualRefundRate() != null) {
+            entity.setPreferManualRefundRate(request.preferManualRefundRate());
+        }
+        entity.setDeliveryFee(request.deliveryFee());
         entity.setUpdatedAt(LocalDateTime.now());
         if (entity.getCreatedAt() == null) {
             entity.setCreatedAt(LocalDateTime.now());
@@ -258,7 +298,9 @@ public class ProductCatalogService {
                 entity.getFirstLeg(),
                 entity.getSalesQty(),
                 entity.getAdCost(),
-                entity.getRefundRate()
+                entity.getRefundRate(),
+                entity.isPreferManualRefundRate(),
+                entity.getDeliveryFee()
         );
     }
 
@@ -308,7 +350,7 @@ public class ProductCatalogService {
     }
 
     private static Variant toVariant(SourceProduct row, Map<String, BigDecimal> historyRates, ProfitCalculator calculator) {
-        ProfitView profitView = computeProfit(row, historyRates, calculator);
+        ProfitView profitView = computeProfit(row, historyRates, calculator, null);
         List<String> images = new ArrayList<>();
         images.add(row.mainImageUrl());
         images.addAll(row.secondaryImageUrls());
@@ -332,6 +374,7 @@ public class ProductCatalogService {
                 row.itemId(),
                 row.upc(),
                 row.price(),
+                row.strikethroughPrice(),
                 row.shippingWeightLb(),
                 row.shippingWeightUnit(),
                 row.shippingWeightKg(),
@@ -343,24 +386,28 @@ public class ProductCatalogService {
         );
     }
 
-    private static ProfitView computeProfit(SourceProduct row, Map<String, BigDecimal> historyRates, ProfitCalculator calculator) {
+    private static ProfitView computeProfit(SourceProduct row, Map<String, BigDecimal> historyRates, ProfitCalculator calculator, BigDecimal deliveryFeeOverride) {
         BigDecimal history = historyRates.get(row.parentSku());
         BigDecimal manual = row.manualRefundRate();
         BigDecimal refundRate;
         String source;
-        if (history != null) {
-            refundRate = history;
-            source = "HISTORY";
-        } else if (manual != null) {
+        if (row.preferManualRefundRate() && manual != null) {
             refundRate = manual;
             source = "MANUAL";
+        } else if (history != null) {
+            refundRate = history;
+            source = "CUMULATIVE";
+        } else if (manual != null) {
+            refundRate = manual;
+            source = "MANUAL_FALLBACK";
         } else {
             refundRate = BigDecimal.ZERO;
             source = "DEFAULT";
         }
+        BigDecimal deliveryFee = deliveryFeeOverride != null ? deliveryFeeOverride : row.deliveryFee();
         ProfitCalculator.ProfitResult result = calculator.compute(
                 row.price(),
-                row.deliveryFee(),
+                deliveryFee,
                 row.purchaseCost(),
                 row.firstLeg(),
                 row.salesQty(),
@@ -369,9 +416,9 @@ public class ProductCatalogService {
                 EXCHANGE_RATE
         );
         if (result == null) {
-            return new ProfitView(null, null, refundRate, source);
+            return new ProfitView(null, null, refundRate, source, history);
         }
-        return new ProfitView(result.profit(), result.margin(), refundRate, source);
+        return new ProfitView(result.profit(), result.margin(), refundRate, source, history);
     }
 
     private static Comparator<SourceProduct> variantComparator() {
@@ -447,31 +494,24 @@ public class ProductCatalogService {
                        product.raw_payload,
                        product.source_updated_at,
                        file.file_name as source_file_name,
-                       ir.item_id,
-                       ir.upc,
-                       ir.wpid,
-                       ir.gtin,
-                       ir.price,
-                       ir.shipping_weight_lb,
-                       ir.shipping_weight_unit,
-                       ir.shipping_weight_kg,
-                       ir.billing_weight_lb,
-                       ir.base_fee,
-                       ir.apparel_surcharge,
-                       ir.low_price_surcharge,
-                       ir.delivery_fee,
+                       product.price,
+                       product.strikethrough_price,
+                       product.upc,
+                       product.gtin,
+                       product.listing_status,
+                       product.store,
+                       product.delivery_fee,
                        pa.purchase_cost,
                        pa.first_leg,
                        pa.sales_qty,
                        pa.ad_cost,
-                       pa.refund_rate
+                       pa.refund_rate,
+                       pa.prefer_manual_refund_rate,
+                       pa.delivery_fee as manual_delivery_fee
                   from wm_ads_product_record product
                   join wm_ads_import_file file
                     on file.id = product.import_file_id
                    and file.active = true
-                  left join wm_ads_item_report_record ir
-                    on ir.sku = product.sku
-                   and ir.current_version = true
                   left join wm_ads_profit_assumption pa
                     on pa.parent_sku = product.parent_sku
                  where product.current_version = true
@@ -513,24 +553,29 @@ public class ProductCatalogService {
                 truthy(rawPayload.get("isPrimaryVariant")),
                 localDateTime(row.get("source_updated_at")),
                 text(row, "source_file_name"),
-                text(row, "item_id"),
+                null,
                 text(row, "upc"),
-                text(row, "wpid"),
+                null,
                 text(row, "gtin"),
                 decimal(row, "price"),
-                decimal(row, "shipping_weight_lb"),
-                text(row, "shipping_weight_unit"),
-                decimal(row, "shipping_weight_kg"),
-                decimal(row, "billing_weight_lb"),
-                decimal(row, "base_fee"),
-                decimal(row, "apparel_surcharge"),
-                decimal(row, "low_price_surcharge"),
+                decimal(row, "strikethrough_price"),
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
                 decimal(row, "delivery_fee"),
                 decimal(row, "purchase_cost"),
                 decimal(row, "first_leg"),
                 decimal(row, "sales_qty"),
                 decimal(row, "ad_cost"),
                 decimal(row, "refund_rate"),
+                truthy(row.get("prefer_manual_refund_rate")),
+                decimal(row, "manual_delivery_fee"),
+                text(row, "listing_status"),
+                text(row, "store"),
                 localDate(row.get("launch_date"))
         );
     }
@@ -543,7 +588,7 @@ public class ProductCatalogService {
             ParentLifecycleService.LifecycleView lifecycle
     ) {
         SourceProduct representative = representative(rows);
-        ProfitView profitView = computeProfit(representative, historyRates, calculator);
+        ProfitView profitView = computeProfit(representative, historyRates, calculator, representative.manualDeliveryFee() != null ? representative.manualDeliveryFee() : representative.deliveryFee());
         LocalDateTime updatedAt = rows.stream()
                 .map(SourceProduct::sourceUpdatedAt)
                 .filter(value -> value != null)
@@ -579,12 +624,13 @@ public class ProductCatalogService {
                 .map(SourceProduct::cuttingYield)
                 .filter(value -> value != null)
                 .findFirst().orElse(null);
+        BigDecimal strikethroughPrice = consensusStrikethroughPrice(rows);
         return new ProductSummary(
                 parentSku,
                 representative.productName(),
                 representative.brand(),
                 representative.productType(),
-                representative.mainImageUrl(),
+                WalmartImageUrl.thumb(representative.mainImageUrl()),
                 rows.size(),
                 distinctCount(rows, SourceProduct::color),
                 distinctCount(rows, SourceProduct::size),
@@ -592,9 +638,13 @@ public class ProductCatalogService {
                 representative.sourceFileName(),
                 updatedAt,
                 representative.price(),
-                representative.deliveryFee(),
+                strikethroughPrice,
+                representative.manualDeliveryFee() != null ? representative.manualDeliveryFee() : representative.deliveryFee(),
                 profitView.profit(),
                 profitView.margin(),
+                representative.manualRefundRate(),
+                profitView.historicalRefundRate(),
+                profitView.refundRateSource(),
                 distinctStrings(searchTerms),
                 groupCuttingYield,
                 lifecycle.clearance(),
@@ -606,6 +656,57 @@ public class ProductCatalogService {
                         .min(LocalDate::compareTo)
                         .orElse(null)
         );
+    }
+
+    /**
+     * 款级划线价 —— 「整条链接统一一个值，才叫划线价」，其余一律不算。
+     *
+     * <p>规则：取链接内出现次数最多的划线价，且必须同时满足
+     * <ol>
+     *   <li>该值在**有值变体**中的占比 ≥ {@link #STRIKETHROUGH_CONSENSUS_RATIO}；</li>
+     *   <li>该值**严格高于**款级售价。</li>
+     * </ol>
+     * 任一不满足即返回 {@code null}，由前端显示「—」。
+     *
+     * <p>为什么必须收敛：实测该字段在导入环节被污染 —— 多款存在「划线价 = 售价」甚至
+     * 「划线价 &lt; 售价」的行（PNK363127 29/31、PNK366066 51/52、PNK366078 12/12），
+     * 且个别链接的变体值分裂成多档（PNK369006 众数仅占 38%）。这些都不构成真实划线价，
+     * 直接展示会误导定价判断。此前的实现是「抓代表变体、没有就取第一个非空」，
+     * 从不校验链接是否统一，脏值排在前面就会直接显示出来。
+     *
+     * <p>只在展示层收敛：DB 原始值原样保留，口径要调整无需重新同步。
+     * 变体级明细（{@link #toVariant}）仍照显真值，便于定位哪些变体是脏的。
+     */
+    private static BigDecimal consensusStrikethroughPrice(List<SourceProduct> rows) {
+        Map<BigDecimal, Long> counts = rows.stream()
+                .map(SourceProduct::strikethroughPrice)
+                .filter(value -> value != null)
+                .map(value -> value.setScale(2, RoundingMode.HALF_UP))
+                .collect(Collectors.groupingBy(Function.identity(), LinkedHashMap::new, Collectors.counting()));
+        BigDecimal highestPrice = rows.stream()
+                .map(SourceProduct::price)
+                .filter(value -> value != null)
+                .max(Comparator.naturalOrder())
+                .map(value -> value.setScale(2, RoundingMode.HALF_UP))
+                .orElse(null);
+        if (counts.isEmpty() || highestPrice == null) {
+            return null;
+        }
+        long filled = counts.values().stream().mapToLong(Long::longValue).sum();
+        Map.Entry<BigDecimal, Long> mode = counts.entrySet().stream()
+                .max(Comparator.<Map.Entry<BigDecimal, Long>>comparingLong(Map.Entry::getValue)
+                        .thenComparing(Map.Entry::getKey))
+                .orElseThrow();
+        BigDecimal consensus = BigDecimal.valueOf(mode.getValue())
+                .divide(BigDecimal.valueOf(filled), 4, RoundingMode.HALF_UP);
+        if (consensus.compareTo(STRIKETHROUGH_CONSENSUS_RATIO) < 0) {
+            return null;
+        }
+        BigDecimal modeValue = mode.getKey();
+        if (modeValue.compareTo(highestPrice) <= 0) {
+            return null;
+        }
+        return modeValue;
     }
 
     private static SourceProduct representative(List<SourceProduct> rows) {
@@ -628,8 +729,12 @@ public class ProductCatalogService {
 
     private static Map<String, String> attributes(SourceProduct row, ProfitView profitView) {
         Map<String, String> attributes = new LinkedHashMap<>();
+        put(attributes, "售价", row.price() == null ? null : "$" + row.price().toPlainString());
+        put(attributes, "划线价", row.strikethroughPrice() == null ? null : "$" + row.strikethroughPrice().toPlainString());
         put(attributes, "商品类型", row.productType());
         put(attributes, "品牌", row.brand());
+        put(attributes, "店铺", row.store());
+        put(attributes, "上架状态", row.listingStatus());
         put(attributes, "适用人群", row.gender());
         put(attributes, "材质", row.materialName());
         put(attributes, "图案", row.patternName());
@@ -638,18 +743,18 @@ public class ProductCatalogService {
         put(attributes, "UPC", row.upc());
         put(attributes, "配送重量(LB)", row.shippingWeightLb() == null ? null : row.shippingWeightLb().toPlainString());
         put(attributes, "配送重量(KG)", row.shippingWeightKg() == null ? null : row.shippingWeightKg().toPlainString());
-        put(attributes, "预估配送费", row.deliveryFee() == null ? null : "$" + row.deliveryFee().toPlainString());
+        BigDecimal displayDeliveryFee = row.manualDeliveryFee() != null ? row.manualDeliveryFee() : row.deliveryFee();
+        put(attributes, "预估配送费", displayDeliveryFee == null ? null : "$" + displayDeliveryFee.toPlainString());
         put(attributes, "采购成本(¥)", row.purchaseCost() == null ? null : row.purchaseCost().toPlainString());
         put(attributes, "头程(¥)", row.firstLeg() == null ? null : row.firstLeg().toPlainString());
         put(attributes, "销量", row.salesQty() == null ? null : row.salesQty().toPlainString());
         put(attributes, "广告费(原币)", row.adCost() == null ? null : row.adCost().toPlainString());
         put(attributes, "退款率", profitView.refundRate() == null ? null
                 : profitView.refundRate().multiply(new BigDecimal("100")).setScale(2, java.math.RoundingMode.HALF_UP) + "%");
-        put(attributes, "退款率来源", switch (profitView.refundRateSource()) {
-            case "HISTORY" -> "系统历史";
-            case "MANUAL" -> "手动";
-            default -> "默认 0";
-        });
+        put(attributes, "退款率来源", refundRateSourceLabel(profitView.refundRateSource()));
+        put(attributes, "款号累计总退款率", profitView.historicalRefundRate() == null ? null
+                : profitView.historicalRefundRate().multiply(new BigDecimal("100"))
+                .setScale(2, java.math.RoundingMode.HALF_UP) + "%");
         put(attributes, "测试毛利(¥)", profitView.profit() == null ? null : "¥" + profitView.profit().toPlainString());
         put(attributes, "测试毛利率", profitView.margin() == null ? null
                 : profitView.margin().multiply(new BigDecimal("100")).setScale(2, java.math.RoundingMode.HALF_UP) + "%");
@@ -662,6 +767,15 @@ public class ProductCatalogService {
         put(attributes, "洗护说明", rawText(row.rawPayload(), "fabricCareInstructions"));
         put(attributes, "履约方式", rawText(row.rawPayload(), "thirdPartyProductFulfillmentType"));
         return attributes;
+    }
+
+    private static String refundRateSourceLabel(String source) {
+        return switch (source) {
+            case "CUMULATIVE" -> "款号累计总退款率（默认）";
+            case "MANUAL" -> "手工退款率（优先）";
+            case "MANUAL_FALLBACK" -> "手工退款率（无累计数据）";
+            default -> "无累计或手工值，按 0";
+        };
     }
 
     private static void put(Map<String, String> target, String label, String value) {
@@ -849,9 +963,13 @@ public class ProductCatalogService {
             String sourceFileName,
             LocalDateTime updatedAt,
             BigDecimal price,
+            BigDecimal strikethroughPrice,
             BigDecimal deliveryFee,
             BigDecimal profit,
             BigDecimal margin,
+            BigDecimal manualRefundRate,
+            BigDecimal historicalRefundRate,
+            String refundRateSource,
             List<String> searchTerms,
             Integer cuttingYield,
             boolean clearance,
@@ -882,6 +1000,7 @@ public class ProductCatalogService {
             ProfitAssumptionView profitAssumption,
             BigDecimal refundRate,
             String refundRateSource,
+            BigDecimal historicalRefundRate,
             boolean clearance,
             boolean allSeason,
             String seasonType
@@ -893,7 +1012,9 @@ public class ProductCatalogService {
             BigDecimal firstLeg,
             BigDecimal salesQty,
             BigDecimal adCost,
-            BigDecimal manualRefundRate
+            BigDecimal manualRefundRate,
+            boolean preferManualRefundRate,
+            BigDecimal deliveryFee
     ) {
     }
 
@@ -903,7 +1024,9 @@ public class ProductCatalogService {
             BigDecimal firstLeg,
             BigDecimal salesQty,
             BigDecimal adCost,
-            BigDecimal refundRate
+            BigDecimal refundRate,
+            Boolean preferManualRefundRate,
+            BigDecimal deliveryFee
     ) {
     }
 
@@ -941,6 +1064,7 @@ public class ProductCatalogService {
             String itemId,
             String upc,
             BigDecimal price,
+            BigDecimal strikethroughPrice,
             BigDecimal shippingWeightLb,
             String shippingWeightUnit,
             BigDecimal shippingWeightKg,
@@ -984,6 +1108,7 @@ public class ProductCatalogService {
             String wpid,
             String gtin,
             BigDecimal price,
+            BigDecimal strikethroughPrice,
             BigDecimal shippingWeightLb,
             String shippingWeightUnit,
             BigDecimal shippingWeightKg,
@@ -997,11 +1122,21 @@ public class ProductCatalogService {
             BigDecimal salesQty,
             BigDecimal adCost,
             BigDecimal manualRefundRate,
+            boolean preferManualRefundRate,
+            BigDecimal manualDeliveryFee,
+            String listingStatus,
+            String store,
             LocalDate launchDate
     ) {
     }
 
-    private record ProfitView(BigDecimal profit, BigDecimal margin, BigDecimal refundRate, String refundRateSource) {
+    private record ProfitView(
+            BigDecimal profit,
+            BigDecimal margin,
+            BigDecimal refundRate,
+            String refundRateSource,
+            BigDecimal historicalRefundRate
+    ) {
     }
 
 }

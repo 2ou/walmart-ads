@@ -1,8 +1,8 @@
 package com.ai.walmartads.inventory.application;
 
-import com.ai.walmartads.importing.domain.ProductionOrderRecord;
 import com.ai.walmartads.importing.parser.ImportValues;
-import com.ai.walmartads.importing.repository.ProductionOrderRepository;
+import com.ai.walmartads.supplychain.CurrentProductionOrder;
+import com.ai.walmartads.supplychain.ProductionOrderSource;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -27,29 +27,35 @@ import java.util.Set;
 public class ReplenishmentPlanningService {
 
     private static final int HORIZON_DAYS = ReplenishmentPlanner.DEFAULT_HORIZON_DAYS;
+    private static final int LAST_SELLING_WINDOW_DAYS = 28;
 
     private final NamedParameterJdbcTemplate jdbc;
     private final StatsForecastClient forecastClient;
-    private final ProductionOrderRepository productionOrderRepository;
+    private final ProductionOrderSource productionOrderSource;
     private final ParentLifecycleService lifecycleService;
     private final TransitInventoryService transitInventoryService;
 
     public ReplenishmentPlanningService(
             NamedParameterJdbcTemplate jdbc,
             StatsForecastClient forecastClient,
-            ProductionOrderRepository productionOrderRepository,
+            ProductionOrderSource productionOrderSource,
             ParentLifecycleService lifecycleService,
             TransitInventoryService transitInventoryService
     ) {
         this.jdbc = jdbc;
         this.forecastClient = forecastClient;
-        this.productionOrderRepository = productionOrderRepository;
+        this.productionOrderSource = productionOrderSource;
         this.lifecycleService = lifecycleService;
         this.transitInventoryService = transitInventoryService;
     }
 
-    @Transactional(readOnly = true)
     public PlanningPayload plan() {
+        return plan(HORIZON_DAYS);
+    }
+
+    @Transactional(readOnly = true)
+    public PlanningPayload plan(int targetDays) {
+        int days = Math.max(7, Math.min(targetDays, 180));
         LocalDate snapshotDate = latestWfsSnapshotDate();
         if (snapshotDate == null) {
             return PlanningPayload.empty("WFS inventory snapshot has not been imported");
@@ -60,53 +66,97 @@ public class ReplenishmentPlanningService {
         }
         Map<String, Double> domesticBySku = domesticBySku();
         Map<String, Double> trailing90Sales = salesBySku(snapshotDate.minusDays(89), snapshotDate);
-        Map<String, List<ReplenishmentPlanner.ScheduledSupply>> incomingBySku = incomingBySku(snapshotDate);
+        Set<String> variantSkus = variants.stream().map(VariantSeed::sku).collect(java.util.stream.Collectors.toSet());
+        Map<String, Double> lastSellingPace90Sales = lastSellingPace90BySku(snapshotDate, variantSkus);
+        LocalDate sameSeasonStart = snapshotDate.minusYears(1).plusDays(1);
+        Map<String, Double> sameSeasonLastYearSales = salesBySku(
+                sameSeasonStart,
+                sameSeasonStart.plusDays(days - 1)
+        );
+        Map<String, List<ReplenishmentPlanner.ScheduledSupply>> incomingBySku = incomingBySku(snapshotDate, days);
         List<String> warnings = new ArrayList<>();
-        Map<String, List<ReplenishmentPlanner.ScheduledSupply>> factoryWipBySku = factoryWipBySku(snapshotDate, warnings);
+        Map<String, List<ReplenishmentPlanner.ScheduledSupply>> factoryWipBySku = factoryWipBySku(snapshotDate, days, warnings);
         Map<String, WipDisplay> factoryWipDisplayBySku = wipDisplayBySku(factoryWipBySku);
         factoryWipBySku.forEach((sku, supplies) -> incomingBySku.computeIfAbsent(sku, ignored -> new ArrayList<>()).addAll(supplies));
 
         Map<String, List<VariantSeed>> variantsByParent = new LinkedHashMap<>();
         variants.forEach(variant -> variantsByParent.computeIfAbsent(variant.parentSku(), ignored -> new ArrayList<>()).add(variant));
         Map<String, List<StatsForecastClient.Observation>> historyByParent = salesHistory(snapshotDate, variantsByParent.keySet());
-        Map<String, StatsForecastClient.ForecastResult> forecastByParent = forecastClient.forecast(historyByParent, HORIZON_DAYS);
+        Map<String, StatsForecastClient.ForecastResult> forecastByParent = forecastClient.forecast(historyByParent, days);
         if (forecastClient.lastFailureReason() != null) {
             warnings.add("Local forecast service unavailable; baseline used: " + forecastClient.lastFailureReason());
         }
         Set<String> clearanceParents = lifecycleService.clearanceParents();
+        Set<String> stockoutHistoryRecoveredSkus = new LinkedHashSet<>();
 
         List<VariantRecommendation> recommendations = new ArrayList<>();
         for (Map.Entry<String, List<VariantSeed>> entry : variantsByParent.entrySet()) {
             String parentSku = entry.getKey();
             List<StatsForecastClient.Observation> history = historyByParent.getOrDefault(parentSku, List.of());
-            StatsForecastClient.ForecastResult forecast = forecastByParent.get(parentSku);
-            if (forecast == null || forecast.p50().size() < HORIZON_DAYS || forecast.p90().size() < HORIZON_DAYS) {
-                forecast = StatsForecastClient.baseline(history, HORIZON_DAYS, "BASELINE_INPUT_FALLBACK", "LOW");
-                warnings.add(parentSku + ": forecast result is incomplete; baseline was used");
+            Map<String, Double> parentTrailing90Sales = demandBySku(entry.getValue(), trailing90Sales);
+            Map<String, Double> parentSameSeasonSales = demandBySku(entry.getValue(), sameSeasonLastYearSales);
+            Map<String, Double> parentLastSellingPace90 = demandBySku(entry.getValue(), lastSellingPace90Sales);
+            Set<String> outOfStockSkus = entry.getValue().stream()
+                    .filter(variant -> variant.wfsUnits() <= 0)
+                    .map(VariantSeed::sku)
+                    .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+            LowSampleDemandPolicy.AllocationWeights recoveredWeights = LowSampleDemandPolicy.recoverOutOfStockWeights(
+                    parentTrailing90Sales,
+                    parentLastSellingPace90,
+                    outOfStockSkus
+            );
+            Map<String, Double> recoveredHistoryFloor = new LinkedHashMap<>();
+            recoveredWeights.recoveredSkus().forEach(sku ->
+                    recoveredHistoryFloor.put(sku, parentLastSellingPace90.getOrDefault(sku, 0d)));
+            stockoutHistoryRecoveredSkus.addAll(recoveredWeights.recoveredSkus());
+            double parentTrailing90Units = parentTrailing90Sales.values().stream().mapToDouble(Double::doubleValue).sum();
+            boolean lowSampleManualReview = LowSampleDemandPolicy.requiresManualReview(parentTrailing90Units);
+            LowSampleDemandPolicy.Reference lowSampleReference = lowSampleManualReview
+                    ? LowSampleDemandPolicy.reference(
+                            days,
+                            parentTrailing90Sales,
+                            parentSameSeasonSales,
+                            recoveredHistoryFloor
+                    )
+                    : null;
+            StatsForecastClient.ForecastResult selectedForecast;
+            Map<String, Double> allocationWeights;
+            if (lowSampleManualReview) {
+                selectedForecast = lowSampleReferenceForecast(days, lowSampleReference.totalDemand());
+                allocationWeights = lowSampleReference.allocatedDemandBySku();
+            } else {
+                StatsForecastClient.ForecastResult forecast = forecastByParent.get(parentSku);
+                if (forecast == null || forecast.p50().size() < days || forecast.p90().size() < days) {
+                    forecast = StatsForecastClient.baseline(history, days, "BASELINE_INPUT_FALLBACK", "LOW");
+                    warnings.add(parentSku + ": forecast result is incomplete; baseline was used");
+                }
+                selectedForecast = forecast;
+                allocationWeights = recoveredWeights.weightsBySku();
             }
-            StatsForecastClient.ForecastResult selectedForecast = forecast;
             List<ReplenishmentPlanner.VariantInput> plannerInputs = entry.getValue().stream()
                     .map(variant -> new ReplenishmentPlanner.VariantInput(
                             variant.sku(),
                             variant.color(),
                             variant.size(),
                             variant.cuttingYield(),
-                            trailing90Sales.getOrDefault(variant.sku(), 0d),
+                            allocationWeights.getOrDefault(variant.sku(), 0d),
                             variant.wfsUnits(),
                             domesticBySku.getOrDefault(variant.sku(), 0d),
                             0,
                             0,
-                            incomingBySku.getOrDefault(variant.sku(), List.of())
+                            incomingBySku.getOrDefault(variant.sku(), List.of()),
+                            recoveredWeights.recoveredSkus().contains(variant.sku())
                     ))
                     .toList();
             ReplenishmentPlanner.ParentPlan parentPlan = ReplenishmentPlanner.plan(new ReplenishmentPlanner.ParentInput(
                     parentSku,
                     snapshotDate,
-                    HORIZON_DAYS,
+                    days,
                     selectedForecast.p50(),
                     selectedForecast.p90(),
                     clearanceParents.contains(parentSku),
-                    plannerInputs
+                    plannerInputs,
+                    lowSampleManualReview
             ));
             parentPlan.variants().forEach(plan -> recommendations.add(toRecommendation(
                     parentSku,
@@ -115,24 +165,50 @@ public class ReplenishmentPlanningService {
                     factoryWipDisplayBySku.get(plan.sku())
             )));
         }
+        if (!stockoutHistoryRecoveredSkus.isEmpty()) {
+            warnings.add(stockoutHistoryRecoveredSkus.size()
+                    + " out-of-stock SKU(s) recovered demand from their latest 28-day selling window; manual review is required");
+        }
         recommendations.sort(Comparator
                 .comparing(VariantRecommendation::expectedStockoutDate, Comparator.nullsLast(Comparator.naturalOrder()))
                 .thenComparing(VariantRecommendation::productionUnits, Comparator.reverseOrder())
                 .thenComparing(VariantRecommendation::sku));
         return new PlanningPayload(
                 snapshotDate,
-                HORIZON_DAYS,
+                days,
                 summary(recommendations),
                 List.copyOf(warnings),
                 List.copyOf(recommendations)
         );
     }
 
+    private static Map<String, Double> demandBySku(List<VariantSeed> variants, Map<String, Double> source) {
+        Map<String, Double> result = new LinkedHashMap<>();
+        variants.forEach(variant -> result.put(variant.sku(), Math.max(0, source.getOrDefault(variant.sku(), 0d))));
+        return result;
+    }
+
+    private static StatsForecastClient.ForecastResult lowSampleReferenceForecast(int days, double totalDemand) {
+        double dailyDemand = Math.max(0, totalDemand) / days;
+        List<Double> reference = new ArrayList<>(days);
+        for (int index = 0; index < days; index++) {
+            reference.add(dailyDemand);
+        }
+        return new StatsForecastClient.ForecastResult(
+                List.copyOf(reference),
+                List.copyOf(reference),
+                "LOW_SAMPLE_SEASONAL_REFERENCE",
+                "LOW",
+                false,
+                null,
+                null
+        );
+    }
+
     private LocalDate latestWfsSnapshotDate() {
         List<Map<String, Object>> results = jdbc.queryForList("""
                 select max(inventory.snapshot_at) as snapshot_at
-                  from wm_ads_inventory_snapshot inventory
-                  join wm_ads_import_file file on file.id = inventory.import_file_id and file.active = true
+                  from wm_ads_inventory_unified inventory
                 """, new MapSqlParameterSource());
         return results.isEmpty() ? null : localDate(results.getFirst().get("snapshot_at"));
     }
@@ -144,9 +220,7 @@ public class ReplenishmentPlanningService {
                        product.color,
                        product.size,
                        style_yield.cutting_yield
-                  from wm_ads_inventory_snapshot inventory
-                  join wm_ads_import_file inventory_file
-                    on inventory_file.id = inventory.import_file_id and inventory_file.active = true
+                  from wm_ads_inventory_unified inventory
                   join (
                         select sku,
                                max(color) as color,
@@ -200,7 +274,7 @@ public class ReplenishmentPlanningService {
         Map<String, Double> result = new LinkedHashMap<>();
         jdbc.queryForList("""
                 select orders.sku, sum(orders.quantity) as units
-                  from wm_ads_order_record orders
+                  from wm_ads_order_record_valid orders
                   join wm_ads_import_file file on file.id = orders.import_file_id and file.active = true
                  where coalesce(orders.order_date, orders.report_date) between :startDate and :endDate
                    and (orders.status is null or (
@@ -215,6 +289,52 @@ public class ReplenishmentPlanningService {
         return result;
     }
 
+    private Map<String, Double> lastSellingPace90BySku(LocalDate snapshotDate, Set<String> requestedSkus) {
+        Map<String, Double> result = new LinkedHashMap<>();
+        if (requestedSkus == null || requestedSkus.isEmpty()) {
+            return result;
+        }
+        Map<String, Map<LocalDate, Double>> dailySales = new LinkedHashMap<>();
+        jdbc.queryForList("""
+                select orders.sku,
+                       coalesce(orders.order_date, orders.report_date) as sale_date,
+                       sum(orders.quantity) as units
+                 from wm_ads_order_record_valid orders
+                  join wm_ads_import_file file on file.id = orders.import_file_id and file.active = true
+                 where orders.sku in (:skus)
+                   and coalesce(orders.order_date, orders.report_date) <= :endDate
+                   and (orders.status is null or (
+                        lower(orders.status) not like '%cancel%'
+                        and lower(orders.status) not like '%test%'
+                   ))
+                 group by orders.sku, coalesce(orders.order_date, orders.report_date)
+                """, new MapSqlParameterSource()
+                .addValue("skus", requestedSkus)
+                .addValue("endDate", snapshotDate)).forEach(row -> {
+            String sku = text(row.get("sku"));
+            LocalDate saleDate = localDate(row.get("sale_date"));
+            double units = number(row.get("units"));
+            if (sku != null && saleDate != null && units > 0) {
+                dailySales.computeIfAbsent(sku, ignored -> new LinkedHashMap<>()).merge(saleDate, units, Double::sum);
+            }
+        });
+        dailySales.forEach((sku, salesByDate) -> {
+            LocalDate lastSellingDate = salesByDate.keySet().stream().max(LocalDate::compareTo).orElse(null);
+            if (lastSellingDate == null) {
+                return;
+            }
+            LocalDate windowStart = lastSellingDate.minusDays(LAST_SELLING_WINDOW_DAYS - 1L);
+            double windowUnits = salesByDate.entrySet().stream()
+                    .filter(entry -> !entry.getKey().isBefore(windowStart) && !entry.getKey().isAfter(lastSellingDate))
+                    .mapToDouble(Map.Entry::getValue)
+                    .sum();
+            if (windowUnits > 0) {
+                result.put(sku, windowUnits * 90d / LAST_SELLING_WINDOW_DAYS);
+            }
+        });
+        return result;
+    }
+
     private Map<String, List<StatsForecastClient.Observation>> salesHistory(
             LocalDate snapshotDate,
             Set<String> requestedParents
@@ -225,7 +345,7 @@ public class ReplenishmentPlanningService {
                 select orders.sku,
                        coalesce(orders.order_date, orders.report_date) as sale_date,
                        sum(orders.quantity) as units
-                  from wm_ads_order_record orders
+                  from wm_ads_order_record_valid orders
                   join wm_ads_import_file file on file.id = orders.import_file_id and file.active = true
                  where coalesce(orders.order_date, orders.report_date) between :startDate and :endDate
                    and (orders.status is null or (
@@ -267,8 +387,7 @@ public class ReplenishmentPlanningService {
                 select inventory.sku,
                        date(inventory.snapshot_at) as snapshot_date,
                        sum(inventory.available_units) as available_units
-                  from wm_ads_inventory_snapshot inventory
-                  join wm_ads_import_file file on file.id = inventory.import_file_id and file.active = true
+                  from wm_ads_inventory_unified inventory
                  where date(inventory.snapshot_at) between :startDate and :endDate
                  group by inventory.sku, date(inventory.snapshot_at)
                 """, new MapSqlParameterSource()
@@ -283,9 +402,9 @@ public class ReplenishmentPlanningService {
         return result;
     }
 
-    private Map<String, List<ReplenishmentPlanner.ScheduledSupply>> incomingBySku(LocalDate snapshotDate) {
+    private Map<String, List<ReplenishmentPlanner.ScheduledSupply>> incomingBySku(LocalDate snapshotDate, int horizonDays) {
         Map<String, List<ReplenishmentPlanner.ScheduledSupply>> result = new LinkedHashMap<>();
-        transitInventoryService.suppliesAvailableWithin(snapshotDate, HORIZON_DAYS).forEach(supply ->
+        transitInventoryService.suppliesAvailableWithin(snapshotDate, horizonDays).forEach(supply ->
                 result.computeIfAbsent(supply.sku(), ignored -> new ArrayList<>())
                         .add(new ReplenishmentPlanner.ScheduledSupply(supply.availableDay(), supply.units())));
         return result;
@@ -293,29 +412,29 @@ public class ReplenishmentPlanningService {
 
     private Map<String, List<ReplenishmentPlanner.ScheduledSupply>> factoryWipBySku(
             LocalDate snapshotDate,
+            int horizonDays,
             List<String> warnings
     ) {
         Map<String, List<ReplenishmentPlanner.ScheduledSupply>> result = new LinkedHashMap<>();
-        for (ProductionOrderRecord order : productionOrderRepository.findCurrentVersions()) {
-            if (order.getSku() == null || order.getSku().isBlank()) {
+        for (CurrentProductionOrder order : productionOrderSource.currentOrders()) {
+            if (order.sku() == null || order.sku().isBlank()) {
                 continue;
             }
-            if (order.getOrderDate() == null) {
-                warnings.add(order.getSku() + ": production order date is missing; WIP was not deducted");
+            if (order.orderDate() == null) {
+                warnings.add(order.sku() + ": production order date is missing; WIP was not deducted");
                 continue;
             }
-            LocalDate returnDate = ImportValues.date(order.getFactoryReturnDate());
-            LocalDate availableDate = returnDate == null ? order.getOrderDate().plusDays(30) : returnDate;
+            LocalDate returnDate = ImportValues.date(order.factoryReturnDate());
+            LocalDate availableDate = returnDate == null ? order.orderDate().plusDays(30) : returnDate;
             long days = ChronoUnit.DAYS.between(snapshotDate, availableDate);
-            if (days < 1 || days > HORIZON_DAYS) {
+            if (days < 1 || days > horizonDays) {
                 continue;
             }
-            BigDecimal preferred = order.getCuttingQty();
-            BigDecimal quantity = preferred != null && preferred.signum() > 0 ? preferred : order.getUnfinishedQty();
+            BigDecimal quantity = order.wipQty();
             if (quantity == null || quantity.signum() <= 0) {
                 continue;
             }
-            result.computeIfAbsent(order.getSku(), ignored -> new ArrayList<>())
+            result.computeIfAbsent(order.sku(), ignored -> new ArrayList<>())
                     .add(new ReplenishmentPlanner.ScheduledSupply(Math.toIntExact(days), quantity.doubleValue()));
         }
         return result;

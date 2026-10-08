@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>初始化店铺 · 沃尔玛工作台</title>
+  <link rel="stylesheet" href="auth.css?v=20261008-simple-login">
+</head>
+<body>
+  <main class="auth-page">
+    <section class="auth-card setup-card">
+      <div class="brand-mark" aria-hidden="true">W</div>
+      <header class="auth-heading">
+        <span class="eyebrow">LOCAL INITIAL SETUP</span>
+        <h1>初始化 PINKSIR 店铺</h1>
+        <p>此页面仅允许服务器本机访问。账号将自动使用所选领星店铺的真实名称。</p>
+      </header>
+      <form id="setupForm" class="auth-form">
+        <label>X-Mcp-Key
+          <div class="secret-field"><input id="setupMcpKey" type="password" autocomplete="off" placeholder="留空可使用检测到的现有配置"><button id="toggleSetupKey" type="button">显示</button></div>
+          <small id="legacyKeyHint">正在检测现有领星配置…</small>
+        </label>
+        <details><summary>高级连接设置</summary><label>MCP 地址<input id="setupBaseUrl" type="url" value="https://openmcp.lingxing.com/mcp-servers/lingxing-mcp"></label></details>
+        <div class="setup-actions"><button class="secondary-action" id="discoverStores" type="button">测试连接并读取店铺</button><span id="discoverStatus">确认连接后才能选择店铺</span></div>
+        <div class="field-grid">
+          <label>领星店铺<select id="setupStore" required disabled><option value="">请先测试连接</option></select></label>
+          <label>店铺缩写<input id="setupAbbreviation" required minlength="2" maxlength="12" pattern="[A-Za-z0-9]{2,12}" placeholder="例如 PNK"></label>
+        </div>
+        <div class="field-grid">
+          <label>密码<input id="setupPassword" type="password" autocomplete="new-password" required minlength="8"></label>
+          <label>确认密码<input id="setupPasswordConfirm" type="password" autocomplete="new-password" required minlength="8"></label>
+        </div>
+        <label>广告账号 ID（可选）<input id="setupAdvertisers" placeholder="多个用逗号分隔；留空时广告同步显示未配置"></label>
+        <p class="form-error" id="setupError" role="alert" hidden></p>
+        <button class="primary-action" id="finishSetup" type="submit" disabled>确认店铺并完成初始化</button>
+      </form>
+    </section>
+  </main>
+  <script src="setup.js?v=20261008-simple-login"></script>
+</body>
+</html>

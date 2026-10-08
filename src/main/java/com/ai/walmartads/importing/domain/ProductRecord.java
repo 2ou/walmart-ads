@@ -10,12 +10,13 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "wm_ads_product_record")
-public class ProductRecord {
+public class ProductRecord extends com.ai.walmartads.workspace.WorkspaceOwnedEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -119,6 +120,86 @@ public class ProductRecord {
     @Column(name = "launch_date")
     private LocalDate launchDate;
 
+    /** 沃尔玛在线列表价格（USD，可空），由「沃尔玛商品」扫描回写到产品库。 */
+    @Column(columnDefinition = "decimal(18,6)")
+    private BigDecimal price;
+
+    /** 沃尔玛在线列表划线价（USD，可空），由「沃尔玛商品」扫描回写到产品库。 */
+    @Column(name = "strikethrough_price", columnDefinition = "decimal(18,6)")
+    private BigDecimal strikethroughPrice;
+
+    /** UPC（可空），由「沃尔玛商品」扫描回写。 */
+    @Column(length = 40)
+    private String upc;
+
+    /** GTIN（可空），由「沃尔玛商品」扫描回写。 */
+    @Column(length = 40)
+    private String gtin;
+
+    /** 上架状态（可空，如 PUBLISHED/UNPUBLISHED），由「沃尔玛商品」扫描回写。 */
+    @Column(name = "listing_status", length = 40)
+    private String listingStatus;
+
+    /** 店铺（可空，如 PINKSIR），由「沃尔玛商品」扫描回写。 */
+    @Column(length = 40)
+    private String store;
+
+    /** WFS 可售库存，来自领星 MCP 沃尔玛在线商品（每小时同步回写，替代文件扫描）。 */
+    @Column(name = "wfs_available")
+    private Integer wfsAvailable;
+
+    /** 非 WFS（自发货）可售库存，来自领星 MCP。 */
+    @Column(name = "non_wfs_available")
+    private Integer nonWfsAvailable;
+
+    /** Buy Box 价格（USD），来自领星 MCP。 */
+    @Column(name = "buy_box_price", columnDefinition = "decimal(18,6)")
+    private BigDecimal buyBoxPrice;
+
+    /** 评论数，来自领星 MCP。 */
+    @Column(name = "review_count")
+    private Integer reviewCount;
+
+    /** 平均评分，来自领星 MCP。 */
+    @Column(name = "average_rating", columnDefinition = "decimal(6,2)")
+    private BigDecimal averageRating;
+
+    /** 竞品价格（USD），来自领星 MCP。 */
+    @Column(name = "competitor_price", columnDefinition = "decimal(18,6)")
+    private BigDecimal competitorPrice;
+
+    /** 履约类型代码（1=WFS），来自领星 MCP。 */
+    @Column(name = "fulfillment_type")
+    private Integer fulfillmentType;
+
+    /** 履约类型名称，来自领星 MCP。 */
+    @Column(name = "fulfillment_type_name", length = 60)
+    private String fulfillmentTypeName;
+
+    /** 上架时间，来自领星 MCP。 */
+    @Column(name = "listing_start_time", columnDefinition = "datetime")
+    private LocalDateTime listingStartTime;
+
+    /** 报价结束时间，来自领星 MCP。 */
+    @Column(name = "offer_end_date", columnDefinition = "datetime")
+    private LocalDateTime offerEndDate;
+
+    /** 沃尔玛商品详情页 URL，来自领星 MCP。 */
+    @Column(name = "item_url", length = 600)
+    private String itemUrl;
+
+    /** 促销明细（promotion_data_list JSON），来自领星 MCP。 */
+    @Column(name = "promotion_json", columnDefinition = "json")
+    private String promotionJson;
+
+    /** 最近一次领星 MCP 同步时间。 */
+    @Column(name = "last_synced_at", columnDefinition = "datetime")
+    private LocalDateTime lastSyncedAt;
+
+    /** 单件实际配送费（USD，可空），由 WFS 配送费报表 qty=1 标准行回填；利润计算兜底用。 */
+    @Column(name = "delivery_fee", columnDefinition = "decimal(18,6)")
+    private BigDecimal deliveryFee;
+
     @Column(nullable = false, columnDefinition = "json")
     /** 原始报文（JSON） */
     private String rawPayload;
@@ -184,6 +265,30 @@ public class ProductRecord {
         return sku;
     }
 
+    public LocalDateTime getSourceUpdatedAt() {
+        return sourceUpdatedAt;
+    }
+
+    public String getParentSku() {
+        return parentSku;
+    }
+
+    public String getProductName() {
+        return productName;
+    }
+
+    public String getBrand() {
+        return brand;
+    }
+
+    public String getProductId() {
+        return productId;
+    }
+
+    public void setProductId(String productId) {
+        this.productId = productId;
+    }
+
     public String getRawPayload() {
         return rawPayload;
     }
@@ -202,5 +307,169 @@ public class ProductRecord {
 
     public void setLaunchDate(LocalDate launchDate) {
         this.launchDate = launchDate;
+    }
+
+    public BigDecimal getPrice() {
+        return price;
+    }
+
+    public void setPrice(BigDecimal price) {
+        this.price = price;
+    }
+
+    public BigDecimal getStrikethroughPrice() {
+        return strikethroughPrice;
+    }
+
+    public void setStrikethroughPrice(BigDecimal strikethroughPrice) {
+        this.strikethroughPrice = strikethroughPrice;
+    }
+
+    public String getUpc() {
+        return upc;
+    }
+
+    public void setUpc(String upc) {
+        this.upc = upc;
+    }
+
+    public String getGtin() {
+        return gtin;
+    }
+
+    public void setGtin(String gtin) {
+        this.gtin = gtin;
+    }
+
+    public String getListingStatus() {
+        return listingStatus;
+    }
+
+    public void setListingStatus(String listingStatus) {
+        this.listingStatus = listingStatus;
+    }
+
+    public String getStore() {
+        return store;
+    }
+
+    public void setStore(String store) {
+        this.store = store;
+    }
+
+    public Integer getWfsAvailable() {
+        return wfsAvailable;
+    }
+
+    public void setWfsAvailable(Integer wfsAvailable) {
+        this.wfsAvailable = wfsAvailable;
+    }
+
+    public Integer getNonWfsAvailable() {
+        return nonWfsAvailable;
+    }
+
+    public void setNonWfsAvailable(Integer nonWfsAvailable) {
+        this.nonWfsAvailable = nonWfsAvailable;
+    }
+
+    public BigDecimal getBuyBoxPrice() {
+        return buyBoxPrice;
+    }
+
+    public void setBuyBoxPrice(BigDecimal buyBoxPrice) {
+        this.buyBoxPrice = buyBoxPrice;
+    }
+
+    public boolean isCurrentVersion() {
+        return currentVersion;
+    }
+
+    public Integer getReviewCount() {
+        return reviewCount;
+    }
+
+    public void setReviewCount(Integer reviewCount) {
+        this.reviewCount = reviewCount;
+    }
+
+    public BigDecimal getAverageRating() {
+        return averageRating;
+    }
+
+    public void setAverageRating(BigDecimal averageRating) {
+        this.averageRating = averageRating;
+    }
+
+    public BigDecimal getCompetitorPrice() {
+        return competitorPrice;
+    }
+
+    public void setCompetitorPrice(BigDecimal competitorPrice) {
+        this.competitorPrice = competitorPrice;
+    }
+
+    public Integer getFulfillmentType() {
+        return fulfillmentType;
+    }
+
+    public void setFulfillmentType(Integer fulfillmentType) {
+        this.fulfillmentType = fulfillmentType;
+    }
+
+    public String getFulfillmentTypeName() {
+        return fulfillmentTypeName;
+    }
+
+    public void setFulfillmentTypeName(String fulfillmentTypeName) {
+        this.fulfillmentTypeName = fulfillmentTypeName;
+    }
+
+    public LocalDateTime getListingStartTime() {
+        return listingStartTime;
+    }
+
+    public void setListingStartTime(LocalDateTime listingStartTime) {
+        this.listingStartTime = listingStartTime;
+    }
+
+    public LocalDateTime getOfferEndDate() {
+        return offerEndDate;
+    }
+
+    public void setOfferEndDate(LocalDateTime offerEndDate) {
+        this.offerEndDate = offerEndDate;
+    }
+
+    public String getItemUrl() {
+        return itemUrl;
+    }
+
+    public void setItemUrl(String itemUrl) {
+        this.itemUrl = itemUrl;
+    }
+
+    public String getPromotionJson() {
+        return promotionJson;
+    }
+
+    public void setPromotionJson(String promotionJson) {
+        this.promotionJson = promotionJson;
+    }
+
+    public LocalDateTime getLastSyncedAt() {
+        return lastSyncedAt;
+    }
+
+    public void setLastSyncedAt(LocalDateTime lastSyncedAt) {
+        this.lastSyncedAt = lastSyncedAt;
+    }
+
+    public BigDecimal getDeliveryFee() {
+        return deliveryFee;
+    }
+
+    public void setDeliveryFee(BigDecimal deliveryFee) {
+        this.deliveryFee = deliveryFee;
     }
 }

@@ -113,8 +113,7 @@ public class DemandForecastService {
         }
         jdbc.queryForList("""
                 select s.sku, s.available_units, s.forecasted_days_supply
-                  from wm_ads_inventory_snapshot s
-                  join wm_ads_import_file f on f.id = s.import_file_id and f.active = true
+                  from wm_ads_inventory_unified s
                  where s.snapshot_at = :snapshotAt and s.sku in (:skus)
                 """, new MapSqlParameterSource("snapshotAt", snapshotAt).addValue("skus", skus))
                 .forEach(row -> result.put(text(row, "sku"), new InventoryInfo(
@@ -127,7 +126,7 @@ public class DemandForecastService {
     private LocalDate latestOrderDate() {
         LocalDate date = localDate(jdbc.queryForList("""
                 select max(o.report_date) as latest
-                  from wm_ads_order_record o
+                  from wm_ads_order_record_valid o
                   join wm_ads_import_file f on f.id = o.import_file_id and f.active = true
                 """, new MapSqlParameterSource()).stream().findFirst().map(row -> row.get("latest")).orElse(null));
         return date == null ? LocalDate.now() : date;
@@ -136,8 +135,7 @@ public class DemandForecastService {
     private LocalDateTime latestSnapshotAt() {
         return localDateTime(jdbc.queryForList("""
                 select max(s.snapshot_at) as snapshot
-                  from wm_ads_inventory_snapshot s
-                  join wm_ads_import_file f on f.id = s.import_file_id and f.active = true
+                  from wm_ads_inventory_unified s
                 """, new MapSqlParameterSource()).stream().findFirst().map(row -> row.get("snapshot")).orElse(null));
     }
 
@@ -145,7 +143,7 @@ public class DemandForecastService {
         Map<String, BigDecimal> result = new LinkedHashMap<>();
         jdbc.queryForList("""
                 select o.sku, sum(o.quantity) as units
-                  from wm_ads_order_record o
+                  from wm_ads_order_record_valid o
                   join wm_ads_import_file f on f.id = o.import_file_id and f.active = true
                  where o.report_date between :start and :end and o.sku in (:skus)
                  group by o.sku

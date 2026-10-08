@@ -10,7 +10,7 @@ import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "wm_ads_replenishment_decision")
-public class ReplenishmentDecision {
+public class ReplenishmentDecision extends com.ai.walmartads.workspace.WorkspaceOwnedEntity {
 
     @Id
     @Column(name = "parent_sku", nullable = false, length = 180)

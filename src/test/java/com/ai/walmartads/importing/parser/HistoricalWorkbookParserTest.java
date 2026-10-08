@@ -1,7 +1,6 @@
 package com.ai.walmartads.importing.parser;
 
 import com.ai.walmartads.config.WalmartAdsProperties;
-import com.ai.walmartads.importing.domain.AdReportKind;
 import com.ai.walmartads.importing.domain.ImportBatch;
 import com.ai.walmartads.importing.domain.ImportFile;
 import com.ai.walmartads.importing.domain.ImportFileType;
@@ -28,8 +27,8 @@ class HistoricalWorkbookParserTest {
     Path temp;
 
     @Test
-    void importsOnlyRowsBeforeConfiguredCutoff() throws Exception {
-        Path path = temp.resolve("history.xlsx");
+    void readsOrderSheetAndIgnoresLegacyAdSheet() throws Exception {
+        Path path = temp.resolve("history-with-ad-sheet.xlsx");
         try (Workbook workbook = new XSSFWorkbook()) {
             writeOrders(workbook);
             writeAds(workbook);
@@ -37,40 +36,24 @@ class HistoricalWorkbookParserTest {
                 workbook.write(output);
             }
         }
-
-        WalmartAdsProperties properties = new WalmartAdsProperties(
-                temp,
-                temp.resolve("archive"),
-                path,
-                LocalDate.of(2026, 7, 21),
-                null,
-                null
-        );
         HistoricalWorkbookParser parser = new HistoricalWorkbookParser(
                 new JsonPayloadWriter(new ObjectMapper()),
-                properties
+                new WalmartAdsProperties(
+                        temp, temp.resolve("archive"), path,
+                        LocalDate.of(2026, 7, 21), null)
         );
         ImportFile importFile = new ImportFile(
-                new ImportBatch(temp.toString()),
-                ImportFileType.HISTORY,
-                AdReportKind.ITEM_PERFORMANCE,
-                path.getFileName().toString(),
-                path.toString(),
-                "0".repeat(64),
-                Files.size(path),
-                LocalDateTime.now(),
-                null,
-                null
+                new ImportBatch(temp.toString()), ImportFileType.HISTORY, null,
+                path.getFileName().toString(), path.toString(), "0".repeat(64),
+                Files.size(path), LocalDateTime.now(), null, null
         );
 
         HistoricalWorkbookRows parsed = parser.parse(path, importFile);
 
-        assertThat(parsed.sourceRowCount()).isEqualTo(4);
+        // 「当天销量」共 2 行，其中 1 行在截止日之后被截断；「当天广告数据」整表不再被读取，
+        // 所以 sourceRowCount 恒为 2（若广告表仍被读入会是 4），orders 恒为 1。
+        assertThat(parsed.sourceRowCount()).isEqualTo(2);
         assertThat(parsed.orders()).hasSize(1);
-        assertThat(parsed.ads())
-                .singleElement()
-                .extracting(item -> item.getAdType())
-                .isEqualTo(ImportFileType.AD_AUTO);
     }
 
     private static void writeOrders(Workbook workbook) {

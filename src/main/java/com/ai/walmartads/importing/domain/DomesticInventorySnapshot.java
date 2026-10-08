@@ -16,7 +16,7 @@ import java.time.LocalDateTime;
 /** Finished-goods stock in the domestic warehouse. */
 @Entity
 @Table(name = "wm_ads_domestic_inventory_snapshot")
-public class DomesticInventorySnapshot {
+public class DomesticInventorySnapshot extends com.ai.walmartads.workspace.WorkspaceOwnedEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

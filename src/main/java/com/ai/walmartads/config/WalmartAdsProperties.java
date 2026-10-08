@@ -11,7 +11,6 @@ public record WalmartAdsProperties(
         Path archiveRoot,
         Path historicalWorkbook,
         LocalDate historicalEndDateExclusive,
-        Path skuMappingWorkbook,
-        Path weeklyReportsRoot
+        Path skuMappingWorkbook
 ) {
 }

@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>登录 · 沃尔玛工作台</title>
+  <link rel="stylesheet" href="auth.css?v=20261008-simple-login">
+</head>
+<body>
+  <main class="auth-page">
+    <section class="auth-card login-card">
+      <div class="brand-mark" aria-hidden="true">W</div>
+      <header class="auth-heading">
+        <span class="eyebrow">WALMART WORKBENCH</span>
+        <h1>登录工作台</h1>
+        <p>使用领星店铺名称进入对应的数据空间。</p>
+      </header>
+      <div class="success-note" id="loginSuccess" hidden>店铺初始化已完成，请登录。</div>
+      <form id="loginForm" class="auth-form">
+        <label>店铺名<input id="loginStoreName" autocomplete="username" autofocus required placeholder="例如 PINKSIR" aria-describedby="loginError"></label>
+        <label>密码<input id="loginPassword" type="password" autocomplete="current-password" required aria-describedby="loginError"></label>
+        <p class="form-error" id="loginError" role="alert" hidden></p>
+        <button class="primary-action" type="submit">登录</button>
+      </form>
+      <a class="emergency-link" href="/pinksir-reset.html">本机紧急重置 PINKSIR</a>
+    </section>
+  </main>
+  <script src="auth.js?v=20261008-simple-login"></script>
+</body>
+</html>

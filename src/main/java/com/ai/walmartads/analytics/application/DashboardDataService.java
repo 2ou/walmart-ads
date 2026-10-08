@@ -1,5 +1,6 @@
 package com.ai.walmartads.analytics.application;
 
+import com.ai.walmartads.common.UsBusinessDate;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -12,9 +13,12 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.TreeMap;
 
 @Service
@@ -30,25 +34,30 @@ public class DashboardDataService {
 
     public DashboardPayload load() {
         List<Map<String, Object>> orderDaily = jdbc.queryForList("""
-                select orders.report_date as report_date,
+                select orders.order_date as report_date,
                        sum(orders.quantity) as orders,
                        sum(orders.quantity * orders.item_cost) as revenue
-                  from wm_ads_order_record orders
+                  from wm_ads_order_record_valid orders
                   join wm_ads_import_file file on file.id = orders.import_file_id and file.active = true
-                 group by orders.report_date
+                 where orders.order_date is not null
+                 group by orders.order_date
                 """, new MapSqlParameterSource());
         List<Map<String, Object>> adDaily = jdbc.queryForList("""
                 select ads.report_date as report_date,
                        sum(ads.impressions) as impressions,
                        sum(ads.clicks) as clicks,
                        sum(ads.ad_spend) as spend,
-                       sum(ads.orders) as ad_orders,
+                       sum(ads.attributed_orders) as ad_orders,
                        sum(ads.attributed_sales) as ad_sales
-                  from wm_ads_ad_performance ads
-                  join wm_ads_import_file file on file.id = ads.import_file_id and file.active = true
-                 where file.report_kind = 'ITEM_PERFORMANCE'
+                  from wm_ads_lx_ad_report ads
+                 where ads.report_level = 'AD_ITEM'
                  group by ads.report_date
                 """, new MapSqlParameterSource());
+        LocalDate adLatestDate = adDaily.stream()
+                .map(row -> date(row, "report_date"))
+                .filter(Objects::nonNull)
+                .max(LocalDate::compareTo)
+                .orElse(null);
 
         TreeMap<LocalDate, MutableDaily> daily = new TreeMap<>();
         orderDaily.forEach(row -> {
@@ -69,30 +78,74 @@ public class DashboardDataService {
         List<SkuDailyRow> skuRows = loadSkuDaily();
         List<CampaignDailyRow> campaignRows = loadCampaignDaily();
 
-        LocalDate latestDate = daily.isEmpty() ? LocalDate.now() : daily.lastKey();
+        LocalDate latestDate = daily.isEmpty() ? UsBusinessDate.usToday() : daily.lastKey();
         LocalDate firstDate = daily.isEmpty() ? latestDate : daily.firstKey();
         long importedFiles = count("select count(*) from wm_ads_import_file where status = 'IMPORTED'");
         long productRows = count("select count(*) from wm_ads_product_record where current_version = true");
         long inventoryRows = count("""
-                select count(*) from wm_ads_inventory_snapshot inventory
-                join wm_ads_import_file file on file.id = inventory.import_file_id and file.active = true
+                select count(*) from wm_ads_inventory_unified inventory
                 where inventory.snapshot_at = (
                       select max(latest.snapshot_at)
-                        from wm_ads_inventory_snapshot latest
-                        join wm_ads_import_file latest_file
-                          on latest_file.id = latest.import_file_id and latest_file.active = true
+                        from wm_ads_inventory_unified latest
                 )
                 """);
 
+        LocalDate orderLatestDate = latestOrderDate();
         Meta meta = new Meta(
                 latestDate,
                 firstDate,
                 importedFiles,
                 new SourceRows(dailyRows.size(), skuRows.size(), productRows, inventoryRows),
-                "订单客户姓名、电话和完整地址未写入数据库。"
+                "订单客户姓名、电话和完整地址未写入数据库。",
+                orderLatestDate,
+                adLatestDate,
+                comparableLatestDate(orderLatestDate, adLatestDate, UsBusinessDate.visibleSalesDate())
         );
-        Defaults defaults = new Defaults(7, 3.0, 1.5, 20, 10.0, 10);
+        Defaults defaults = new Defaults(7, 5.0, 1.5, 20, 10.0, 10);
         return new DashboardPayload(meta, defaults, dailyRows, skuRows, campaignRows);
+    }
+
+    /**
+     * 订单口径最新业务日（美西日历日）。
+     *
+     * <p>广告报表（{@code wm_ads_lx_ad_report_raw}）是 T+0，订单销量统计（领星「销量统计列表 v2」）
+     * 是 T+1，两者最新日期经常差一天。页面「当日 / 最新业务日」在订单语境下应以订单为准。
+     */
+    private LocalDate latestOrderDate() {
+        LocalDate latest = jdbc.getJdbcTemplate().queryForObject(
+                "select max(order_date) from wm_ads_order_record_valid where order_date is not null", LocalDate.class);
+        return latest == null ? UsBusinessDate.usToday() : latest;
+    }
+
+    static LocalDate comparableLatestDate(LocalDate orderLatestDate, LocalDate adLatestDate, LocalDate usToday) {
+        return java.util.stream.Stream.of(orderLatestDate, adLatestDate, usToday)
+                .filter(Objects::nonNull)
+                .min(LocalDate::compareTo)
+                .orElse(usToday);
+    }
+
+    public DashboardPayload bootstrap() {
+        Map<String, Object> bounds = jdbc.queryForMap("""
+                select min(report_date) as first_date,
+                       max(report_date) as latest_date
+                  from wm_ads_lx_ad_report_raw
+                 where report_level = 'AD_ITEM'
+                """, new MapSqlParameterSource());
+        LocalDate latestDate = localDate(bounds.get("latest_date"));
+        LocalDate firstDate = localDate(bounds.get("first_date"));
+        if (latestDate == null) {
+            latestDate = UsBusinessDate.usToday();
+        }
+        if (firstDate == null) {
+            firstDate = latestDate;
+        }
+        LocalDate orderLatestDate = latestOrderDate();
+        Meta meta = new Meta(latestDate, firstDate, 0,
+                new SourceRows(0, 0, 0, 0), "Bootstrap metadata only; no customer PII is exposed.",
+                orderLatestDate, latestDate,
+                comparableLatestDate(orderLatestDate, latestDate, UsBusinessDate.visibleSalesDate()));
+        Defaults defaults = new Defaults(7, 5.0, 1.5, 20, 10.0, 10);
+        return new DashboardPayload(meta, defaults, List.of(), List.of(), List.of());
     }
 
     /**
@@ -110,8 +163,11 @@ public class DashboardDataService {
             double minSpend
     ) {
         DashboardPayload payload = load();
-        LocalDate start = payload.meta().latestDate().minusDays(Math.max(days, 1) - 1L);
-        return recommendations(payload, start, payload.meta().latestDate(), targetRoas, floorRoas, minClicks, minSpend);
+        LocalDate latestAdDate = payload.meta().adLatestDate() == null
+                ? payload.meta().latestDate()
+                : payload.meta().adLatestDate();
+        LocalDate start = latestAdDate.minusDays(Math.max(days, 1) - 1L);
+        return recommendations(payload, start, latestAdDate, targetRoas, floorRoas, minClicks, minSpend);
     }
 
     public List<Recommendation> recommendations(
@@ -150,14 +206,17 @@ public class DashboardDataService {
     }
 
     private List<SkuDailyRow> loadSkuDaily() {
+        Set<String> validParents = loadValidParentSkus();
+        boolean filterByProductLibrary = !validParents.isEmpty();
         List<Map<String, Object>> orders = jdbc.queryForList("""
-                select orders.report_date as report_date,
+                select orders.order_date as report_date,
                        coalesce(orders.parent_sku, orders.sku) as parent_sku,
                        sum(orders.quantity) as orders,
                        sum(orders.quantity * orders.item_cost) as revenue
-                  from wm_ads_order_record orders
+                  from wm_ads_order_record_valid orders
                   join wm_ads_import_file file on file.id = orders.import_file_id and file.active = true
-                 group by orders.report_date, coalesce(orders.parent_sku, orders.sku)
+                 where orders.order_date is not null
+                 group by orders.order_date, coalesce(orders.parent_sku, orders.sku)
                 """, new MapSqlParameterSource());
         List<Map<String, Object>> ads = jdbc.queryForList("""
                 select ads.report_date as report_date,
@@ -165,22 +224,29 @@ public class DashboardDataService {
                        sum(ads.impressions) as impressions,
                        sum(ads.clicks) as clicks,
                        sum(ads.ad_spend) as spend,
-                       sum(ads.orders) as ad_orders,
+                       sum(ads.attributed_orders) as ad_orders,
                        sum(ads.attributed_sales) as ad_sales
-                  from wm_ads_ad_performance ads
-                  join wm_ads_import_file file on file.id = ads.import_file_id and file.active = true
-                 where file.report_kind = 'ITEM_PERFORMANCE'
+                  from wm_ads_lx_ad_report ads
+                 where ads.report_level = 'AD_ITEM'
                  group by ads.report_date, coalesce(ads.parent_sku, '未映射SKU')
                 """, new MapSqlParameterSource());
         Map<SkuDate, MutableSku> result = new HashMap<>();
         orders.forEach(row -> {
-            SkuDate key = new SkuDate(date(row, "report_date"), text(row, "parent_sku"));
+            String parentSku = text(row, "parent_sku");
+            if (filterByProductLibrary && !validParents.contains(upper(parentSku))) {
+                return;
+            }
+            SkuDate key = new SkuDate(date(row, "report_date"), parentSku);
             MutableSku item = result.computeIfAbsent(key, MutableSku::new);
             item.orders = decimal(row, "orders");
             item.revenue = decimal(row, "revenue");
         });
         ads.forEach(row -> {
-            SkuDate key = new SkuDate(date(row, "report_date"), text(row, "parent_sku"));
+            String parentSku = text(row, "parent_sku");
+            if (filterByProductLibrary && !validParents.contains(upper(parentSku))) {
+                return;
+            }
+            SkuDate key = new SkuDate(date(row, "report_date"), parentSku);
             MutableSku item = result.computeIfAbsent(key, MutableSku::new);
             item.impressions = decimal(row, "impressions");
             item.clicks = decimal(row, "clicks");
@@ -194,27 +260,56 @@ public class DashboardDataService {
                 .toList();
     }
 
+    /**
+     * 产品库（wm_ads_product_record，current_version=1）中有效的父 SKU 集合。
+     * 仅当该集合非空时才启用过滤：产品库为空时兜底显示全部，避免误杀。
+     */
+    private Set<String> loadValidParentSkus() {
+        Set<String> parents = new LinkedHashSet<>();
+        for (Map<String, Object> row : jdbc.queryForList("""
+                select distinct upper(parent_sku) as parent_sku
+                  from wm_ads_product_record
+                 where current_version = true
+                   and parent_sku is not null
+                   and parent_sku <> ''
+                """, new MapSqlParameterSource())) {
+            String value = text(row, "parent_sku");
+            if (value != null && !value.isBlank()) {
+                parents.add(value);
+            }
+        }
+        return parents;
+    }
+
+    private static String upper(String value) {
+        return value == null ? null : value.toUpperCase(Locale.ROOT);
+    }
+
     private List<CampaignDailyRow> loadCampaignDaily() {
         return jdbc.queryForList("""
                 select ads.report_date as report_date,
                        ads.campaign_name as campaign_name,
                        max(ads.campaign_id) as campaign_id,
-                       case when ads.ad_type = 'AD_AUTO' then '自动广告' else '手动广告' end as ad_type,
+                       case
+                           when ads.ad_type = 'SP' and lower(coalesce(ads.targeting_type, '')) = 'auto' then '自动广告'
+                           when ads.ad_type = 'SP' then '手动广告'
+                           when ads.ad_type = 'SB' then 'SB 品牌广告'
+                           else 'SV 视频广告'
+                       end as ad_type,
                        coalesce(max(ads.parent_sku), '未映射SKU') as parent_sku,
                        sum(ads.impressions) as impressions,
                        sum(ads.clicks) as clicks,
                        sum(ads.ad_spend) as spend,
-                       sum(ads.orders) as ad_orders,
+                       sum(ads.attributed_orders) as ad_orders,
                        sum(ads.attributed_sales) as ad_sales,
                        case when sum(ads.clicks) > 0
-                            then sum(ads.average_cpc * ads.clicks) / sum(ads.clicks)
+                            then sum(ads.ad_spend) / sum(ads.clicks)
                             else avg(ads.bid)
                        end as average_bid,
                        count(distinct ads.item_id) as listed_products
-                  from wm_ads_ad_performance ads
-                  join wm_ads_import_file file on file.id = ads.import_file_id and file.active = true
-                 where file.report_kind = 'ITEM_PERFORMANCE'
-                 group by ads.report_date, ads.campaign_name, ads.ad_type
+                  from wm_ads_lx_ad_report ads
+                 where ads.report_level = 'AD_ITEM'
+                 group by ads.report_date, ads.campaign_name, ads.ad_type, ads.targeting_type
                 """, new MapSqlParameterSource()).stream().map(row -> new CampaignDailyRow(
                         date(row, "report_date"),
                         text(row, "campaign_name"),
@@ -239,14 +334,17 @@ public class DashboardDataService {
     }
 
     private static LocalDate date(Map<String, Object> row, String key) {
-        Object value = row.get(key);
+        return localDate(row.get(key));
+    }
+
+    private static LocalDate localDate(Object value) {
         if (value instanceof LocalDate localDate) {
             return localDate;
         }
         if (value instanceof Date sqlDate) {
             return sqlDate.toLocalDate();
         }
-        return LocalDate.parse(String.valueOf(value));
+        return value == null ? null : LocalDate.parse(String.valueOf(value));
     }
 
     private static BigDecimal decimal(Map<String, Object> row, String key) {
@@ -283,7 +381,13 @@ public class DashboardDataService {
             LocalDate firstDate,
             long importedFiles,
             SourceRows sourceRows,
-            String privacy
+            String privacy,
+            /** 订单口径最新业务日。广告报表是 T+0、订单销量统计是 T+1，两者常差一天。 */
+            LocalDate orderLatestDate,
+            /** 广告报表最新业务日，仅供广告诊断等广告单源页面使用。 */
+            LocalDate adLatestDate,
+            /** 订单、广告和美西当前日共同具备的最后可比业务日。 */
+            LocalDate analysisLatestDate
     ) {
     }
 

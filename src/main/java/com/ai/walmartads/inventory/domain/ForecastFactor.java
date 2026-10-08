@@ -20,7 +20,7 @@ import java.time.LocalDateTime;
  */
 @Entity
 @Table(name = "wm_ads_forecast_factor")
-public class ForecastFactor {
+public class ForecastFactor extends com.ai.walmartads.workspace.WorkspaceOwnedEntity {
 
     @Id
     @Column(name = "sku", length = 180, nullable = false)

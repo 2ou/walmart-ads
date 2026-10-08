@@ -1,5 +1,6 @@
 package com.ai.walmartads.inventory.application;
 
+import com.ai.walmartads.workspace.WorkspaceContext;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
@@ -59,17 +60,19 @@ public class StatsForecastClient {
                 throw new IllegalStateException("Forecast service did not return every parent style");
             }
             lastFailureReason = null;
+            long workspaceId = WorkspaceContext.requireId();
             result.forEach((parentSku, forecast) -> {
                 if (forecast.model() != null && !forecast.model().contains("SERVICE_FALLBACK")) {
-                    lastSuccessful.put(parentSku, forecast);
+                    lastSuccessful.put(cacheKey(workspaceId, parentSku), forecast);
                 }
             });
             return result;
         } catch (RuntimeException exception) {
             lastFailureReason = exception.getClass().getSimpleName() + ": " + conciseMessage(exception.getMessage());
             Map<String, ForecastResult> fallback = new LinkedHashMap<>();
+            long workspaceId = WorkspaceContext.requireId();
             historyByParent.forEach((parentSku, history) -> {
-                ForecastResult previous = lastSuccessful.get(parentSku);
+                ForecastResult previous = lastSuccessful.get(cacheKey(workspaceId, parentSku));
                 fallback.put(
                         parentSku,
                         previous != null && previous.p50().size() >= horizon && previous.p90().size() >= horizon
@@ -103,6 +106,10 @@ public class StatsForecastClient {
 
     public String lastFailureReason() {
         return lastFailureReason;
+    }
+
+    private static String cacheKey(long workspaceId, String parentSku) {
+        return workspaceId + "\u0000" + parentSku;
     }
 
     private static double round(double value) {

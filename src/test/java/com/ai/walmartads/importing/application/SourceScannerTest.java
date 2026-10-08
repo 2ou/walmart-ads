@@ -1,7 +1,6 @@
 package com.ai.walmartads.importing.application;
 
 import com.ai.walmartads.config.WalmartAdsProperties;
-import com.ai.walmartads.importing.domain.AdReportKind;
 import com.ai.walmartads.importing.domain.ImportFileType;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -18,82 +17,41 @@ class SourceScannerTest {
     Path temp;
 
     @Test
-    void scansDailyReportsFromDateDirectoryAndDistinguishesReportKind() throws Exception {
+    void ignoresRetiredDailyReportsUnderDateDirectory() throws Exception {
         Path day = Files.createDirectories(temp.resolve("date").resolve("2026-7-22"));
         Files.createFile(day.resolve("ItemPerformance_example.csv"));
         Files.createFile(day.resolve("ItemKeywordPerformance_example.csv"));
         Files.createFile(day.resolve("KeywordPerformance_example.csv"));
+        // PO_Data（每日订单明细）已由领星 MCP 接管，扫描必须完全忽略，避免与领星口径重复入账。
         Files.createFile(day.resolve("PO_Data_example.xlsx"));
+        // inventory.xlsx（Walmart 后台库存健康报表）同理由领星 MCP 在线商品库存接管。
         Files.createFile(day.resolve("inventory.xlsx"));
 
         SourceScanner scanner = new SourceScanner(new WalmartAdsProperties(
-                temp, temp.resolve("archive"), null, null, null, null
+                temp, temp.resolve("archive"), null, null, null
         ));
         List<SourceFileCandidate> candidates = scanner.scan();
 
-        assertThat(candidates).hasSize(5);
-        assertThat(report(candidates, "ItemPerformance_example.csv").fileType())
-                .isEqualTo(ImportFileType.AD_REPORT);
-        assertThat(report(candidates, "ItemPerformance_example.csv").reportKind())
-                .isEqualTo(AdReportKind.ITEM_PERFORMANCE);
-        assertThat(report(candidates, "ItemKeywordPerformance_example.csv").reportKind())
-                .isEqualTo(AdReportKind.ITEM_KEYWORD_PERFORMANCE);
-        assertThat(report(candidates, "KeywordPerformance_example.csv").reportKind())
-                .isEqualTo(AdReportKind.KEYWORD_PERFORMANCE);
-        assertThat(report(candidates, "PO_Data_example.xlsx").reportKind()).isNull();
-        assertThat(report(candidates, "PO_Data_example.xlsx").relativePath())
-                .isEqualTo(Path.of("date", "2026-7-22", "PO_Data_example.xlsx"));
-        assertThat(report(candidates, "inventory.xlsx"))
-                .satisfies(candidate -> {
-                    assertThat(candidate.fileType()).isEqualTo(ImportFileType.INVENTORY);
-                    assertThat(candidate.reportDate()).isEqualTo(java.time.LocalDate.of(2026, 7, 22));
-                    assertThat(candidate.snapshotAt())
-                            .isEqualTo(java.time.LocalDate.of(2026, 7, 22).atTime(12, 0));
-                    assertThat(candidate.relativePath())
-                            .isEqualTo(Path.of("date", "2026-7-22", "inventory.xlsx"));
-                });
+        // date/ 日目录整目录已退役：订单、库存、广告三类日报都不再进扫描结果。
+        assertThat(candidates).isEmpty();
     }
 
     @Test
-    void onlyCreatesInventorySnapshotsForDaysContainingInventoryWorkbook() throws Exception {
-        Files.createDirectories(temp.resolve("date").resolve("2026-7-22"));
-        Path updatedDay = Files.createDirectories(temp.resolve("date").resolve("2026-7-23"));
-        Files.createFile(updatedDay.resolve("inventory-latest.xlsx"));
-        Path obsoleteRoot = Files.createDirectories(temp.resolve("source").resolve("inventory"));
-        Files.createFile(obsoleteRoot.resolve("inventory-2026-07-20.xlsx"));
-
-        SourceScanner scanner = new SourceScanner(new WalmartAdsProperties(
-                temp, temp.resolve("archive"), null, null, null, null
-        ));
-
-        assertThat(scanner.scan())
-                .singleElement()
-                .satisfies(candidate -> {
-                    assertThat(candidate.fileType()).isEqualTo(ImportFileType.INVENTORY);
-                    assertThat(candidate.reportDate()).isEqualTo(java.time.LocalDate.of(2026, 7, 23));
-                    assertThat(candidate.snapshotAt())
-                            .isEqualTo(java.time.LocalDate.of(2026, 7, 23).atTime(12, 0));
-                    assertThat(candidate.path()).isEqualTo(updatedDay.resolve("inventory-latest.xlsx"));
-                });
-    }
-
-    @Test
-    void fallsBackToLegacyRootDateDirectoryWhenDateFolderIsAbsent() throws Exception {
+    void ignoresLegacyRootDateDirectory() throws Exception {
         Path day = Files.createDirectories(temp.resolve("2026-7-21"));
-        Files.createFile(day.resolve("PO_Data_legacy.xlsx"));
+        Files.createFile(day.resolve("inventory.xlsx"));
 
         SourceScanner scanner = new SourceScanner(new WalmartAdsProperties(
-                temp, temp.resolve("archive"), null, null, null, null
+                temp, temp.resolve("archive"), null, null, null
         ));
 
-        assertThat(scanner.scan())
-                .singleElement()
-                .extracting(SourceFileCandidate::reportDate)
-                .isEqualTo(java.time.LocalDate.of(2026, 7, 21));
+        assertThat(scanner.scan()).isEmpty();
     }
 
     @Test
-    void scansConfiguredHistoricalWorkbookAsItemPerformanceHistory() throws Exception {
+    void ignoresRetiredHistoricalWorkbookEvenWhenConfigured() throws Exception {
+        // HISTORY 已于 2026-09-28 退出文件扫描链路：即使 data-root / historical-workbook 都配好，
+        // 也不再产出候选（历史订单早已落库，ImportFileType.HISTORY 仅用于读回历史 import_file 行）。
         Path dataRoot = Files.createDirectories(temp.resolve("data"));
         Path workbook = Files.createFile(temp.resolve("PNK 每日销售数据统计.xlsx"));
         SourceScanner scanner = new SourceScanner(new WalmartAdsProperties(
@@ -101,77 +59,69 @@ class SourceScannerTest {
                 temp.resolve("archive"),
                 workbook,
                 java.time.LocalDate.of(2026, 7, 21),
-                null,
                 null
+        ));
+
+        assertThat(scanner.scan()).isEmpty();
+    }
+
+    @Test
+    void ignoresRetiredDemandForecastDirectory() throws Exception {
+        // source/demand-forecast/ 已不存在，扫描链路一并摘除；残留目录不得再产出候选。
+        Path dataRoot = Files.createDirectories(temp.resolve("demand-data"));
+        Path demand = Files.createDirectories(dataRoot.resolve("source").resolve("demand-forecast"));
+        Files.createFile(demand.resolve("demand.xlsx"));
+        SourceScanner scanner = new SourceScanner(new WalmartAdsProperties(
+                dataRoot, temp.resolve("demand-archive"), null, null, null
+        ));
+
+        assertThat(scanner.scan()).isEmpty();
+    }
+
+    @Test
+    void scansDomesticInventoryUnderSourceDirectory() throws Exception {
+        Path dataRoot = Files.createDirectories(temp.resolve("domestic-data"));
+        Path domestic = Files.createDirectories(dataRoot.resolve("source").resolve("国内仓库存"));
+        Files.createFile(domestic.resolve("国内仓库存-20260901.xlsx"));
+        SourceScanner scanner = new SourceScanner(new WalmartAdsProperties(
+                dataRoot, temp.resolve("domestic-archive"), null, null, null
         ));
 
         assertThat(scanner.scan())
                 .singleElement()
-                .satisfies(candidate -> {
-                    assertThat(candidate.fileType()).isEqualTo(ImportFileType.HISTORY);
-                    assertThat(candidate.reportKind()).isEqualTo(AdReportKind.ITEM_PERFORMANCE);
-                    assertThat(candidate.relativePath())
-                            .isEqualTo(Path.of("history", "PNK 每日销售数据统计.xlsx"));
-                });
+                .satisfies(candidate -> assertThat(candidate.fileType())
+                        .isEqualTo(ImportFileType.DOMESTIC_INVENTORY));
     }
 
     @Test
-    void scansConfiguredSkuMappingWorkbookBeforeDailyReports() throws Exception {
+    void ignoresRetiredSkuMappingWorkbookEvenWhenConfigured() throws Exception {
+        // SKU 映射已于 2026-09-28 换源为领星 MCP 在线商品：即使 data-root / sku-mapping-workbook
+        // 都配好，也不再产出候选（ImportFileType.SKU_MAPPING 仅用于读回历史 import_file 行）。
         Path dataRoot = Files.createDirectories(temp.resolve("mapping-data"));
         Path day = Files.createDirectories(dataRoot.resolve("date").resolve("2026-7-22"));
         Files.createFile(day.resolve("ItemPerformance_example.csv"));
+        Files.createFile(day.resolve("inventory.xlsx"));
         Path workbook = Files.createFile(temp.resolve("WFS-upload-template.xlsx"));
         SourceScanner scanner = new SourceScanner(new WalmartAdsProperties(
                 dataRoot,
                 temp.resolve("mapping-archive"),
                 null,
                 null,
-                workbook,
-                null
+                workbook
         ));
 
-        assertThat(scanner.scan())
-                .extracting(SourceFileCandidate::fileType)
-                .containsExactly(ImportFileType.SKU_MAPPING, ImportFileType.AD_REPORT);
-    }
-
-    @Test
-    void scansWeeklyInventoryRecursivelyUsingDateFromWorkbookName() throws Exception {
-        Path dataRoot = Files.createDirectories(temp.resolve("weekly-data"));
-        Path weeklyRoot = Files.createDirectories(temp.resolve("weekly").resolve("2025年"));
-        Files.createFile(weeklyRoot.resolve("沃尔玛PNK周报 2025.04.28 .xlsx"));
-        Files.createFile(weeklyRoot.resolve("沃尔玛PNK周转天数 2025.04.28.xlsx"));
-
-        SourceScanner scanner = new SourceScanner(new WalmartAdsProperties(
-                dataRoot,
-                temp.resolve("weekly-archive"),
-                null,
-                null,
-                null,
-                temp.resolve("weekly")
-        ));
-
-        assertThat(scanner.scan())
-                .singleElement()
-                .satisfies(candidate -> {
-                    assertThat(candidate.fileType()).isEqualTo(ImportFileType.WEEKLY_INVENTORY);
-                    assertThat(candidate.reportDate()).isEqualTo(java.time.LocalDate.of(2025, 4, 28));
-                    assertThat(candidate.snapshotAt())
-                            .isEqualTo(java.time.LocalDate.of(2025, 4, 28).atTime(12, 0));
-                    assertThat(candidate.relativePath())
-                            .isEqualTo(Path.of("weekly-inventory", "2025年", "沃尔玛PNK周报 2025.04.28 .xlsx"));
-                });
+        assertThat(scanner.scan()).isEmpty();
     }
 
     @Test
     void scansMonthlyReturnOrdersUsingMonthFromFileName() throws Exception {
         Path dataRoot = Files.createDirectories(temp.resolve("return-data"));
         Path returns = Files.createDirectories(dataRoot.resolve("source").resolve("Return_Orders"));
-        Files.createFile(returns.resolve("Return_Orders_2026-06.xlsx"));
+        Files.createFile(returns.resolve("Customer returns-202606.xlsx"));
         Files.createFile(returns.resolve("notes.xlsx"));
 
         SourceScanner scanner = new SourceScanner(new WalmartAdsProperties(
-                dataRoot, temp.resolve("return-archive"), null, null, null, null
+                dataRoot, temp.resolve("return-archive"), null, null, null
         ));
 
         assertThat(scanner.scan())
@@ -180,14 +130,22 @@ class SourceScannerTest {
                     assertThat(candidate.fileType()).isEqualTo(ImportFileType.RETURN_ORDER);
                     assertThat(candidate.reportDate()).isEqualTo(java.time.LocalDate.of(2026, 6, 1));
                     assertThat(candidate.relativePath())
-                            .isEqualTo(Path.of("source", "Return_Orders", "Return_Orders_2026-06.xlsx"));
+                            .isEqualTo(Path.of("source", "Return_Orders", "Customer returns-202606.xlsx"));
                 });
     }
 
-    private static SourceFileCandidate report(List<SourceFileCandidate> candidates, String fileName) {
-        return candidates.stream()
-                .filter(candidate -> candidate.path().getFileName().toString().equals(fileName))
-                .findFirst()
-                .orElseThrow();
+    @Test
+    void ignoresCampaignSnapshotJsonAfterLingXingSync() throws Exception {
+        Path dataRoot = Files.createDirectories(temp.resolve("snapshot-data"));
+        Path snapshot = Files.createDirectories(dataRoot.resolve("source").resolve("snapshot"))
+                .resolve("snapshot.json");
+        Files.writeString(snapshot, "{\"campaigns\":[],\"adItem\":[]}");
+        SourceScanner scanner = new SourceScanner(new WalmartAdsProperties(
+                dataRoot, temp.resolve("snapshot-archive"), null, null, null
+        ));
+
+        // 广告活动快照已改由领星 MCP 同步（wm_ads_lx_campaign_snapshot），文件扫描入口软禁用。
+        assertThat(scanner.scan())
+                .noneMatch(candidate -> candidate.fileType() == ImportFileType.CAMPAIGN_SNAPSHOT);
     }
 }

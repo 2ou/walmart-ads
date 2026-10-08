@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PNK366085 Walmart Listing 优化方案</title>
+<style>
+  :root{
+    --ink:#12141a; --ink2:#3b4048; --ink3:#6b7280; --line:#e6e8ee;
+    --bg:#f5f6f9; --card:#ffffff; --pink:#d9738f; --pink-soft:#fbeef2;
+    --green:#2f9e6b; --green-soft:#e8f6ef; --amber:#c98a20; --amber-soft:#fdf3e2;
+    --red:#c9484f; --red-soft:#fdeceE; --blue:#4a6fa5; --blue-soft:#eef3fb;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:15px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",Roboto,sans-serif;}
+  .wrap{max-width:1180px;margin:0 auto;padding:32px 22px 80px}
+  header.top{background:linear-gradient(135deg,#1b1d24,#2c2f3a);color:#fff;border-radius:16px;
+    padding:30px 32px;box-shadow:0 8px 26px rgba(18,20,26,.16)}
+  header.top .kicker{font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:#e9a9bd;font-weight:600}
+  header.top h1{margin:8px 0 6px;font-size:27px;letter-spacing:-.01em}
+  header.top p{margin:0;color:#c2c6d2;font-size:13.5px;max-width:800px}
+  .meta{margin-top:18px;display:flex;flex-wrap:wrap;gap:8px}
+  .meta span{background:rgba(255,255,255,.09);border:1px solid rgba(255,255,255,.14);
+    color:#dfe2ea;font-size:12px;padding:4px 11px;border-radius:20px}
+  section{background:var(--card);border:1px solid var(--line);border-radius:14px;
+    padding:26px 28px;margin-top:22px;box-shadow:0 1px 3px rgba(18,20,26,.04)}
+  h2{font-size:19px;margin:0 0 4px;letter-spacing:-.01em;display:flex;align-items:center;gap:10px}
+  h2 .idx{width:26px;height:26px;border-radius:8px;background:var(--pink);color:#fff;
+    font-size:13px;display:grid;place-items:center;font-weight:700;flex:none}
+  .sub{color:var(--ink3);font-size:13px;margin:0 0 18px 36px}
+  h3{font-size:15px;margin:24px 0 10px}
+  p{margin:8px 0}
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(168px,1fr));gap:12px}
+  .kpi{border:1px solid var(--line);border-radius:11px;padding:14px 16px;background:#fcfcfe}
+  .kpi .l{font-size:12px;color:var(--ink3);margin-bottom:5px}
+  .kpi .v{font-size:22px;font-weight:700;letter-spacing:-.02em}
+  .kpi .d{font-size:12px;color:var(--ink3);margin-top:3px}
+  .v.red{color:var(--red)} .v.green{color:var(--green)} .v.amber{color:var(--amber)}
+  .pill{display:inline-block;font-size:11.5px;font-weight:600;padding:3px 9px;border-radius:20px;
+    border:1px solid transparent;white-space:nowrap}
+  .p0{background:var(--red-soft);color:var(--red);border-color:#f3cfd2}
+  .p1{background:var(--amber-soft);color:var(--amber);border-color:#f0dcb6}
+  .p2{background:var(--blue-soft);color:var(--blue);border-color:#d3e0f2}
+  .ok{background:var(--green-soft);color:var(--green);border-color:#c9e9d9}
+  .mut{background:#f1f2f6;color:var(--ink3);border-color:#e2e4ea}
+  table{width:100%;border-collapse:collapse;font-size:13.5px;margin-top:6px}
+  th,td{text-align:left;padding:9px 11px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{background:#fafbfd;font-weight:600;font-size:12.5px;color:var(--ink2);
+    position:sticky;top:0;z-index:1}
+  tbody tr:hover{background:#fcfcfe}
+  td.num{font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
+  .scroll{max-height:520px;overflow-y:auto;border:1px solid var(--line);border-radius:10px}
+  .scroll table{margin:0}
+  .chart{width:100%;height:330px;margin-top:6px}
+  .chart.sm{height:280px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+  @media(max-width:880px){.grid2{grid-template-columns:1fr}}
+  .callout{border-left:3px solid var(--pink);background:var(--pink-soft);
+    padding:13px 16px;border-radius:0 10px 10px 0;margin:14px 0;font-size:13.5px}
+  .callout.warn{border-color:var(--red);background:var(--red-soft)}
+  .callout.info{border-color:var(--blue);background:var(--blue-soft)}
+  .callout b{color:var(--ink)}
+  ul.tight{margin:8px 0;padding-left:20px} ul.tight li{margin:5px 0;font-size:13.5px}
+  .copybox{position:relative;border:1px solid var(--line);border-radius:10px;background:#fcfcfe;
+    padding:13px 44px 13px 15px;font-size:13.5px;margin:9px 0}
+  .copybox .txt{white-space:pre-wrap;word-break:break-word}
+  .copybox button{position:absolute;top:9px;right:9px;border:1px solid var(--line);
+    background:#fff;border-radius:7px;font-size:11.5px;padding:4px 9px;cursor:pointer;color:var(--ink2)}
+  .copybox button:hover{border-color:var(--pink);color:var(--pink)}
+  .len{font-size:11.5px;color:var(--ink3);margin-top:6px}
+  .len.bad{color:var(--red);font-weight:600}
+  .len.good{color:var(--green);font-weight:600}
+  code{background:#f2f3f7;border:1px solid var(--line);border-radius:5px;padding:1px 5px;
+    font-size:12.5px;font-family:ui-monospace,Consolas,monospace}
+  .step{display:flex;gap:13px;padding:13px 0;border-bottom:1px dashed var(--line)}
+  .step:last-child{border-bottom:none}
+  .step .n{width:24px;height:24px;border-radius:50%;background:#eef0f5;color:var(--ink2);
+    display:grid;place-items:center;font-size:12px;font-weight:700;flex:none;margin-top:2px}
+  .step .b{flex:1}
+  .step .b b{display:block;margin-bottom:3px}
+  .step .b span{color:var(--ink2);font-size:13.5px}
+  footer{color:var(--ink3);font-size:12.5px;text-align:center;margin-top:26px;line-height:1.9}
+  .legend{display:flex;gap:16px;font-size:12.5px;color:var(--ink3);margin:8px 0 2px;flex-wrap:wrap}
+  .legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="top">
+  <div class="kicker">PINKSIR · Walmart Listing Audit</div>
+  <h1>PNK366085 Plus Size 长袖罗纹 Tunic 衬衫 — Listing 优化方案</h1>
+  <p>以自有 Walmart WFS 上传表为基准，对标 Amazon 同品类头部竞品 AUTOMET（B0F93P8RGT / B0F93MLVNZ）的标题结构、价格带、评价体量与 2000 词流量词库，输出可落地的分级优化方案。</p>
+  <div class="meta">
+    <span>自有：PNK366085-Blouses-Tops-upload.xlsx</span>
+    <span>竞品词库：卖家精灵 ReverseASIN · 35 流量词 / 934 高频词</span>
+    <span>竞品问答：Amazon AI 5 条买家提问</span>
+    <span>竞品对比集 6 个 ASIN</span>
+    <span>生成日期 2026-09-16</span>
+  </div>
+</header>
+
+<section>
+  <h2><span class="idx">1</span>结论速览</h2>
+  <p class="sub">先看最需要动手的 4 件事，细节在后文各章展开。</p>
+  <div class="kpis" id="kpis"></div>
+
+  <h3>P0 立即处理（不修就持续漏流量 / 影响可选购性）</h3>
+  <table>
+    <thead><tr><th style="width:62px">级别</th><th style="width:190px">问题</th><th>证据与影响</th><th style="width:230px">动作</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><span class="pill p0">P0-1</span></td>
+        <td><b>变体第二轴绑成了常量</b><br><span style="color:var(--ink3);font-size:12.5px">尺码可能选不了</span></td>
+        <td><code>variantAttributeNames</code> = <code>color</code> + <code>clothingSizeGroup</code>，但 20 行的 <code>clothingSizeGroup</code> 全部是 <code>Women's Plus</code>，1X–5X 只写在 <code>clothingSize</code> 里。按模板口径推演，变体组会按（色 × 尺码组）聚合 → 每组只剩 1 个 SKU → 前台只呈现 4 个色块、5 个尺码没有独立选择项。</td>
+        <td>把第二轴改成 <code>clothingSize</code>，<code>color</code> 保持为 swatch 轴。上线前先在线上 PDP 复核一次（后台口径与前台渲染偶有不一致）。</td>
+      </tr>
+      <tr>
+        <td><span class="pill p0">P0-2</span></td>
+        <td><b>标题浪费约 29 个字符</b></td>
+        <td>现标题 71 字符，Walmart 建议 ≤90、上限 100。竞品标题把「fall / sweaters / business casual / work / teacher / cute / trendy / 2026 / outfits」全塞进去了，我方头部词只有 Plus Size + Ribbed Tunic Blouse + Long Sleeve。</td>
+        <td>按第 5 章 3 个候选标题替换，补入 fall / business casual / work 等高频词，控制在 95–100 字符。</td>
+      </tr>
+      <tr>
+        <td><span class="pill p0">P0-3</span></td>
+        <td><b>$19.99 缺价值支点</b></td>
+        <td>竞品价带 $9.99（4 款）/ $12.98 / $12.99 / $23.99，主力在 $9.99。我方 $19.99 属第二高价位，但材质是 95% 涤 + 5% 氨纶，没有 OEKO-TEX 认证、没有羊毛/天丝一类材质背书，价格缺锚。</td>
+        <td>不降价（$19.99 卡在 10% 佣金档最优位），改为补齐价格锚：MSRP 29.99 + 最低/最高售价守卫，并用「大码 1X–5X + 罗纹针织 + 肩扣」三件事撑住溢价。</td>
+      </tr>
+      <tr>
+        <td><span class="pill p0">P0-4</span></td>
+        <td><b>无视频、副图未按转化顺序排</b></td>
+        <td>主图 4 色各 1 张（正确）+ 8 张副图（每色一套，正确），但全为静态图，且没有视频。竞品有视频 + A+ 内容。</td>
+        <td>补 1 条 15–30s 视频；副图按「平铺正背面 → 面料微距 → 肩扣细节 → 模特上身 → 尺码表 → 场景 → 四色色卡 → 大码版型」重排，统一 JPEG 2200×2200。</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<section>
+  <h2><span class="idx">2</span>自有 Listing 体检</h2>
+  <p class="sub">覆盖 153 个模板字段；其中约 47 个字段对「成人女装」不适用（电池、危化品、照片冲印、体育球队等），按实际适用口径统计。</p>
+  <div class="grid2">
+    <div>
+      <h3 style="margin-top:0">属性完整度</h3>
+      <div class="chart sm" id="c_attr"></div>
+      <p style="font-size:13px;color:var(--ink3)">已填字段集中在「必填 + 高权重推荐」区，缺口主要在<b>结构类属性</b>（肩部造型、领型、袖型、背部造型）与<b>价格/合规类</b>（MSRP、价格守卫、制造商、型号）。</p>
+    </div>
+    <div>
+      <h3 style="margin-top:0">标题长度与关键词占用</h3>
+      <div class="chart sm" id="c_title"></div>
+      <p style="font-size:13px;color:var(--ink3)">标题仅用掉 71/100 字符；对比竞品在同品类里把标题当作「关键词容器」用满。</p>
+    </div>
+  </div>
+
+  <h3>已具备的优势（不要动）</h3>
+  <ul class="tight">
+    <li><b>20 个变体结构完整</b>：4 色（Army Green / Black / Dark Coffee / Light Apricot）× 5 码（1X–5X），全 WFS，<code>variantGroupId</code> 统一为 PNK366085，每色有独立主图与 swatch。</li>
+    <li><b>描述质量高于同类</b>：1,100+ 字符 HTML，含材质、场景（workdays/weekends/business-casual/travel/layering）、护理、尺码引导四段式，已自然植入 fall / winter / transitional spring / business-casual / tunic。</li>
+    <li><b>六条 Key Features 结构规范</b>：emoji + [标签] + 收益，覆盖面料/细节/版型/搭配/护理。</li>
+    <li><b>结构化属性扎实</b>：面料成分、护理、性别、年龄、领型、袖长、版型、场合、扣合方式（Pull-On）、织法（Knit）、图案（Solid）、装饰（Ornamental Button）均已填。</li>
+    <li><b>颜色归类正确</b>：Army Green→Green、Black→Black、Dark Coffee→Brown、Light Apricot→Beige。</li>
+  </ul>
+
+  <div class="callout warn">
+    <b>一个容易被忽略的细节：</b><code>clothingSizeGroup</code> 全系写死 <code>Women's Plus</code> 是对的（用于尺码体系归类），但它<b>不能</b>同时充当变体的第二轴——变体轴的值必须逐 SKU 不同。这就是 P0-1 的根因。
+  </div>
+</section>
+
+<section>
+  <h2><span class="idx">3</span>竞品拆解：AUTOMET</h2>
+  <p class="sub">竞品为 Amazon 同品类头部，5K+ 评价、4.4★，是整个流量词库的流量中心。</p>
+
+  <div class="grid2">
+    <div>
+      <h3 style="margin-top:0">价格 × 评价分布</h3>
+      <div class="chart" id="c_price"></div>
+    </div>
+    <div>
+      <h3 style="margin-top:0">竞品标题的关键词结构</h3>
+      <div class="copybox">
+        <button data-copy>复制</button>
+        <div class="txt">AUTOMET Womens Long Sleeve Shirts Fall Sweaters Business Casual Tops Blouse | Work Tunic Tops, Trendy Cute Sweaters, Dressy Casual Blouse, Plus Size, 2026 Teacher Outfits, Fashion Winter Clothes</div>
+      </div>
+      <p style="font-size:13px;color:var(--ink3);margin-top:2px">它把标题做成了「品类词 × 场景词 × 人群词」的矩阵：<b>品类</b> Shirts / Sweaters / Tops / Blouse / Tunic · <b>场景</b> Fall / Winter / Business Casual / Work / Teacher / Dressy Casual · <b>人群</b> Womens / Plus Size · <b>情绪</b> Trendy / Cute · <b>年份</b> 2026。</p>
+    </div>
+  </div>
+
+  <h3>Amazon AI（Rufus / Alexa）买家问答 —— 竞品在用这些角度成交</h3>
+  <table>
+    <thead><tr><th style="width:220px">买家高频提问</th><th>竞品答案里的成交支点</th><th style="width:260px">PNK366085 可对标的话术</th></tr></thead>
+    <tbody id="qa_tbody"></tbody>
+  </table>
+
+  <div class="callout info">
+    <b>可直接抄的三个点：</b>① <b>叠穿（layering）</b> 被单独问了一次——说明大码长袖的叠穿诉求强；② <b>护理（care）</b> 被单独问了一次，答案是「冷水机洗 + 低温烘干 + 抗皱抗缩」；③ 竞品把 <b>28–30 种颜色</b> 当成卖点反复讲。我方护理说明已写进描述，但<b>没有写进 Key Features</b>，叠穿只出现一次，颜色只有 4 个。
+  </div>
+</section>
+
+<section>
+  <h2><span class="idx">4</span>关键词机会</h2>
+  <p class="sub">竞品流量词库共 2,000 词（导出展示 35 个）；下表按「月搜索量 × 我方覆盖缺口」排序解读，词量为 Amazon 口径，作方向性参考（Walmart 站内搜索行为不同，但品类词高度重叠）。</p>
+
+  <div class="legend">
+    <span><i style="background:#d9738f"></i>我方已覆盖</span>
+    <span><i style="background:#c9ccd6"></i>我方未覆盖</span>
+  </div>
+  <h3 style="margin-top:0">竞品词库高频词 Top 30</h3>
+  <div class="chart" id="c_words"></div>
+
+  <h3>头部机会词明细</h3>
+  <div class="scroll">
+    <table>
+      <thead>
+        <tr>
+          <th style="width:210px">流量词</th>
+          <th style="width:120px">中文</th>
+          <th class="num" style="width:82px">月搜索量</th>
+          <th class="num" style="width:70px">标题密度</th>
+          <th class="num" style="width:76px">商品数</th>
+          <th class="num" style="width:64px">需供比</th>
+          <th style="width:96px">建议竞价</th>
+          <th class="num" style="width:70px">竞品自然排名</th>
+          <th style="width:70px">我方覆盖</th>
+          <th>建议落位</th>
+        </tr>
+      </thead>
+      <tbody id="kw_tbody"></tbody>
+    </table>
+  </div>
+  <p style="font-size:12.5px;color:var(--ink3)">标题密度 = 前十名商品里标题含该词的数量。<b>密度 0 而搜索量高</b>的词（如 <code>fall clothes for women 2026</code> 月搜 34,137、密度 0）意味着头部没人占位，是最快见效的插入点。</p>
+
+  <div class="callout warn">
+    <b>明确不要碰的词：</b><code>returns and refunds my orders my account 2026</code>（月搜 61,176，但属账户售后导航词，与商品无关，硬塞会拉低相关度）；以及所有 <code>amazon ...</code> / <code>... storefront</code> 平台专属词，以及 <code>automet</code> / <code>wiholl</code> / <code>ofeefan</code> / <code>maurices</code> / <code>chicos</code> 等他人品牌词——在 Walmart 站内既无用又违规风险。
+  </div>
+</section>
+
+<section>
+  <h2><span class="idx">5</span>建议方案</h2>
+  <p class="sub">按可直接粘贴的顺序给出；标题 3 选 1，其余为替换件。</p>
+
+  <h3>① 标题（3 个候选，均含 Brand + 品类 + 人群 + 场景 + 尺码）</h3>
+  <div id="title_cands"></div>
+  <div class="callout">
+    <b>规则：</b>首词必须是品牌 <code>PINKSIR</code>；把 <code>Plus Size</code> 与 <code>1X-5X</code> 都写进去（大码人群两种搜法都有人用）；<code>fall</code> 是季节流量入口，<code>Business Casual / Work</code> 是高转化场景词；避免与前缀重复堆词（Walmart 对重复词有降权）。
+  </div>
+
+  <h3>② Key Features 六条改写（替换现有六条）</h3>
+  <div id="bullet_cands"></div>
+  <p style="font-size:13px;color:var(--ink3)">改动逻辑：去掉 emoji（Walmart 前台渲染不稳定），改用 <code>[标签]</code> 纯文本；第 1、2 条给材质与尺码（权重最高），第 3 条单独立出「肩扣」这把唯一差异化细节，第 4 条塞场景词（business casual / office / teacher / travel），第 6 条给尺码引导降低退货。</p>
+
+  <h3>③ 描述（shortDescription）补词要点</h3>
+  <ul class="tight">
+    <li>首段前 30 词植入头部词：<b>plus size long sleeve tunic blouse</b> / <b>fall business casual top</b> / <b>ribbed knit</b>。<br>
+      现开篇为「Comfortable style for workdays and weekends.」——情感开场但零关键词，建议改为「This PINKSIR plus size long sleeve tunic blouse is an easy fall and business casual layer…」。</li>
+    <li>补 3 个高频场景词：<b>teacher outfits</b>、<b>office</b>、<b>capsule wardrobe</b>（后者在词库中出现 16 次）。</li>
+    <li>补尺码段：明确「1X–5X 大码专版，覆盖臀线」，并保留现有「请对照 PINKSIR 尺码表下单」的退货抑制话术。</li>
+    <li>如面料确有再生涤纶或取得 OEKO-TEX，务必写进描述第 2 段（这是竞品唯一的材质级护城河，没有就强调「罗纹针织 + 不起球 + 不厚重」）。</li>
+    <li>整体保持现有四段式结构，不要推倒重写——现描述已达同类中上水平。</li>
+  </ul>
+
+  <h3>④ 属性补全清单（<span id="fill_count"></span> 项，直接补进上传表）</h3>
+  <div class="scroll">
+    <table>
+      <thead><tr>
+        <th style="width:172px">字段</th><th style="width:132px">属性 ID</th>
+        <th style="width:150px">建议值</th><th>为什么填</th>
+      </tr></thead>
+      <tbody id="fill_tbody"></tbody>
+    </table>
+  </div>
+  <p style="font-size:12.5px;color:var(--ink3)">上表为「对成人女装适用但当前为空」的字段；另有少量字段属可选或需业务侧确认（如认证、法律标签），未列入。</p>
+
+  <h3>⑤ 价格与促销</h3>
+  <table>
+    <thead><tr><th style="width:150px">动作</th><th style="width:130px">建议值</th><th>理由</th></tr></thead>
+    <tbody>
+      <tr><td>售价</td><td><b>$19.99 保持</b></td><td>正好卡在 10% 佣金档上限之下；降到 $15–20 区间不会拿回佣金差，降到 $14.99 虽降为 5% 档但毛利损失大于佣金节省。</td></tr>
+      <tr><td>MSRP</td><td>$29.99</td><td>给出原价锚点，让 $19.99 呈现为「折扣价」，缓解与 $9.99 竞品的直观比价。</td></tr>
+      <tr><td>最低 / 最高售价守卫</td><td>$18.99 / $24.99</td><td>避免促销互踩与自动比价被压到 $9.99 带。</td></tr>
+      <tr><td>Repricer</td><td>No Repricing</td><td>显式声明，不进入自动跟价池。</td></tr>
+    </tbody>
+  </table>
+
+  <h3>⑥ 视觉与富媒体</h3>
+  <ul class="tight">
+    <li><b>视频</b>（缺失，最高优先）：15–30s，产品平铺 → 面料拉伸 → 肩扣特写 → 模特上身转身 → 尺码表。</li>
+    <li><b>副图顺序</b>建议：正面平铺 → 背面平铺 → 面料罗纹微距 → 肩扣细节特写 → 模特上身（大码体型）→ 尺码对照表 → office/teacher 场景 → 四色色卡。</li>
+    <li><b>规格</b>：现有副图 6 张 PNG + 2 张 JPEG，模板建议统一 JPEG、2200×2200、300ppi、1:1、≤5MB —— 上线前逐张核对。</li>
+    <li><b>Rich Media / A+ 内容</b>：竞品有 A+ 与视频；我方可用「材质对比 + 尺码指南 + 场景搭配 + 四色展示」四模块补齐。</li>
+  </ul>
+
+  <h3>⑦ 变体与评价</h3>
+  <ul class="tight">
+    <li><b>修变体轴</b>（同 P0-1）：<code>variantAttributeNames</code> 第二项 → <code>clothingSize</code>。</li>
+    <li><b>扩色</b>：竞品讲 28–30 色，我方 4 色。若供应链允许，优先补 <b>Cream / Beige 一类的浅色</b>与 <b>酒红/焦糖</b>（词库中 cream 18、burgundy 2、caramel 3、camel 1、mustard 1 均有搜索）。</li>
+    <li><b>评价冷启动</b>：竞品 5K 评价是最大壁垒。只走合规路径（Walmart 官方评价加速项目 / 站内促销 / 包裹内引导卡），<b>不做刷评</b>。</li>
+  </ul>
+</section>
+
+<section>
+  <h2><span class="idx">6</span>执行清单</h2>
+  <p class="sub">按优先级排，P0 当天可改完，P1 一周内，P2 随下次内容迭代。</p>
+  <table>
+    <thead><tr>
+      <th style="width:60px">级别</th><th style="width:190px">事项</th>
+      <th style="width:210px">落点</th><th>验收标准</th>
+    </tr></thead>
+    <tbody id="todo_tbody"></tbody>
+  </table>
+</section>
+
+<section>
+  <h2><span class="idx">7</span>口径与红线</h2>
+  <ul class="tight">
+    <li><b>数据口径</b>：自有数据来自 Walmart <code>MP_WFS_ITEM</code> 上传模板 v5.0.20260803（Product Content And Site Exp 表，20 个 SKU）。竞品数据来自 Amazon：卖家精灵 ReverseASIN（ASIN B0F93MLVNZ，2,000 词版本，导出可见 35 个流量词）与 Amazon AI 买家问答抓取。</li>
+    <li><b>跨平台提醒</b>：Amazon 的搜索量、标题密度、建议竞价不能直接套到 Walmart。本报告只把它们当作<b>需求方向与词族结构</b>的参考，实际投放前需用 Walmart 站内搜索建议与广告报表复核。</li>
+    <li><b>不做的事</b>：不使用 Amazon 平台专属词（<code>amazon choice</code> / <code>amazon capsule wardrobe</code>）、不抢他人品牌词、不刷评、不为排名虚标认证（如无 OEKO-TEX 不得在描述中提及）。</li>
+    <li><b>需线上复核的一处</b>：P0-1 变体轴问题请在上线后打开线上 PDP 确认尺码选择器是否正常出现 1X–5X 五档；若原本显示正常，说明 Walmart 侧会剔除常量轴，则此条降级为「建议规范化」。</li>
+  </ul>
+</section>
+
+<footer>
+  PNK366085 Listing 优化方案 · 生成于 2026-09-16 · 数据源：Walmart WFS 上传表 + 卖家精灵 ReverseASIN + Amazon AI 问答<br>
+  本报告为离线单文件，图表已内联，可直接归档或转发。
+</footer>
+
+</div>
+
+<script>/*__ECHARTS__*/</script>
+<script>
+const D = __PAYLOAD__;
+
+/* ---------- KPI cards ---------- */
+const kpi=(l,v,d,cls)=>`<div class="kpi"><div class="l">${l}</div><div class="v ${cls||''}">${v}</div><div class="d">${d||''}</div></div>`;
+const worstKw = D.keywords.filter(k=>!k.amz).sort((a,b)=>(b.vol||0)-(a.vol||0))[0];
+document.getElementById('kpis').innerHTML = [
+  kpi('适用属性覆盖', D.attr.filled+' / '+D.attr.total, '待补 '+D.attr.empty+' 项 · 另有 '+D.attr.na+' 项不适用', 'amber'),
+  kpi('标题长度', D.title.len+' / 100', '还剩 '+(100-D.title.len)+' 字符未用', 'amber'),
+  kpi('变体数', D.colors.length+' 色 × '+D.sizes.length+' 码', '轴绑定异常，尺码可能不可选', 'red'),
+  kpi('售价 vs 竞品主力', '$'+D.ownPrice+' vs $9.99', '竞品 5K 评价 / 4.4★', 'red'),
+  kpi('最大机会词', worstKw ? worstKw.w.split(' ').slice(0,4).join(' ') : '-', worstKw ? '月搜 '+(worstKw.vol||0).toLocaleString()+' · 标题密度 '+(worstKw.density||0) : '', 'green'),
+].join('');
+
+/* ---------- chart: attribute coverage ---------- */
+const c1=echarts.init(document.getElementById('c_attr'));
+c1.setOption({
+  tooltip:{trigger:'item'},
+  legend:{bottom:0,itemWidth:10,itemHeight:10,textStyle:{fontSize:12,color:'#6b7280'}},
+  series:[{
+    type:'pie', radius:['52%','74%'], center:['50%','45%'], avoidLabelOverlap:true,
+    itemStyle:{borderColor:'#fff',borderWidth:2},
+    label:{formatter:'{b}\n{c}',fontSize:12,color:'#3b4048'},
+    data:[
+      {value:D.attr.filled, name:'已填', itemStyle:{color:'#2f9e6b'}},
+      {value:D.attr.empty,  name:'待补', itemStyle:{color:'#c98a20'}},
+      {value:D.attr.na,     name:'不适用', itemStyle:{color:'#c9ccd6'}}
+    ]
+  }]
+});
+
+/* ---------- chart: title length ---------- */
+const c2=echarts.init(document.getElementById('c_title'));
+c2.setOption({
+  grid:{left:10,right:24,top:20,bottom:26,containLabel:true},
+  tooltip:{trigger:'axis',axisPointer:{type:'shadow'}},
+  xAxis:{type:'value',max:100,axisLabel:{color:'#6b7280'},splitLine:{lineStyle:{color:'#eef0f5'}}},
+  yAxis:{type:'category',data:['PNK366085 现状','竞品 AUTOMET','Walmart 建议上限','Walmart 硬上限'],
+    axisLabel:{color:'#3b4048',fontSize:12},axisLine:{lineStyle:{color:'#e6e8ee'}}},
+  series:[{
+    type:'bar', barWidth:18,
+    data:[
+      {value:D.title.len, itemStyle:{color:'#d9738f'}},
+      {value:126, itemStyle:{color:'#8f96a8'}},
+      {value:90, itemStyle:{color:'#c98a20'}},
+      {value:100, itemStyle:{color:'#c9484f'}}
+    ],
+    label:{show:true,position:'right',formatter:'{c}',color:'#3b4048',fontSize:12}
+  }]
+});
+
+/* ---------- chart: price x rating ---------- */
+const cs = D.compSet.slice();
+cs.push({asin:'PNK366085',title:'PINKSIR（我方）',price:D.ownPrice,reviews:'0',rating:null,self:true});
+const c3=echarts.init(document.getElementById('c_price'));
+c3.setOption({
+  grid:{left:10,right:20,top:30,bottom:30,containLabel:true},
+  tooltip:{trigger:'axis',axisPointer:{type:'shadow'},
+    formatter:p=>{const d=cs[p[0].dataIndex];return `${d.asin}<br>价格 $${d.price}<br>评分 ${d.rating||'-'} · 评价 ${d.reviews}`;}},
+  xAxis:{type:'category',data:cs.map(d=>d.asin),axisLabel:{color:'#6b7280',fontSize:11,rotate:28},
+    axisLine:{lineStyle:{color:'#e6e8ee'}}},
+  yAxis:[
+    {type:'value',name:'价格 $',axisLabel:{color:'#6b7280'},splitLine:{lineStyle:{color:'#eef0f5'}}},
+    {type:'value',name:'评分',min:3.5,max:5,axisLabel:{color:'#6b7280'},splitLine:{show:false}}
+  ],
+  series:[
+    {name:'价格',type:'bar',barWidth:24,data:cs.map(d=>({value:d.price,
+      itemStyle:{color:d.self?'#d9738f':'#c9ccd6'}})),
+      label:{show:true,position:'top',formatter:'${c}',color:'#3b4048',fontSize:11}},
+    {name:'评分',type:'line',yAxisIndex:1,symbolSize:8,data:cs.map(d=>d.rating),
+      itemStyle:{color:'#4a6fa5'},lineStyle:{width:2}}
+  ]
+});
+
+/* ---------- chart: word frequency ---------- */
+const wf = D.wordFreq.slice(0,30);
+const ownText = (D.title.text+' '+D.bullets.join(' ')).toLowerCase();
+const c4=echarts.init(document.getElementById('c_words'));
+c4.setOption({
+  grid:{left:10,right:44,top:14,bottom:20,containLabel:true},
+  tooltip:{trigger:'axis',axisPointer:{type:'shadow'},
+    formatter:p=>`${p[0].name}<br>竞品词库出现 ${p[0].value} 次<br>${p[0].data.hit?'我方标题/五点已含':'我方标题/五点未含'}`},
+  xAxis:{type:'value',axisLabel:{color:'#6b7280'},splitLine:{lineStyle:{color:'#eef0f5'}}},
+  yAxis:{type:'category',inverse:true,data:wf.map(w=>w[0]),
+    axisLabel:{color:'#3b4048',fontSize:12},axisLine:{lineStyle:{color:'#e6e8ee'}}},
+  series:[{
+    type:'bar',barWidth:13,
+    data:wf.map(w=>({value:w[1],hit:ownText.includes(w[0]),
+      itemStyle:{color:ownText.includes(w[0])?'#d9738f':'#c9ccd6'}})),
+    label:{show:true,position:'right',color:'#6b7280',fontSize:11}
+  }]
+});
+
+/* ---------- keyword table ---------- */
+const kws = D.keywords.filter(k=>!k.amz).sort((a,b)=>(b.vol||0)-(a.vol||0));
+function advice(k){
+  if(k.amz) return '忽略（平台专属/导航词）';
+  if(k.own && k.comp) return '已覆盖，保持';
+  if(k.own) return '已覆盖，可移到标题提权';
+  if((k.vol||0)>=3000) return '标题必收（高量低密度）';
+  if((k.products||0)<=1000) return '五点/描述收词（低竞争）';
+  if((k.vol||0)>=300) return '五点收词';
+  return '长尾词，描述覆盖即可';
+}
+document.getElementById('kw_tbody').innerHTML = kws.map(k=>`
+  <tr>
+    <td><b>${k.w}</b></td>
+    <td style="color:var(--ink3)">${k.cn||'-'}</td>
+    <td class="num">${k.vol?k.vol.toLocaleString():'-'}</td>
+    <td class="num">${k.density!==null?k.density:'-'}</td>
+    <td class="num">${k.products?k.products.toLocaleString():'-'}</td>
+    <td class="num">${k.ratio!==null?k.ratio:'-'}</td>
+    <td style="white-space:nowrap">${k.ppc||'-'}</td>
+    <td class="num">${k.rank||'-'}</td>
+    <td>${k.own?'<span class="pill ok">已覆盖</span>':'<span class="pill mut">未覆盖</span>'}</td>
+    <td>${advice(k)}</td>
+  </tr>`).join('');
+
+/* ---------- title candidates ---------- */
+document.getElementById('title_cands').innerHTML = D.titles.map((t,i)=>`
+  <div class="copybox">
+    <button data-copy>复制</button>
+    <div class="txt">${t.text}</div>
+    <div class="len ${t.len<=100?'good':'bad'}">候选 ${i+1} · ${t.len} 字符 ${t.len<=100?'✓ 在 100 字符上限内':'✗ 超限'}</div>
+  </div>`).join('');
+
+/* ---------- bullet candidates ---------- */
+document.getElementById('bullet_cands').innerHTML = D.newBullets.map((b,i)=>`
+  <div class="copybox">
+    <button data-copy>复制</button>
+    <div class="txt">${b}</div>
+    <div class="len">第 ${i+1} 条 · ${b.length} 字符</div>
+  </div>`).join('');
+
+/* ---------- copy buttons (bind after all blocks are rendered) ---------- */
+document.querySelectorAll('.copybox').forEach(box=>{
+  const b=box.querySelector('[data-copy]'), t=box.querySelector('.txt');
+  if(!b||!t) return;
+  b.textContent='复制';
+  b.addEventListener('click',()=>{
+    navigator.clipboard.writeText(t.innerText).then(()=>{
+      const o=b.textContent;b.textContent='已复制';setTimeout(()=>b.textContent=o,1200);
+    }).catch(()=>{});
+  });
+});
+
+/* ---------- QA table ---------- */
+const qaMap = [
+  ['what are the care instructions?','冷水机洗 + 低温烘干/平铺晾干 + 抗皱抗缩，并主动引导「如何防起球」',
+   '我方护理已写进描述第 4 段，但<b>没写进 Key Features</b>；建议把它作为第 6 条独立呈现'],
+  ['is it good for layering?','修身圆领可伏贴于西装/毛衣之下、轻量透气、平滑针织垂坠好；顾客常一次买多色当打底',
+   '「Layer Friendly」应单列成一条五点，并点明可under 开衫/blazer/马甲'],
+  ['compare with similar','把自己放进「同价最超值 / 相似但更精致 / 更高阶」三档里定位',
+   '我方需在描述里明确「比 $9.99 涤纶款厚实、比羊毛款好打理」的差异定位'],
+  ['why you might like this','舒适柔软、可通勤、易叠穿、OEKO-TEX + Climate Pledge 环保背书、抗皱、30+ 色',
+   '环保背书是竞品护城河；我方若无认证，改打「罗纹针织 + 不厚重 + 大码专版」'],
+  ['does it come in different patterns?','纯色但 28 色，多色复购是主要增长动作',
+   '我方 4 色偏少，建议至少补 2 色浅色系（cream/beige）'],
+];
+document.getElementById('qa_tbody').innerHTML = qaMap.map(r=>`
+  <tr><td><code>${r[0]}</code></td><td>${r[1]}</td><td>${r[2]}</td></tr>`).join('');
+
+/* ---------- fillable attributes ---------- */
+document.getElementById('fill_count').textContent = D.fillable.length;
+document.getElementById('fill_tbody').innerHTML = D.fillable.map(f=>`
+  <tr>
+    <td>${f.label}<div style="color:var(--ink3);font-size:12px">${f.cn}</div></td>
+    <td><code>${f.id}</code></td>
+    <td>${f.val}</td>
+    <td style="color:var(--ink2)">${f.why}</td>
+  </tr>`).join('');
+
+/* ---------- todo ---------- */
+const todos = [
+  ['p0','修变体轴绑定','上传表 <code>variantAttributeNames</code>','第二轴由 clothingSizeGroup 改为 clothingSize；线上 PDP 出现 1X–5X 五档尺码选择'],
+  ['p0','替换标题','上传表 <code>productName</code>','采用候选 1/2/3 之一，长度 95–100 字符，含 fall + business casual + 1X-5X'],
+  ['p0','补齐价格锚','上传表 msrp / min / max price','MSRP 29.99、守卫价 18.99–24.99 生效'],
+  ['p0','补视频 + 重排副图','Seller Center 富媒体','视频上线；8 张副图按转化顺序重排并统一 JPEG 2200×2200'],
+  ['p1','替换六条 Key Features','上传表 <code>keyFeatures</code> ×6','六条全部替换为本报告版本，含肩扣/叠穿/尺码引导'],
+  ['p1','补 24 项属性','上传表对应列','清单内字段全部填上，无遗留空值'],
+  ['p1','描述首段植入头部词','<code>shortDescription</code>','首 30 词含 plus size long sleeve tunic blouse / fall business casual / ribbed knit'],
+  ['p1','上线站内广告词包','Walmart SP 手动','优先 fall clothes for women 2026、ladies fall tops、womens tops fall、plus size womens fall tops'],
+  ['p2','扩色与评价冷启动','选品 + 官方评价项目','至少补 2 个浅色系 SKU；走合规路径累积首批评价'],
+  ['p2','Rich Media / A+ 内容','Seller Center','材质对比 + 尺码指南 + 场景搭配 + 四色展示 四模块上线'],
+];
+document.getElementById('todo_tbody').innerHTML = todos.map(t=>`
+  <tr>
+    <td><span class="pill ${t[0]}">${t[0].toUpperCase()}</span></td>
+    <td><b>${t[1]}</b></td>
+    <td>${t[2]}</td>
+    <td style="color:var(--ink2)">${t[3]}</td>
+  </tr>`).join('');
+
+window.addEventListener('resize',()=>[c1,c2,c3,c4].forEach(c=>c.resize()));
+</script>
+</body>
+</html>

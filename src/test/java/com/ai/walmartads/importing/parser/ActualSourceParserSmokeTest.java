@@ -1,16 +1,11 @@
 package com.ai.walmartads.importing.parser;
 
 import com.ai.walmartads.config.WalmartAdsProperties;
-import com.ai.walmartads.importing.application.DeliveryFeeCalculator;
 import com.ai.walmartads.importing.application.SourceFileCandidate;
 import com.ai.walmartads.importing.application.SourceScanner;
-import com.ai.walmartads.importing.domain.AdReportKind;
 import com.ai.walmartads.importing.domain.ImportBatch;
 import com.ai.walmartads.importing.domain.ImportFile;
 import com.ai.walmartads.importing.domain.ImportFileType;
-import com.ai.walmartads.importing.domain.ProductionOrderRecord;
-import com.ai.walmartads.importing.repository.InventorySnapshotRepository;
-import com.ai.walmartads.importing.repository.SkuMappingRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 
@@ -20,14 +15,10 @@ import java.util.EnumMap;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
 
 class ActualSourceParserSmokeTest {
 
@@ -42,41 +33,20 @@ class ActualSourceParserSmokeTest {
                 DATA_ROOT.resolve("archive"),
                 null,
                 null,
-                null,
                 null
         ));
         List<SourceFileCandidate> candidates = scanner.scan();
         Map<ImportFileType, SourceFileCandidate> sampleByType = new EnumMap<>(ImportFileType.class);
         candidates.forEach(candidate -> sampleByType.putIfAbsent(candidate.fileType(), candidate));
 
-        Set<ImportFileType> expectedTypes = EnumSet.of(
-                ImportFileType.ORDER,
-                ImportFileType.AD_REPORT,
-                ImportFileType.INVENTORY,
-                ImportFileType.PRODUCT,
-                ImportFileType.ITEM_REPORT
-        );
+        // date/ 日目录整目录已退役：ORDER（PO_Data 每日订单明细）、INVENTORY（inventory.xlsx 库存报表）
+        // 与广告 CSV / 活动快照的扫描入口均已停用（领星 MCP 接管），正常扫描不会产出这几类候选。
+        Set<ImportFileType> expectedTypes = EnumSet.of(ImportFileType.PRODUCT);
         assertThat(sampleByType.keySet()).containsAll(expectedTypes);
-        assertThat(candidates)
-                .extracting(SourceFileCandidate::reportKind)
-                .contains(
-                        AdReportKind.ITEM_PERFORMANCE,
-                        AdReportKind.ITEM_KEYWORD_PERFORMANCE,
-                        AdReportKind.KEYWORD_PERFORMANCE
-                );
 
         JsonPayloadWriter json = new JsonPayloadWriter(new ObjectMapper());
-        InventorySnapshotRepository inventoryRepository = mock(InventorySnapshotRepository.class);
-        when(inventoryRepository.findLatestByItemId(anyString())).thenReturn(Optional.empty());
-        AdCsvParser adParser = new AdCsvParser(
-                json,
-                new SkuResolver(inventoryRepository, mock(SkuMappingRepository.class))
-        );
-        OrderWorkbookParser orderParser = new OrderWorkbookParser(json);
-        InventoryWorkbookParser inventoryParser = new InventoryWorkbookParser(json);
-        WeeklyInventoryWorkbookParser weeklyInventoryParser = new WeeklyInventoryWorkbookParser(json);
         ProductWorkbookParser productParser = new ProductWorkbookParser(json);
-        ItemReportCsvParser itemReportParser = new ItemReportCsvParser(json, new DeliveryFeeCalculator());
+        WalmartListingParser walmartListingParser = new WalmartListingParser();
         DemandForecastParser demandForecastParser = new DemandForecastParser(json);
         DomesticInventoryWorkbookParser domesticInventoryParser = new DomesticInventoryWorkbookParser(json);
         ProductionOrderParser productionOrderParser = new ProductionOrderParser(json);
@@ -89,12 +59,11 @@ class ActualSourceParserSmokeTest {
             }
             ImportFile importFile = importFile(candidate);
             ParsedRows<?> parsed = switch (candidate.fileType()) {
-                case ORDER -> orderParser.parse(candidate.path(), importFile);
-                case AD_REPORT, AD_AUTO, AD_MANUAL -> adParser.parse(candidate.path(), importFile);
-                case INVENTORY -> inventoryParser.parse(candidate.path(), importFile);
-                case WEEKLY_INVENTORY -> weeklyInventoryParser.parse(candidate.path(), importFile);
+                case ORDER -> throw new IllegalStateException("PO_Data 扫描入口已停用（领星 MCP 接管）");
+                case INVENTORY -> throw new IllegalStateException("inventory.xlsx 库存报表扫描入口已停用（领星 MCP 接管）");
+                case AD_REPORT, AD_AUTO, AD_MANUAL -> throw new IllegalStateException("广告 CSV 解析器已下线（领星 MCP 接管）");
                 case PRODUCT -> productParser.parse(candidate.path(), importFile);
-                case ITEM_REPORT -> itemReportParser.parse(candidate.path(), importFile);
+                case WALMART_LISTING -> walmartListingParser.parse(candidate.path(), importFile);
                 case DEMAND_FORECAST -> demandForecastParser.parse(candidate.path(), importFile);
                 case DOMESTIC_INVENTORY -> domesticInventoryParser.parse(candidate.path(), importFile);
                 case PRODUCTION_ORDER -> productionOrderParser.parse(candidate.path(), importFile);
@@ -103,15 +72,17 @@ class ActualSourceParserSmokeTest {
                 case HISTORY -> throw new IllegalStateException("Two-argument test configuration does not scan history");
                 case SKU_MAPPING -> throw new IllegalStateException("Test configuration does not scan SKU mappings");
                 case RETURN_ORDER -> throw new IllegalStateException("Dedicated return parser test covers return workbooks");
+                case CAMPAIGN_SNAPSHOT -> throw new IllegalStateException("广告活动快照扫描入口已停用（领星 MCP 接管）");
+                case WEEKLY_INVENTORY -> throw new IllegalStateException("沃尔玛PNK周报扫描链路已删除（2026-09-23）");
+                // 领星订单由 MCP 同步直接写库，不存在可解析的样本文件，故永不走这条分支。
+                case LINGXING_ORDER -> throw new IllegalStateException("LingXing order rows are synced via MCP, not parsed from files");
             };
             assertThat(parsed.sourceRowCount())
                     .as("源文件应有数据行：%s", candidate.path())
                     .isPositive();
-            if (candidate.fileType() != ImportFileType.ORDER) {
-                assertThat(parsed.rows())
-                        .as("报表应解析出有效记录：%s", candidate.path())
-                        .isNotEmpty();
-            }
+            assertThat(parsed.rows())
+                    .as("报表应解析出有效记录：%s", candidate.path())
+                    .isNotEmpty();
         }
     }
 

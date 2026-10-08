@@ -10,7 +10,7 @@ import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "wm_ads_profit_assumption")
-public class ProfitAssumption {
+public class ProfitAssumption extends com.ai.walmartads.workspace.WorkspaceOwnedEntity {
 
     @Id
     @Column(name = "parent_sku", length = 80)
@@ -35,6 +35,14 @@ public class ProfitAssumption {
     @Column(columnDefinition = "decimal(10,6)")
     /** 退款率（可空，0~1） */
     private BigDecimal refundRate;
+
+    @Column(name = "prefer_manual_refund_rate", nullable = false)
+    /** 是否优先采用手工退款率；默认使用款号累计总退款率 */
+    private boolean preferManualRefundRate;
+
+    @Column(columnDefinition = "decimal(18,6)")
+    /** 手工配送费（可空，整款级兜底：产品库无 ItemReport 重量反算后改由此值承担） */
+    private BigDecimal deliveryFee;
 
     @Column(nullable = false)
     /** 创建时间 */
@@ -96,6 +104,22 @@ public class ProfitAssumption {
 
     public void setRefundRate(BigDecimal refundRate) {
         this.refundRate = refundRate;
+    }
+
+    public boolean isPreferManualRefundRate() {
+        return preferManualRefundRate;
+    }
+
+    public void setPreferManualRefundRate(boolean preferManualRefundRate) {
+        this.preferManualRefundRate = preferManualRefundRate;
+    }
+
+    public BigDecimal getDeliveryFee() {
+        return deliveryFee;
+    }
+
+    public void setDeliveryFee(BigDecimal deliveryFee) {
+        this.deliveryFee = deliveryFee;
     }
 
     public LocalDateTime getCreatedAt() {

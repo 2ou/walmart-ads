@@ -1,5 +1,8 @@
 package com.ai.walmartads.sales.application;
 
+import com.ai.walmartads.common.UsBusinessDate;
+import com.ai.walmartads.common.WalmartImageUrl;
+import com.ai.walmartads.inventory.application.TransitInventoryService;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -27,9 +30,11 @@ public class SalesDataService {
     private static final BigDecimal ZERO = BigDecimal.ZERO;
 
     private final NamedParameterJdbcTemplate jdbc;
+    private final TransitInventoryService transitInventoryService;
 
-    public SalesDataService(NamedParameterJdbcTemplate jdbc) {
+    public SalesDataService(NamedParameterJdbcTemplate jdbc, TransitInventoryService transitInventoryService) {
         this.jdbc = jdbc;
+        this.transitInventoryService = transitInventoryService;
     }
 
     public SalesPayload load(int requestedDays) {
@@ -44,15 +49,13 @@ public class SalesDataService {
         Map<String, Object> bounds = jdbc.queryForMap("""
                 select min(orders.order_date) as first_date,
                        max(orders.order_date) as latest_date
-                  from wm_ads_order_record orders
+                  from wm_ads_order_record_valid orders
                   join wm_ads_import_file file
                     on file.id = orders.import_file_id and file.active = true
                 """, new MapSqlParameterSource());
         LocalDate firstDate = localDate(bounds.get("first_date"));
         LocalDate latestDate = localDate(bounds.get("latest_date"));
-        if (latestDate == null) {
-            latestDate = LocalDate.now();
-        }
+        latestDate = UsBusinessDate.capToVisibleSalesDate(latestDate);
 
         LocalDate currentStart = latestDate.minusDays(days - 1L);
         LocalDate currentEnd = latestDate;
@@ -61,7 +64,11 @@ public class SalesDataService {
                 throw new IllegalArgumentException("开始日期不能晚于结束日期。");
             }
             currentStart = requestedStart;
-            currentEnd = requestedEnd;
+            currentEnd = UsBusinessDate.capToVisibleSalesDate(requestedEnd);
+            if (currentStart.isAfter(currentEnd)) {
+                throw new IllegalArgumentException("当前可查看的最新销售日期为 " + currentEnd
+                        + "（北京时间 16:00 后开放当日）。");
+            }
             days = Math.toIntExact(ChronoUnit.DAYS.between(currentStart, currentEnd) + 1);
         }
         int analysisDays = days;
@@ -83,10 +90,15 @@ public class SalesDataService {
         InventorySnapshotData inventorySnapshot = loadLatestInventory();
         Map<String, InventoryInfo> inventory = inventorySnapshot.rows();
 
+        // 有效款口径：以产品库（current_version=true）为准。产品库非空时，库存/订单集
+        // 里不属于产品库的 SKU 一律剔除（它们会经 buildSkuRow 兜底成“款”显示）；
+        // 产品库为空时兜底放行全部，避免误杀成空页。
         Set<String> skuUniverse = new LinkedHashSet<>();
         skuUniverse.addAll(products.keySet());
-        skuUniverse.addAll(inventory.keySet());
-        skuUniverse.addAll(sales.keySet());
+        if (products.isEmpty()) {
+            skuUniverse.addAll(inventory.keySet());
+            skuUniverse.addAll(sales.keySet());
+        }
 
         double totalUnits = daily.stream().mapToDouble(DailyRow::units).sum();
         double totalRevenue = daily.stream().mapToDouble(DailyRow::revenue).sum();
@@ -164,13 +176,13 @@ public class SalesDataService {
         MapSqlParameterSource params = new MapSqlParameterSource()
                 .addValue("start", start)
                 .addValue("end", end);
-        Map<LocalDate, DailyRow> values = new HashMap<>();
+        Map<LocalDate, double[]> salesValues = new HashMap<>();
         jdbc.queryForList("""
                 select orders.order_date as sales_date,
                        sum(orders.quantity) as units,
                        sum(orders.quantity * orders.item_cost) as revenue,
                        count(distinct orders.order_number) as order_count
-                  from wm_ads_order_record orders
+                  from wm_ads_order_record_valid orders
                   join wm_ads_import_file file
                     on file.id = orders.import_file_id and file.active = true
                  where orders.order_date between :start and :end
@@ -178,19 +190,44 @@ public class SalesDataService {
                  order by orders.order_date
                 """, params).forEach(row -> {
             LocalDate date = localDate(row.get("sales_date"));
-            double units = number(row, "units");
-            double revenue = number(row, "revenue");
-            values.put(date, new DailyRow(
-                    date,
-                    round(units),
-                    round(revenue),
-                    longNumber(row, "order_count"),
-                    round(divide(revenue, units))
-            ));
+            salesValues.put(date, new double[]{
+                    number(row, "units"),
+                    number(row, "revenue"),
+                    longNumber(row, "order_count")
+            });
+        });
+        // 广告费 / 广告归因销售额按日汇总（领星 AD_ITEM 日事实），供销量趋势悬停展示
+        Map<LocalDate, double[]> adValues = new HashMap<>();
+        jdbc.queryForList("""
+                select ads.report_date as ad_date,
+                       sum(ads.ad_spend) as spend,
+                       sum(ads.attributed_sales) as ad_sales
+                  from wm_ads_lx_ad_report ads
+                 where ads.report_level = 'AD_ITEM'
+                   and ads.report_date between :start and :end
+                 group by ads.report_date
+                """, params).forEach(row -> {
+            LocalDate date = localDate(row.get("ad_date"));
+            adValues.put(date, new double[]{number(row, "spend"), number(row, "ad_sales")});
         });
         List<DailyRow> result = new ArrayList<>();
         for (LocalDate date = start; !date.isAfter(end); date = date.plusDays(1)) {
-            result.add(values.getOrDefault(date, new DailyRow(date, 0, 0, 0, 0)));
+            double[] sales = salesValues.get(date);
+            double units = sales == null ? 0 : round(sales[0]);
+            double revenue = sales == null ? 0 : round(sales[1]);
+            long orderCount = sales == null ? 0L : (long) sales[2];
+            double[] ads = adValues.get(date);
+            double adSpend = ads == null ? 0 : round(ads[0]);
+            double adSales = ads == null ? 0 : round(ads[1]);
+            result.add(new DailyRow(
+                    date,
+                    units,
+                    revenue,
+                    orderCount,
+                    round(divide(revenue, units)),
+                    adSpend,
+                    round(divide(adSales, adSpend))
+            ));
         }
         return result;
     }
@@ -213,7 +250,7 @@ public class SalesDataService {
                                 then orders.quantity * orders.item_cost else 0 end) as previous_revenue,
                        count(distinct case when orders.order_date between :previousStart and :previousEnd
                                            then orders.order_number else null end) as previous_orders
-                  from wm_ads_order_record orders
+                  from wm_ads_order_record_valid orders
                   join wm_ads_import_file file
                     on file.id = orders.import_file_id and file.active = true
                  where orders.order_date between :previousStart and :latestDate
@@ -255,7 +292,7 @@ public class SalesDataService {
                     sku,
                     text(row, "parent_sku"),
                     text(row, "product_name"),
-                    text(row, "image_url"),
+                    WalmartImageUrl.thumb(text(row, "image_url")),
                     text(row, "color"),
                     text(row, "size")
             ));
@@ -266,26 +303,21 @@ public class SalesDataService {
     private InventorySnapshotData loadLatestInventory() {
         Map<String, Object> bounds = jdbc.queryForMap("""
                 select max(inventory.snapshot_at) as snapshot_at
-                  from wm_ads_inventory_snapshot inventory
-                  join wm_ads_import_file file
-                    on file.id = inventory.import_file_id and file.active = true
+                  from wm_ads_inventory_unified inventory
                 """, new MapSqlParameterSource());
         LocalDateTime latestSnapshot = localDateTime(bounds.get("snapshot_at"));
         if (latestSnapshot == null) {
             return new InventorySnapshotData(null, Map.of());
         }
+        Map<String, Double> transitBySku = transitInventoryService.load().unitsBySku();
         Map<String, InventoryInfo> result = new LinkedHashMap<>();
         jdbc.queryForList("""
                 select inventory.sku as sku,
                        max(inventory.parent_sku) as parent_sku,
                        max(inventory.item_id) as item_id,
                        max(inventory.item_name) as item_name,
-                       sum(inventory.available_units) as available_units,
-                       sum(inventory.reserved_units) as reserved_units,
-                       sum(inventory.inbound_units) as transit_units
-                  from wm_ads_inventory_snapshot inventory
-                  join wm_ads_import_file file
-                    on file.id = inventory.import_file_id and file.active = true
+                       sum(inventory.available_units) as available_units
+                  from wm_ads_inventory_unified inventory
                  where inventory.snapshot_at = :snapshotAt
                  group by inventory.sku
                 """, new MapSqlParameterSource("snapshotAt", latestSnapshot)).forEach(row -> {
@@ -296,8 +328,8 @@ public class SalesDataService {
                     text(row, "item_id"),
                     text(row, "item_name"),
                     number(row, "available_units"),
-                    number(row, "reserved_units"),
-                    number(row, "transit_units")
+                    0,
+                    transitBySku.getOrDefault(sku, 0.0)
             ));
         });
         return new InventorySnapshotData(latestSnapshot, result);
@@ -531,7 +563,9 @@ public class SalesDataService {
             double units,
             double revenue,
             long orders,
-            double averageUnitPrice
+            double averageUnitPrice,
+            double adSpend,
+            double roas
     ) {
     }
 

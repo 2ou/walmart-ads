@@ -2,25 +2,24 @@ package com.ai.walmartads.returns.application;
 
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.RecordComponent;
+import java.util.Arrays;
 import java.util.List;
-import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 class ReturnAnalyticsServiceTest {
 
     @Test
-    void aggregatesOnlyImportedMonthsUsingWeightedTotals() {
-        List<ReturnAnalyticsService.MonthlyRow> trend = List.of(
-                month("2026-02", 20, 10, 100, 200, 2_000),
-                month("2026-03", 30, 15, 50, 150, 1_000),
-                month("2026-07", 90, 80, 100, 900, 1_500)
-        );
-
+    void aggregatesDirectTotalsForTheImportedReportRange() {
         ReturnAnalyticsService.AccountSummary result =
                 ReturnAnalyticsService.accountSummary(
                         List.of("2026-03", "2026-02"),
-                        trend
+                        50,
+                        25,
+                        150,
+                        350,
+                        3_000
                 );
 
         assertThat(result.firstMonth()).isEqualTo("2026-02");
@@ -39,7 +38,7 @@ class ReturnAnalyticsServiceTest {
     @Test
     void returnsZeroSummaryWhenNoImportedMonthsExist() {
         ReturnAnalyticsService.AccountSummary result =
-                ReturnAnalyticsService.accountSummary(List.of(), List.of());
+                ReturnAnalyticsService.accountSummary(List.of(), 0, 0, 0, 0, 0);
 
         assertThat(result.monthCount()).isZero();
         assertThat(result.firstMonth()).isNull();
@@ -48,69 +47,17 @@ class ReturnAnalyticsServiceTest {
     }
 
     @Test
-    void calculatesWeightedParentTotalsFromCompleteImportedMonths() {
-        List<ReturnAnalyticsService.ParentMonthlyRow> trend = List.of(
-                parentMonth("PNK100", "2026-02", 10, 100),
-                parentMonth("PNK100", "2026-03", 20, 50),
-                parentMonth("PNK100", "2026-07", 30, 30),
-                parentMonth("PNK200", "2026-03", 4, 40)
-        );
-
-        Map<String, ReturnAnalyticsService.ParentTotal> result =
-                ReturnAnalyticsService.parentTotals(
-                        List.of("2026-02", "2026-03"),
-                        trend
-                );
-
-        assertThat(result.get("PNK100").completedUnits()).isEqualTo(30);
-        assertThat(result.get("PNK100").soldUnits()).isEqualTo(150);
-        assertThat(result.get("PNK100").completedRate()).isEqualTo(0.2);
-        assertThat(result.get("PNK200").completedRate()).isEqualTo(0.1);
+    void classifiesRiskFromCompletedRefundRateRatherThanRequestedUnits() {
+        assertThat(ReturnAnalyticsService.refundRisk(7, 100)).isEqualTo("NORMAL");
+        assertThat(ReturnAnalyticsService.refundRisk(8, 100)).isEqualTo("WATCH");
+        assertThat(ReturnAnalyticsService.refundRisk(15, 100)).isEqualTo("HIGH");
+        assertThat(ReturnAnalyticsService.refundRisk(1, 0)).isEqualTo("NO_SALES_DENOMINATOR");
     }
 
-    private static ReturnAnalyticsService.MonthlyRow month(
-            String month,
-            double requested,
-            double completed,
-            double sold,
-            double refundAmount,
-            double salesRevenue
-    ) {
-        return new ReturnAnalyticsService.MonthlyRow(
-                month,
-                requested,
-                completed,
-                0,
-                0,
-                sold,
-                sold == 0 ? 0 : requested / sold,
-                sold == 0 ? 0 : completed / sold,
-                refundAmount,
-                salesRevenue,
-                salesRevenue == 0 ? 0 : refundAmount / salesRevenue
-        );
-    }
-
-    private static ReturnAnalyticsService.ParentMonthlyRow parentMonth(
-            String parentSku,
-            String month,
-            double completed,
-            double sold
-    ) {
-        return new ReturnAnalyticsService.ParentMonthlyRow(
-                parentSku,
-                parentSku,
-                month,
-                completed,
-                completed,
-                0,
-                0,
-                sold,
-                sold == 0 ? 0 : completed / sold,
-                sold == 0 ? 0 : completed / sold,
-                0,
-                0,
-                0
-        );
+    @Test
+    void parentRowsExposeCumulativeRiskSeparatelyFromMonthlyRisk() {
+        assertThat(Arrays.stream(ReturnAnalyticsService.ParentRow.class.getRecordComponents())
+                .map(RecordComponent::getName))
+                .contains("risk", "totalRisk");
     }
 }

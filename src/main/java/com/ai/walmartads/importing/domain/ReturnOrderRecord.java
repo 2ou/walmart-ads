@@ -17,7 +17,7 @@ import java.util.Map;
 
 @Entity
 @Table(name = "wm_ads_return_order")
-public class ReturnOrderRecord {
+public class ReturnOrderRecord extends com.ai.walmartads.workspace.WorkspaceOwnedEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -213,40 +213,41 @@ public class ReturnOrderRecord {
         this.reportMonth = reportMonth;
         this.requestAt = requestAt;
         this.requestDate = requestAt.toLocalDate();
-        this.customerOrderNo = required(values, "CUSTOMER_ORDER_NO");
-        this.poNo = values.get("PO_NO");
-        this.poLineNo = values.get("PO_LINE_NO");
-        this.rmaNo = required(values, "RMA_NO");
-        this.returnOrderLineNo = values.get("RETURN_ORDER_LINE_NO");
-        this.quantity = decimal(values.get("QUANTITY"));
-        this.returnReason = values.get("RETURN_REASON");
-        this.itemId = required(values, "ITEM_ID");
+        // NEW 模板无 ITEM_ID，用 Seller SKU 顶替以满足 NOT NULL 并保持可追溯。
+        this.itemId = sku != null ? sku : required(values, "SELLERSKU");
+        this.customerOrderNo = required(values, "CUSTOMERORDERID");
+        this.poNo = null;
+        this.poLineNo = null;
+        this.rmaNo = required(values, "RMANUMBER");
+        this.returnOrderLineNo = values.get("RMALINENUMBER");
+        this.quantity = decimal(values.get("QTYRETURNED"));
+        this.returnReason = normalizeReason(values.get("RETURNREASON"));
         this.sku = sku;
         this.parentSku = parentSku;
-        this.itemCondition = values.get("CONDITION");
-        this.currentStatus = values.get("CURRENT_STATUS");
+        this.itemCondition = values.get("CONDITIONRESULTLATEST");
+        this.currentStatus = values.get("RETURNINVOICESTATUS");
         this.currentStatusTime = currentStatusTime;
-        this.keepIt = bool(values.get("KEEP_IT"));
-        this.itemName = values.get("ITEM_NAME");
-        this.carrier = values.get("CARRIER");
-        this.trackingNumber = values.get("TRACKING_NUMBER");
-        this.channel = values.get("CHANNEL");
-        this.customerName = values.get("CUSTOMER_NAME");
-        this.customerEmail = values.get("CUSTOMER_EMAIL");
-        this.customerComments = values.get("CUSTOMER_COMMENTS");
-        this.orderAmount = decimal(values.get("ORDER_AMOUNT"));
-        this.returnShippingFee = decimal(values.get("RETURN_SHIPPING_FEE"));
-        this.restockingFee = decimal(values.get("RESTOCKING_FEE"));
-        this.totalRefundAmount = decimal(values.get("TOTAL_REFUND_AMOUNT"));
-        this.sellerOrderNo = values.get("SELLER_ORDER_NO");
-        this.refundMode = values.get("REFUND_MODE");
-        this.refundCoveredBy = values.get("REFUND_COVERED_BY");
-        this.trackingStatus = values.get("TRACKING_STATUS");
-        this.refundStatus = values.get("REFUND_STATUS");
-        this.replacement = bool(values.get("REPLACEMENT"));
-        this.platformType = values.get("PLATFORM_TYPE");
-        this.returnShipFrom = values.get("RETURN_SHIP_FROM");
-        this.returnShipTo = values.get("RETURN_SHIP_TO");
+        this.keepIt = yes(values.get("KEEPITYN"));
+        this.itemName = values.get("ITEMNAMEDESCRIPTION");
+        this.carrier = values.get("RTVCARRIER");
+        this.trackingNumber = values.get("RETURNTRACKINGID");
+        this.channel = values.get("RETURNCHANNEL");
+        this.customerName = null;
+        this.customerEmail = null;
+        this.customerComments = null;
+        this.orderAmount = BigDecimal.ZERO;
+        this.returnShippingFee = decimal(values.get("WFSRETURNPROCESSINGFEE"));
+        this.restockingFee = BigDecimal.ZERO;
+        this.totalRefundAmount = decimal(values.get("REFUNDAMOUNT"));
+        this.sellerOrderNo = null;
+        this.refundMode = null;
+        this.refundCoveredBy = mapFault(values.get("FAULT"));
+        this.trackingStatus = values.get("RETURNDELIVERYTRACKINGSTATUS");
+        this.refundStatus = values.get("RETURNINVOICESTATUS");
+        this.replacement = false;
+        this.platformType = values.get("CROSSBORDERPROGRAMTYPE");
+        this.returnShipFrom = values.get("RETRNSHPFRMCNTRY");
+        this.returnShipTo = values.get("RETRNTOCNTRY");
         this.rawPayload = rawPayload;
         this.createdAt = LocalDateTime.now();
     }
@@ -281,5 +282,37 @@ public class ReturnOrderRecord {
 
     private static boolean bool(String value) {
         return value != null && ("true".equalsIgnoreCase(value.trim()) || "1".equals(value.trim()));
+    }
+
+    /** NEW 模板 Keep-it 列：Y/Yes/1/true 视为留货(keepIt=true)，N/No 视为实退。 */
+    private static boolean yes(String value) {
+        if (value == null) {
+            return false;
+        }
+        String v = value.trim().toUpperCase();
+        return v.equals("Y") || v.equals("YES") || v.equals("1") || v.equals("TRUE");
+    }
+
+    /**
+     * NEW 模板 Fault 列(SELLER/WFS/NA) 映射为退款承担方，
+     * 复用旧口径的 Seller/Walmart 前缀以便 SQL 的 like 'Seller%' / 'Walmart%' 生效。
+     */
+    private static String mapFault(String value) {
+        if (value == null) {
+            return "";
+        }
+        return switch (value.trim().toUpperCase()) {
+            case "SELLER" -> "Seller";
+            case "WFS" -> "Walmart";
+            default -> "";
+        };
+    }
+
+    /** 退货原因归一：转小写、空格转下划线，合并 Incorrect_Item / Incorrect item 等大小写变体。 */
+    private static String normalizeReason(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return value.trim().toLowerCase().replace(' ', '_');
     }
 }

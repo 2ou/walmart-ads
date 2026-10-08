@@ -1,5 +1,6 @@
 package com.ai.walmartads.analytics.application;
 
+import com.ai.walmartads.common.UsBusinessDate;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Service;
 
@@ -10,23 +11,23 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 /**
- * 广告表现（按产品）：按 parent_sku 聚合广告明细（自动 + 手动，沿用 ITEM_PERFORMANCE active 过滤），
+ * 广告表现（按产品）：按 parent_sku 聚合领星 AD_ITEM 日事实（SP / SB / SV），
  * 输出每款曝光 / 点击 / 广告费 / 订单 / 归因销售，并派生 RoAS / ACOS / CTR / CPC / 转化率，
  * 对应参考报表「当天广告数据」子表（产品级广告表现）。
  */
 @Service
 public class AdProductService {
 
-    private static final BigDecimal ZERO = BigDecimal.ZERO;
     private static final int SCALE = 4;
 
     private final NamedParameterJdbcTemplate jdbc;
+    private final ProductImageLookupService productImages;
 
-    public AdProductService(NamedParameterJdbcTemplate jdbc) {
+    public AdProductService(NamedParameterJdbcTemplate jdbc, ProductImageLookupService productImages) {
         this.jdbc = jdbc;
+        this.productImages = productImages;
     }
 
     public AdProductPayload load(int days) {
@@ -35,28 +36,31 @@ public class AdProductService {
 
     public AdProductPayload load(int days, boolean latest) {
         int window = latest ? 1 : Math.max(1, Math.min(days, 365));
-        LocalDate end = latestAdDate();
+        LocalDate end = UsBusinessDate.capToVisibleSalesDate(latestAdDate());
         LocalDate start = end.minusDays(window - 1L);
 
         Map<String, Object> params = new HashMap<>();
         params.put("start", start);
+        params.put("end", end);
 
         List<Map<String, Object>> rows = jdbc.queryForList("""
                 select a.parent_sku as parent_sku,
                        sum(a.impressions) as impressions,
                        sum(a.clicks) as clicks,
                        sum(a.ad_spend) as spend,
-                       sum(a.orders) as ad_orders,
+                       sum(a.attributed_orders) as ad_orders,
                        sum(a.attributed_sales) as sales
-                  from wm_ads_ad_performance a
-                  join wm_ads_import_file f on f.id = a.import_file_id and f.active = true
-                 where f.report_kind = 'ITEM_PERFORMANCE'
+                  from wm_ads_lx_ad_report a
+                 where a.report_level = 'AD_ITEM'
                    and a.report_date >= :start
+                   and a.report_date <= :end
                    and a.parent_sku is not null and a.parent_sku <> ''
                  group by a.parent_sku
                 """, params);
 
+        Map<String, String> imageByStyle = productImages.loadParentImages();
         List<AdProduct> products = rows.stream().map(row -> {
+            String style = String.valueOf(row.get("parent_sku"));
             double impressions = num(row, "impressions");
             double clicks = num(row, "clicks");
             double spend = num(row, "spend");
@@ -68,7 +72,8 @@ public class AdProductService {
             double cpc = clicks > 0 ? spend / clicks : 0;
             double conversionRate = clicks > 0 ? orders / clicks : 0;
             return new AdProduct(
-                    String.valueOf(row.get("parent_sku")),
+                    style,
+                    imageByStyle.getOrDefault(style, ""),
                     impressions, clicks, spend, orders, sales,
                     round(roas), round(acos), round(ctr), round(cpc), round(conversionRate));
         }).sorted(Comparator.comparingDouble(AdProduct::spend).reversed()).toList();
@@ -110,8 +115,8 @@ public class AdProductService {
 
     private LocalDate latestAdDate() {
         LocalDate latest = jdbc.getJdbcTemplate().queryForObject(
-                "select max(report_date) from wm_ads_ad_performance where report_date is not null", LocalDate.class);
-        return latest == null ? LocalDate.now() : latest;
+                "select max(report_date) from wm_ads_lx_ad_report where report_level = 'AD_ITEM'", LocalDate.class);
+        return latest == null ? UsBusinessDate.visibleSalesDate() : latest;
     }
 
     public record AdProductPayload(
@@ -140,6 +145,7 @@ public class AdProductService {
 
     public record AdProduct(
             String style,
+            String imageUrl,
             double impressions,
             double clicks,
             double spend,

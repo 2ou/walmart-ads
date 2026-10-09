@@ -5,8 +5,6 @@ import com.ai.walmartads.importing.parser.SkuResolver;
 import com.ai.walmartads.workspace.WorkspaceLingXingConfigService;
 import com.ai.walmartads.workspace.WorkspaceContext;
 import com.ai.walmartads.workspace.WorkspacePrincipal;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
@@ -40,7 +38,6 @@ public class WalmartAdSyncService {
     private final LingXingAdClient client;
     private final WalmartAdStore store;
     private final WalmartAdSkuResolver skuResolver;
-    private final ObjectMapper objectMapper;
     private final WorkspaceLingXingConfigService workspaceConfig;
     private final ReentrantLock syncLock = new ReentrantLock();
     private final AtomicBoolean backfillRunning = new AtomicBoolean(false);
@@ -50,14 +47,12 @@ public class WalmartAdSyncService {
             LingXingAdClient client,
             WalmartAdStore store,
             WalmartAdSkuResolver skuResolver,
-            ObjectMapper objectMapper,
             WorkspaceLingXingConfigService workspaceConfig
     ) {
         this.properties = properties;
         this.client = client;
         this.store = store;
         this.skuResolver = skuResolver;
-        this.objectMapper = objectMapper;
         this.workspaceConfig = workspaceConfig;
     }
 
@@ -283,7 +278,7 @@ public class WalmartAdSyncService {
                 metrics.advertisedSkuUnits(), metrics.otherSkuSales(), metrics.otherSkuUnits(),
                 metrics.ntbOrders(), metrics.ntbRevenue(), metrics.ntbUnits(), metrics.cpc(),
                 metrics.ctr(), metrics.cvr(), metrics.acos(), metrics.roas(), metrics.aov(), metrics.cpa(),
-                json(row), syncedAt);
+                syncedAt);
     }
 
     private AdSliceRow mapSlice(
@@ -313,7 +308,7 @@ public class WalmartAdSyncService {
                 metrics.advertisedSkuUnits(), metrics.otherSkuSales(), metrics.otherSkuUnits(),
                 metrics.ntbOrders(), metrics.ntbRevenue(), metrics.ntbUnits(), metrics.cpc(),
                 metrics.ctr(), metrics.cvr(), metrics.acos(), metrics.roas(), metrics.aov(), metrics.cpa(),
-                json(row), syncedAt);
+                syncedAt);
     }
 
     private long advertiserId(Map<String, Object> row) {
@@ -351,14 +346,6 @@ public class WalmartAdSyncService {
             return combined.substring(combined.lastIndexOf('+') + 1);
         }
         return null;
-    }
-
-    private String json(Map<String, Object> row) {
-        try {
-            return objectMapper.writeValueAsString(row);
-        } catch (JsonProcessingException exception) {
-            throw new IllegalStateException("Unable to serialize LingXing ad row", exception);
-        }
     }
 
     private static String reportUniqueness(AdReportRow row) {

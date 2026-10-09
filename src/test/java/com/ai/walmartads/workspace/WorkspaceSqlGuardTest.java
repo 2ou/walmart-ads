@@ -24,9 +24,32 @@ class WorkspaceSqlGuardTest {
                 left join wm_ads_lx_ad_report ads on ads.sku=p.sku
                 """);
 
-        assertThat(rewritten).contains("from (select * from wm_ads_order_record where workspace_id = 27)")
+        assertThat(rewritten).contains("from (select * from wm_ads_order_record where workspace_id = 27) as wm_ads_order_record")
                 .contains("from (select * from wm_ads_product_record where workspace_id = 27) p")
                 .contains("join (select * from wm_ads_lx_ad_report where workspace_id = 27) ads");
+    }
+
+    @Test
+    void addsRequiredAliasWhenReadTableHasNoExplicitAlias() {
+        bind(1L);
+
+        String rewritten = guard.rewrite("""
+                select distinct upper(parent_sku) as parent_sku
+                  from wm_ads_product_record
+                 where current_version = true
+                """);
+
+        assertThat(rewritten).contains(
+                "from (select * from wm_ads_product_record where workspace_id = 1) as wm_ads_product_record")
+                .contains("where current_version = true");
+    }
+
+    @Test
+    void scopesDashboardSummaryTables() {
+        bind(11L);
+
+        assertThat(guard.rewrite("select max(report_date) from wm_ads_dashboard_ad_daily"))
+                .contains("from (select * from wm_ads_dashboard_ad_daily where workspace_id = 11) as wm_ads_dashboard_ad_daily");
     }
 
     @Test

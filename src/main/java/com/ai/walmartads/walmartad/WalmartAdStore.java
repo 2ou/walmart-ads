@@ -7,6 +7,7 @@ import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.support.TransactionTemplate;
+import com.ai.walmartads.workspace.WorkspaceContext;
 
 import java.sql.PreparedStatement;
 import java.sql.Statement;
@@ -30,7 +31,7 @@ public class WalmartAdStore {
                 impressions, clicks, ad_spend, attributed_sales, attributed_orders, attributed_units,
                 advertised_sku_sales, advertised_sku_units, other_sku_sales, other_sku_units,
                 ntb_orders, ntb_revenue, ntb_units, cpc, ctr, cvr, acos, roas, aov, cpa,
-                raw_payload, synced_at
+                synced_at
             ) values (
                 :reportDate, :advertiserId, :adType, :reportLevel, :entityKey, 'LINGXING_MCP', 14,
                 :campaignId, :campaignName, :campaignType, :campaignStatus, :targetingType,
@@ -41,7 +42,7 @@ public class WalmartAdStore {
                 :impressions, :clicks, :adSpend, :attributedSales, :attributedOrders, :attributedUnits,
                 :advertisedSkuSales, :advertisedSkuUnits, :otherSkuSales, :otherSkuUnits,
                 :ntbOrders, :ntbRevenue, :ntbUnits, :cpc, :ctr, :cvr, :acos, :roas, :aov, :cpa,
-                :rawPayload, :syncedAt
+                :syncedAt
             )
             """;
 
@@ -53,7 +54,7 @@ public class WalmartAdStore {
                 impressions, clicks, ad_spend, attributed_sales, attributed_orders, attributed_units,
                 advertised_sku_sales, advertised_sku_units, other_sku_sales, other_sku_units,
                 ntb_orders, ntb_revenue, ntb_units, cpc, ctr, cvr, acos, roas, aov, cpa,
-                raw_payload, synced_at
+                synced_at
             ) values (
                 :reportDate, :advertiserId, :adType, :sliceType, :entityKey, 'LINGXING_MCP', 14,
                 :campaignId, :campaignName, :campaignType, :campaignStatus, :targetingType,
@@ -61,7 +62,7 @@ public class WalmartAdStore {
                 :impressions, :clicks, :adSpend, :attributedSales, :attributedOrders, :attributedUnits,
                 :advertisedSkuSales, :advertisedSkuUnits, :otherSkuSales, :otherSkuUnits,
                 :ntbOrders, :ntbRevenue, :ntbUnits, :cpc, :ctr, :cvr, :acos, :roas, :aov, :cpa,
-                :rawPayload, :syncedAt
+                :syncedAt
             )
             """;
 
@@ -132,7 +133,87 @@ public class WalmartAdStore {
             if (!slices.isEmpty()) {
                 namedJdbc.batchUpdate(SLICE_INSERT, slices.stream().map(WalmartAdStore::params).toArray(MapSqlParameterSource[]::new));
             }
+            refreshDashboardSummaries(start, end);
         });
+    }
+
+    private void refreshDashboardSummaries(LocalDate start, LocalDate end) {
+        long workspaceId = WorkspaceContext.requireId();
+        MapSqlParameterSource parameters = new MapSqlParameterSource()
+                .addValue("workspaceId", workspaceId)
+                .addValue("start", start)
+                .addValue("end", end);
+        for (String table : List.of(
+                "wm_ads_dashboard_ad_daily",
+                "wm_ads_dashboard_ad_sku_daily",
+                "wm_ads_dashboard_ad_campaign_daily")) {
+            namedJdbc.update("delete from " + table + " where workspace_id=:workspaceId and report_date between :start and :end",
+                    parameters);
+        }
+        namedJdbc.update("""
+                insert into wm_ads_dashboard_ad_daily (
+                    workspace_id, report_date, impressions, clicks, ad_spend, attributed_orders, attributed_sales
+                )
+                select ads.workspace_id, ads.report_date,
+                       sum(ads.impressions), sum(ads.clicks), sum(ads.ad_spend),
+                       sum(ads.attributed_orders), sum(ads.attributed_sales)
+                  from wm_ads_lx_ad_report_raw ads
+                  left join (
+                      select distinct workspace_id, parent_sku
+                        from wm_ads_product_record
+                       where workspace_id=:workspaceId and current_version=true
+                         and parent_sku is not null and parent_sku <> ''
+                  ) product on product.workspace_id=ads.workspace_id and product.parent_sku=ads.parent_sku
+                 where ads.workspace_id=:workspaceId and ads.report_level='AD_ITEM'
+                   and ads.report_date between :start and :end
+                   and (ads.parent_sku is null or ads.parent_sku='' or product.parent_sku is not null)
+                 group by ads.workspace_id, ads.report_date
+                """, parameters);
+        namedJdbc.update("""
+                insert into wm_ads_dashboard_ad_sku_daily (
+                    workspace_id, report_date, parent_sku, impressions, clicks, ad_spend,
+                    attributed_orders, attributed_sales
+                )
+                select ads.workspace_id, ads.report_date, product.parent_sku,
+                       sum(ads.impressions), sum(ads.clicks), sum(ads.ad_spend),
+                       sum(ads.attributed_orders), sum(ads.attributed_sales)
+                  from wm_ads_lx_ad_report_raw ads
+                  join (
+                      select distinct workspace_id, parent_sku
+                        from wm_ads_product_record
+                       where workspace_id=:workspaceId and current_version=true
+                         and parent_sku is not null and parent_sku <> ''
+                  ) product on product.workspace_id=ads.workspace_id and product.parent_sku=ads.parent_sku
+                 where ads.workspace_id=:workspaceId and ads.report_level='AD_ITEM'
+                   and ads.report_date between :start and :end
+                 group by ads.workspace_id, ads.report_date, product.parent_sku
+                """, parameters);
+        namedJdbc.update("""
+                insert into wm_ads_dashboard_ad_campaign_daily (
+                    workspace_id, report_date, campaign_name, campaign_id, ad_type, targeting_type, parent_sku,
+                    impressions, clicks, ad_spend, attributed_orders, attributed_sales, average_bid, listed_products
+                )
+                select ads.workspace_id, ads.report_date, coalesce(ads.campaign_name, '未命名广告'),
+                       max(ads.campaign_id), coalesce(ads.ad_type, 'UNKNOWN'), coalesce(ads.targeting_type, ''),
+                       coalesce(max(nullif(ads.parent_sku, '')), '未映射SKU'),
+                       sum(ads.impressions), sum(ads.clicks), sum(ads.ad_spend),
+                       sum(ads.attributed_orders), sum(ads.attributed_sales),
+                       case when sum(ads.clicks) > 0 then sum(ads.ad_spend) / sum(ads.clicks)
+                            else coalesce(avg(ads.bid), 0) end,
+                       count(distinct ads.item_id)
+                  from wm_ads_lx_ad_report_raw ads
+                  left join (
+                      select distinct workspace_id, parent_sku
+                        from wm_ads_product_record
+                       where workspace_id=:workspaceId and current_version=true
+                         and parent_sku is not null and parent_sku <> ''
+                  ) product on product.workspace_id=ads.workspace_id and product.parent_sku=ads.parent_sku
+                 where ads.workspace_id=:workspaceId and ads.report_level='AD_ITEM'
+                   and ads.report_date between :start and :end
+                   and (ads.parent_sku is null or ads.parent_sku='' or product.parent_sku is not null)
+                 group by ads.workspace_id, ads.report_date, coalesce(ads.campaign_name, '未命名广告'),
+                          coalesce(ads.ad_type, 'UNKNOWN'), coalesce(ads.targeting_type, '')
+                """, parameters);
     }
 
     public Map<WalmartAdSyncGuard.CoverageKey, Long> loadCoverage(
@@ -252,7 +333,7 @@ public class WalmartAdStore {
                 .addValue("ntbRevenue", row.ntbRevenue()).addValue("ntbUnits", row.ntbUnits())
                 .addValue("cpc", row.cpc()).addValue("ctr", row.ctr()).addValue("cvr", row.cvr())
                 .addValue("acos", row.acos()).addValue("roas", row.roas()).addValue("aov", row.aov())
-                .addValue("cpa", row.cpa()).addValue("rawPayload", row.rawPayload())
+                .addValue("cpa", row.cpa())
                 .addValue("syncedAt", row.syncedAt());
     }
 
@@ -273,7 +354,7 @@ public class WalmartAdStore {
                 .addValue("ntbRevenue", row.ntbRevenue()).addValue("ntbUnits", row.ntbUnits())
                 .addValue("cpc", row.cpc()).addValue("ctr", row.ctr()).addValue("cvr", row.cvr())
                 .addValue("acos", row.acos()).addValue("roas", row.roas()).addValue("aov", row.aov())
-                .addValue("cpa", row.cpa()).addValue("rawPayload", row.rawPayload())
+                .addValue("cpa", row.cpa())
                 .addValue("syncedAt", row.syncedAt());
     }
 

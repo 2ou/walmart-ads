@@ -56,6 +56,5 @@ public record AdReportRow(
         BigDecimal roas,
         BigDecimal aov,
         BigDecimal cpa,
-        String rawPayload,
         LocalDateTime syncedAt
 ) { }

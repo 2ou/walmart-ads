@@ -30,7 +30,6 @@ public class ImportService {
     private final WalmartAdsProperties properties;
     private final SourceScanner scanner;
     private final FileFingerprint fingerprint;
-    private final FileArchiveService archiveService;
     private final FileImportProcessor processor;
     private final ImportBatchRepository batchRepository;
     private final ImportFileRepository fileRepository;
@@ -39,7 +38,6 @@ public class ImportService {
             WalmartAdsProperties properties,
             SourceScanner scanner,
             FileFingerprint fingerprint,
-            FileArchiveService archiveService,
             FileImportProcessor processor,
             ImportBatchRepository batchRepository,
             ImportFileRepository fileRepository
@@ -47,7 +45,6 @@ public class ImportService {
         this.properties = properties;
         this.scanner = scanner;
         this.fingerprint = fingerprint;
-        this.archiveService = archiveService;
         this.processor = processor;
         this.batchRepository = batchRepository;
         this.fileRepository = fileRepository;
@@ -165,9 +162,6 @@ public class ImportService {
             Set<ImportSource> selectedSources
     ) throws IOException {
         ImportBatch batch = batchRepository.save(new ImportBatch(properties.dataRoot().toString()));
-        Path batchDirectory = archiveService.batchDirectory(batch.getId());
-        batch.setArchiveDirectory(batchDirectory.toString());
-        batchRepository.save(batch);
 
         int imported = 0;
         int skipped = 0;
@@ -224,10 +218,8 @@ public class ImportService {
                     candidate.snapshotAt()
             );
             fileRepository.saveAndFlush(file);
-            Path archivePath = null;
             try {
-                archivePath = archiveService.archive(batchDirectory, candidate);
-                DocumentImportTool.ImportOutcome processed = processor.process(file.getId(), archivePath);
+                DocumentImportTool.ImportOutcome processed = processor.process(file.getId(), candidate.path());
                 retainedFileIds.add(file.getId());
                 imported++;
                 results.add(FileResult.imported(
@@ -240,7 +232,7 @@ public class ImportService {
                 failed++;
                 log.error("Import failed for {}", candidate.path(), exception);
                 ImportFile failedFile = fileRepository.findById(file.getId()).orElse(file);
-                failedFile.failed(archivePath == null ? null : archivePath.toString(), rootMessage(exception));
+                failedFile.failed(candidate.path().toString(), rootMessage(exception));
                 fileRepository.save(failedFile);
                 results.add(FileResult.failed(candidate.path(), candidateLabel(candidate), rootMessage(exception)));
             }

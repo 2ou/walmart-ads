@@ -33,6 +33,17 @@ public class DashboardDataService {
     }
 
     public DashboardPayload load() {
+        return load(true);
+    }
+
+    /**
+     * 首屏只需要日趋势和款号汇总；活动明细由广告诊断、决策和 Agent 接口按需读取。
+     */
+    public DashboardPayload loadDashboard() {
+        return load(false);
+    }
+
+    private DashboardPayload load(boolean includeCampaignDaily) {
         List<Map<String, Object>> orderDaily = jdbc.queryForList("""
                 select orders.order_date as report_date,
                        sum(orders.quantity) as orders,
@@ -44,14 +55,12 @@ public class DashboardDataService {
                 """, new MapSqlParameterSource());
         List<Map<String, Object>> adDaily = jdbc.queryForList("""
                 select ads.report_date as report_date,
-                       sum(ads.impressions) as impressions,
-                       sum(ads.clicks) as clicks,
-                       sum(ads.ad_spend) as spend,
-                       sum(ads.attributed_orders) as ad_orders,
-                       sum(ads.attributed_sales) as ad_sales
-                  from wm_ads_lx_ad_report ads
-                 where ads.report_level = 'AD_ITEM'
-                 group by ads.report_date
+                       ads.impressions as impressions,
+                       ads.clicks as clicks,
+                       ads.ad_spend as spend,
+                       ads.attributed_orders as ad_orders,
+                       ads.attributed_sales as ad_sales
+                  from wm_ads_dashboard_ad_daily ads
                 """, new MapSqlParameterSource());
         LocalDate adLatestDate = adDaily.stream()
                 .map(row -> date(row, "report_date"))
@@ -76,7 +85,7 @@ public class DashboardDataService {
 
         List<DailyRow> dailyRows = daily.values().stream().map(MutableDaily::toRow).toList();
         List<SkuDailyRow> skuRows = loadSkuDaily();
-        List<CampaignDailyRow> campaignRows = loadCampaignDaily();
+        List<CampaignDailyRow> campaignRows = includeCampaignDaily ? loadCampaignDaily() : List.of();
 
         LocalDate latestDate = daily.isEmpty() ? UsBusinessDate.usToday() : daily.lastKey();
         LocalDate firstDate = daily.isEmpty() ? latestDate : daily.firstKey();
@@ -128,8 +137,7 @@ public class DashboardDataService {
         Map<String, Object> bounds = jdbc.queryForMap("""
                 select min(report_date) as first_date,
                        max(report_date) as latest_date
-                  from wm_ads_lx_ad_report_raw
-                 where report_level = 'AD_ITEM'
+                  from wm_ads_dashboard_ad_daily
                 """, new MapSqlParameterSource());
         LocalDate latestDate = localDate(bounds.get("latest_date"));
         LocalDate firstDate = localDate(bounds.get("first_date"));
@@ -220,15 +228,13 @@ public class DashboardDataService {
                 """, new MapSqlParameterSource());
         List<Map<String, Object>> ads = jdbc.queryForList("""
                 select ads.report_date as report_date,
-                       coalesce(ads.parent_sku, '未映射SKU') as parent_sku,
-                       sum(ads.impressions) as impressions,
-                       sum(ads.clicks) as clicks,
-                       sum(ads.ad_spend) as spend,
-                       sum(ads.attributed_orders) as ad_orders,
-                       sum(ads.attributed_sales) as ad_sales
-                  from wm_ads_lx_ad_report ads
-                 where ads.report_level = 'AD_ITEM'
-                 group by ads.report_date, coalesce(ads.parent_sku, '未映射SKU')
+                       ads.parent_sku as parent_sku,
+                       ads.impressions as impressions,
+                       ads.clicks as clicks,
+                       ads.ad_spend as spend,
+                       ads.attributed_orders as ad_orders,
+                       ads.attributed_sales as ad_sales
+                  from wm_ads_dashboard_ad_sku_daily ads
                 """, new MapSqlParameterSource());
         Map<SkuDate, MutableSku> result = new HashMap<>();
         orders.forEach(row -> {
@@ -289,27 +295,22 @@ public class DashboardDataService {
         return jdbc.queryForList("""
                 select ads.report_date as report_date,
                        ads.campaign_name as campaign_name,
-                       max(ads.campaign_id) as campaign_id,
+                       ads.campaign_id as campaign_id,
                        case
                            when ads.ad_type = 'SP' and lower(coalesce(ads.targeting_type, '')) = 'auto' then '自动广告'
                            when ads.ad_type = 'SP' then '手动广告'
                            when ads.ad_type = 'SB' then 'SB 品牌广告'
                            else 'SV 视频广告'
                        end as ad_type,
-                       coalesce(max(ads.parent_sku), '未映射SKU') as parent_sku,
-                       sum(ads.impressions) as impressions,
-                       sum(ads.clicks) as clicks,
-                       sum(ads.ad_spend) as spend,
-                       sum(ads.attributed_orders) as ad_orders,
-                       sum(ads.attributed_sales) as ad_sales,
-                       case when sum(ads.clicks) > 0
-                            then sum(ads.ad_spend) / sum(ads.clicks)
-                            else avg(ads.bid)
-                       end as average_bid,
-                       count(distinct ads.item_id) as listed_products
-                  from wm_ads_lx_ad_report ads
-                 where ads.report_level = 'AD_ITEM'
-                 group by ads.report_date, ads.campaign_name, ads.ad_type, ads.targeting_type
+                       ads.parent_sku as parent_sku,
+                       ads.impressions as impressions,
+                       ads.clicks as clicks,
+                       ads.ad_spend as spend,
+                       ads.attributed_orders as ad_orders,
+                       ads.attributed_sales as ad_sales,
+                       ads.average_bid as average_bid,
+                       ads.listed_products as listed_products
+                  from wm_ads_dashboard_ad_campaign_daily ads
                 """, new MapSqlParameterSource()).stream().map(row -> new CampaignDailyRow(
                         date(row, "report_date"),
                         text(row, "campaign_name"),

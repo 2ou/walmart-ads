@@ -32,9 +32,8 @@ public class WorkspaceSqlGuard {
             "wm_ads_lingxing_comment_sync_log", "wm_ads_forecast_setting", "wm_ads_ai_agent_run",
             "wm_ads_ai_conversation", "wm_ads_ai_conversation_message", "wm_ads_price_baseline",
             "wm_ads_price_change", "wm_ads_supply_production_order", "wm_ads_supply_delivery_detail",
-            "wm_ads_supply_chain_sync_log", "_deprecated_wm_ads_ad_performance",
-            "_deprecated_wm_ads_ad_campaign_snapshot", "_deprecated_wm_ads_ad_campaign_item_snapshot",
-            "_deprecated_wm_ads_inventory_snapshot");
+            "wm_ads_supply_chain_sync_log", "wm_ads_dashboard_ad_daily", "wm_ads_dashboard_ad_sku_daily",
+            "wm_ads_dashboard_ad_campaign_daily");
 
     private static final String TABLE_ALTERNATION = TENANT_TABLES.stream()
             .sorted((left, right) -> Integer.compare(right.length(), left.length()))
@@ -52,7 +51,12 @@ public class WorkspaceSqlGuard {
     private static final Pattern DELETE_TARGET = Pattern.compile(
             "(?is)^\\s*delete\\s+from\\s+(" + TABLE_ALTERNATION + ")\\s*(?:as\\s+)?([a-zA-Z_][a-zA-Z0-9_]*)?");
     private static final Pattern WHERE = Pattern.compile("(?i)\\bwhere\\b");
-    private static final List<String> NON_ALIAS_WORDS = List.of("set", "join", "left", "right", "inner", "outer", "where", "order", "limit");
+    private static final List<String> NON_ALIAS_WORDS = List.of(
+            "set", "join", "left", "right", "inner", "outer", "cross", "full", "natural", "straight_join",
+            "where", "group", "order", "having", "limit", "union", "on", "and", "or", "window", "qualify",
+            "use", "force", "ignore", "partition", "for", "lock", "values");
+    private static final Pattern FOLLOWING_ALIAS = Pattern.compile(
+            "(?is)^\\s+(?:as\\s+)?([a-zA-Z_][a-zA-Z0-9_]*)");
 
     public String rewrite(String sql) {
         if (sql == null || sql.isBlank() || WorkspaceContext.current().isEmpty()) return sql;
@@ -82,7 +86,9 @@ public class WorkspaceSqlGuard {
         while (matcher.find()) {
             String prefix = matcher.group(1);
             String table = matcher.group(2);
-            String replacement = prefix + " (select * from " + table + " where workspace_id = " + workspaceId + ")";
+            String generatedAlias = hasFollowingAlias(sql, matcher.end()) ? "" : " as " + table;
+            String replacement = prefix + " (select * from " + table + " where workspace_id = " + workspaceId + ")"
+                    + generatedAlias;
             matcher.appendReplacement(buffer, Matcher.quoteReplacement(replacement));
         }
         matcher.appendTail(buffer);
@@ -123,8 +129,10 @@ public class WorkspaceSqlGuard {
         Matcher matcher = Pattern.compile("(?i)\\b(join)\\s+(" + TABLE_ALTERNATION + ")\\b").matcher(sql);
         StringBuffer buffer = new StringBuffer();
         while (matcher.find()) {
+            String table = matcher.group(2);
+            String generatedAlias = hasFollowingAlias(sql, matcher.end()) ? "" : " as " + table;
             String replacement = matcher.group(1) + " (select * from " + matcher.group(2)
-                    + " where workspace_id = " + workspaceId + ")";
+                    + " where workspace_id = " + workspaceId + ")" + generatedAlias;
             matcher.appendReplacement(buffer, Matcher.quoteReplacement(replacement));
         }
         matcher.appendTail(buffer);
@@ -146,6 +154,11 @@ public class WorkspaceSqlGuard {
     private static String safeAlias(String alias, String table) {
         if (alias == null || NON_ALIAS_WORDS.contains(alias.toLowerCase(Locale.ROOT))) return table;
         return alias;
+    }
+
+    private static boolean hasFollowingAlias(String sql, int tableEnd) {
+        Matcher alias = FOLLOWING_ALIAS.matcher(sql.substring(tableEnd));
+        return alias.find() && !NON_ALIAS_WORDS.contains(alias.group(1).toLowerCase(Locale.ROOT));
     }
 
     private static boolean containsColumn(String columns, String expected) {

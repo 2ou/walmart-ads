@@ -60,13 +60,10 @@ class ImportServiceTest {
     private ImportService buildService(Path root) throws IOException {
         ImportBatchRepository batchRepository = mock(ImportBatchRepository.class);
         when(batchRepository.save(any(ImportBatch.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        FileArchiveService archiveService = mock(FileArchiveService.class);
-        when(archiveService.batchDirectory(any())).thenReturn(temp.resolve("batch"));
         return new ImportService(
                 new WalmartAdsProperties(root, temp.resolve("archive"), null, null, null),
                 scanner,
                 fingerprint,
-                archiveService,
                 processor,
                 batchRepository,
                 fileRepository

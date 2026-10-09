@@ -183,15 +183,15 @@ public class FileImportProcessor {
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public DocumentImportTool.ImportOutcome process(Long fileId, Path archivePath) throws IOException {
+    public DocumentImportTool.ImportOutcome process(Long fileId, Path sourcePath) throws IOException {
         ImportFile file = fileRepository.findById(fileId)
                 .orElseThrow(() -> new IllegalArgumentException("导入文件记录不存在：" + fileId));
         DocumentImportTool tool = tools.get(file.getFileType());
         if (tool == null) {
             throw new IllegalArgumentException("No code import tool registered for " + file.getFileType());
         }
-        DocumentImportTool.ImportOutcome result = tool.importDocument(archivePath, file);
-        file.imported(archivePath.toString(), result.sourceRows(), result.importedRows());
+        DocumentImportTool.ImportOutcome result = tool.importDocument(sourcePath, file);
+        file.imported(sourcePath.toString(), result.sourceRows(), result.importedRows());
         if (file.getReportDate() != null && file.getReportKind() != null) {
             fileRepository.deactivateAdReportVersion(file.getReportKind(), file.getReportDate(), file.getId());
         } else if (file.getFileType() == ImportFileType.INVENTORY && file.getSnapshotAt() != null) {

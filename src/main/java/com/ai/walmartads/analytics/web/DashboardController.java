@@ -21,7 +21,7 @@ public class DashboardController {
 
     @GetMapping("/data")
     public DashboardDataService.DashboardPayload data() {
-        return dashboardDataService.load();
+        return dashboardDataService.loadDashboard();
     }
 
     @GetMapping("/bootstrap")

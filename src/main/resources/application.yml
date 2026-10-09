@@ -1,6 +1,10 @@
 server:
   address: ${WALMART_ADS_SERVER_ADDRESS:127.0.0.1}
   port: ${WALMART_ADS_PORT:8081}
+  compression:
+    enabled: true
+    min-response-size: 1024
+    mime-types: application/json,text/html,text/css,text/javascript,application/javascript
 
 spring:
   application:

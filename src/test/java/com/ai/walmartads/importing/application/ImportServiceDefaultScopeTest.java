@@ -90,9 +90,6 @@ class ImportServiceDefaultScopeTest {
         FileFingerprint fingerprint = mock(FileFingerprint.class);
         when(fingerprint.sha256(any())).thenReturn("sha-test");
 
-        FileArchiveService archiveService = mock(FileArchiveService.class);
-        when(archiveService.batchDirectory(any())).thenReturn(Path.of("tmp"));
-
         FileImportProcessor processor = mock(FileImportProcessor.class);
         when(processor.importFingerprint(any(), anyString())).thenReturn("sha-test");
 
@@ -106,7 +103,6 @@ class ImportServiceDefaultScopeTest {
                 properties,
                 scanner,
                 fingerprint,
-                archiveService,
                 processor,
                 batchRepository,
                 fileRepository

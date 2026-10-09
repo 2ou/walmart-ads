@@ -72,7 +72,8 @@ public class ProductCatalogService {
 
     @Transactional(readOnly = true)
     public CatalogPayload load() {
-        List<SourceProduct> rows = loadRows(null);
+        // 列表页不需要完整 raw_payload（见 loadRows 注释），按需精简，避免每次打开都搬 4MB JSON。
+        List<SourceProduct> rows = loadRows(null, false);
         Map<String, BigDecimal> historyRates = refundRateService.ratesByParent();
         Map<String, ParentLifecycleService.LifecycleView> lifecycleByParent = lifecycleService.viewsByParent();
         Map<String, List<SourceProduct>> groups = rows.stream()
@@ -112,7 +113,7 @@ public class ProductCatalogService {
         if (safeParentSku.isEmpty()) {
             throw new IllegalArgumentException("父 SKU 不能为空。");
         }
-        List<SourceProduct> rows = loadRows(safeParentSku);
+        List<SourceProduct> rows = loadRows(safeParentSku, true);
         if (rows.isEmpty()) {
             throw new IllegalArgumentException("产品库中找不到父 SKU：" + safeParentSku);
         }
@@ -462,12 +463,26 @@ public class ProductCatalogService {
         return present(value) ? value.trim().toLowerCase(Locale.ROOT) : "__unlabeled__";
     }
 
-    private List<SourceProduct> loadRows(String parentSku) {
+    /**
+     * 读取产品记录。
+     *
+     * <p><b>为什么要按需取 raw_payload</b>：该列是完整的上传 payload（全库 current_version=1 合计 <b>4MB</b>），
+     * 列表接口只用到它里面的 {@code swatchImageUrl} 与 {@code isPrimaryVariant} 两个键，
+     * 却要为此搬运 4MB 并在 Java 侧逐行 Jackson 解析。实测该列让列表主查询从 <b>37ms 涨到 300ms</b>。
+     * 故 {@code withRawPayload=false}（列表页）时改用 {@code JSON_EXTRACT} 只取这两个键；
+     * {@code true}（详情抽屉）时才取整列 —— 详情页需要回传完整 raw 字段并据此拼属性。
+     */
+    private List<SourceProduct> loadRows(String parentSku, boolean withRawPayload) {
         String whereParent = parentSku == null ? "" : " and product.parent_sku = :parentSku ";
         MapSqlParameterSource parameters = new MapSqlParameterSource();
         if (parentSku != null) {
             parameters.addValue("parentSku", parentSku);
         }
+        String rawPayloadColumns = withRawPayload
+                ? "product.raw_payload,"
+                : """
+                  json_unquote(json_extract(product.raw_payload, '$.swatchImageUrl')) as swatch_image_url,
+                          json_unquote(json_extract(product.raw_payload, '$.isPrimaryVariant')) as is_primary_variant,""";
         return jdbc.queryForList("""
                 select product.id as id,
                        product.sku,
@@ -491,7 +506,7 @@ public class ProductCatalogService {
                        product.material_name,
                        product.gender,
                        product.variant_group_id,
-                       product.raw_payload,
+                       %s
                        product.source_updated_at,
                        file.file_name as source_file_name,
                        product.price,
@@ -515,13 +530,15 @@ public class ProductCatalogService {
                   left join wm_ads_profit_assumption pa
                     on pa.parent_sku = product.parent_sku
                  where product.current_version = true
-                """ + whereParent + """
+                """.formatted(rawPayloadColumns) + whereParent + """
                  order by product.parent_sku, product.sku
                 """, parameters).stream().map(this::sourceProduct).toList();
     }
 
     private SourceProduct sourceProduct(Map<String, Object> row) {
-        Map<String, Object> rawPayload = objectMap(row.get("raw_payload"));
+        // 列表页走精简列（swatch_image_url / is_primary_variant），详情页走完整 raw_payload。
+        boolean slim = !row.containsKey("raw_payload");
+        Map<String, Object> rawPayload = slim ? Map.of() : objectMap(row.get("raw_payload"));
         String parentSku = text(row, "parent_sku");
         if (!present(parentSku)) {
             parentSku = parentSku(text(row, "sku"));
@@ -549,8 +566,8 @@ public class ProductCatalogService {
                 text(row, "gender"),
                 text(row, "variant_group_id"),
                 rawPayload,
-                rawText(rawPayload, "swatchImageUrl"),
-                truthy(rawPayload.get("isPrimaryVariant")),
+                slim ? text(row, "swatch_image_url") : rawText(rawPayload, "swatchImageUrl"),
+                slim ? truthy(row.get("is_primary_variant")) : truthy(rawPayload.get("isPrimaryVariant")),
                 localDateTime(row.get("source_updated_at")),
                 text(row, "source_file_name"),
                 null,

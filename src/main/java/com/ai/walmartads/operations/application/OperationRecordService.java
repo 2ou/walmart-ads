@@ -29,6 +29,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 public class OperationRecordService {
@@ -56,6 +57,9 @@ public class OperationRecordService {
 
     /** 款号 / SKU 候选池上限（实测在售 28 款 + 786 SKU，留足余量）。 */
     private static final int MAX_TARGET_OPTIONS = 2000;
+
+    /** 效果快照缓存容量上限，超出即整体清空（避免无界增长）。 */
+    private static final int IMPACT_CACHE_MAX = 2000;
 
     /**
      * 款号级候选（款号 + 该款任一商品名）。
@@ -95,6 +99,15 @@ public class OperationRecordService {
 
     private final NamedParameterJdbcTemplate jdbc;
     private final OperationWindowCalculator windowCalculator;
+
+    /**
+     * 效果快照缓存：key = 记录 id + 最新数据日 + 窗口天数。
+     *
+     * <p>「最新数据日」是有新导入 / 领星同步的天然指纹——一旦有新数据，key 变化、旧条目自然不再命中，
+     * 无需在各写入点接线。每条记录一次请求要跑 5 条串行 SQL（前后窗口各 2 条 + 重叠操作 1 条），
+     * 缓存后重复打开、以及 board 内部对同一记录的多处引用都能直接复用。
+     */
+    private final Map<String, OperationImpact> impactCache = new ConcurrentHashMap<>();
 
     public OperationRecordService(
             NamedParameterJdbcTemplate jdbc,
@@ -752,6 +765,20 @@ public class OperationRecordService {
     }
 
     private OperationImpact impact(OperationRecord record, LocalDate latestDataDate, int days) {
+        String cacheKey = record.id() + "|" + latestDataDate + "|" + days;
+        OperationImpact cached = impactCache.get(cacheKey);
+        if (cached != null) {
+            return cached;
+        }
+        OperationImpact computed = computeImpact(record, latestDataDate, days);
+        if (impactCache.size() >= IMPACT_CACHE_MAX) {
+            impactCache.clear();
+        }
+        impactCache.put(cacheKey, computed);
+        return computed;
+    }
+
+    private OperationImpact computeImpact(OperationRecord record, LocalDate latestDataDate, int days) {
         if (!"EXECUTED".equals(record.status())) {
             return new OperationImpact(
                     "NOT_EXECUTED", days, 0, latestDataDate,
@@ -767,6 +794,7 @@ public class OperationRecordService {
         MetricSnapshot before = metrics(
                 record.targetType(),
                 record.targetKey(),
+                record.parentSku(),
                 window.beforeStart(),
                 window.beforeEnd(),
                 window.comparedDays() > 0 ? window.comparedDays() : window.requestedDays()
@@ -776,6 +804,7 @@ public class OperationRecordService {
                 : metrics(
                         record.targetType(),
                         record.targetKey(),
+                        record.parentSku(),
                         window.afterStart(),
                         window.afterEnd(),
                         window.comparedDays()
@@ -803,20 +832,35 @@ public class OperationRecordService {
     private MetricSnapshot metrics(
             String targetType,
             String targetKey,
+            String parentSku,
             LocalDate start,
             LocalDate end,
             int calendarDays
     ) {
-        String orderTarget = "PARENT_SKU".equals(targetType)
-                ? "coalesce(orders.parent_sku, orders.sku)"
-                : "orders.sku";
-        String adTarget = "PARENT_SKU".equals(targetType)
-                ? "ads.parent_sku"
-                : "ads.sku";
+        boolean parentLevel = "PARENT_SKU".equals(targetType);
+        boolean hasParentGuard = !parentLevel && parentSku != null && !parentSku.isBlank();
+        String orderTarget;
+        String adTarget;
+        if (parentLevel) {
+            orderTarget = "coalesce(orders.parent_sku, orders.sku) = :targetKey";
+            adTarget = "ads.parent_sku = :targetKey";
+        } else if (hasParentGuard) {
+            // SKU 级：先用 parent_sku 走索引把范围收到本款内，再精确匹配 sku。
+            // 实测 ads 侧由「全表扫 20 万行 / 885MB」降为本款内几百行，14.75s → 0.07s。
+            // 安全性：现网所有 sku 的 parent_sku 唯一且与记录一致（订单侧跨父 0 条）。
+            orderTarget = "orders.sku = :targetKey and orders.parent_sku = :parentSku";
+            adTarget = "ads.sku = :targetKey and ads.parent_sku = :parentSku";
+        } else {
+            orderTarget = "orders.sku = :targetKey";
+            adTarget = "ads.sku = :targetKey";
+        }
         MapSqlParameterSource params = new MapSqlParameterSource()
                 .addValue("targetKey", targetKey)
                 .addValue("start", start)
                 .addValue("end", end);
+        if (hasParentGuard) {
+            params.addValue("parentSku", parentSku);
+        }
         Map<String, Object> order = jdbc.queryForMap("""
                 select coalesce(sum(orders.quantity), 0) as units,
                        coalesce(sum(orders.quantity * orders.item_cost), 0) as sales
@@ -824,7 +868,7 @@ public class OperationRecordService {
                   join wm_ads_import_file file
                     on file.id = orders.import_file_id and file.active = true
                  where orders.report_date between :start and :end
-                   and %s = :targetKey
+                   and %s
                 """.formatted(orderTarget), params);
         Map<String, Object> ad = jdbc.queryForMap("""
                 select coalesce(sum(ads.impressions), 0) as impressions,
@@ -835,7 +879,7 @@ public class OperationRecordService {
                   from wm_ads_lx_ad_report ads
                  where ads.report_level = 'AD_ITEM'
                    and ads.report_date between :start and :end
-                   and %s = :targetKey
+                   and %s
                 """.formatted(adTarget), params);
         double units = number(order, "units");
         double sales = number(order, "sales");
@@ -889,17 +933,25 @@ public class OperationRecordService {
         return result == null ? 0 : result;
     }
 
+    /**
+     * 最新可用数据日：订单与广告（AD_ITEM）各自最大报表日期中的较大者。
+     *
+     * <p>刻意**不经过** {@code wm_ads_order_record_valid} / {@code wm_ads_lx_ad_report} 视图：
+     * 二者均为 {@code ALGORITHM=MERGE} 且带 {@code parent_sku in (select ... product_record)}
+     * 相关子查询，使 {@code max(report_date)} 无法走索引、退化为全表扫描
+     * （实测 ads 侧 20.5s vs 直查原始表 0.0014s，快约 1.4 万倍；取到的日期与视图一致）。
+     */
     private LocalDate latestDataDate() {
         return jdbc.query("""
                 select max(source.latest_date) as latest_date
                   from (
                         select max(orders.report_date) as latest_date
-                          from wm_ads_order_record_valid orders
+                          from wm_ads_order_record orders
                           join wm_ads_import_file file
                             on file.id = orders.import_file_id and file.active = true
                         union all
                         select max(ads.report_date) as latest_date
-                          from wm_ads_lx_ad_report ads
+                          from wm_ads_lx_ad_report_raw ads
                          where ads.report_level = 'AD_ITEM'
                        ) source
                 """, new MapSqlParameterSource(), resultSet ->

@@ -27,6 +27,7 @@ import com.ai.walmartads.workspace.WorkspaceOwnershipService;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Set;
@@ -79,22 +80,50 @@ public class ImportController {
 
     @PostMapping(value = "/upload", consumes = "multipart/form-data")
     public ApiResponse<ImportService.ImportRunResult> upload(
-            @RequestPart("source") String sourceValue,
-            @RequestPart("file") MultipartFile file
+            @RequestPart("source") List<String> sourceValues,
+            @RequestPart("file") List<MultipartFile> files
     ) throws IOException {
+        if (files == null || files.isEmpty()) {
+            throw new IllegalArgumentException("请选择要上传的工作簿");
+        }
+        if (sourceValues == null || sourceValues.size() != files.size()) {
+            throw new IllegalArgumentException("导入类型数量与文件数量不匹配");
+        }
+        List<ImportService.FileResult> allFiles = new ArrayList<>();
+        int ok = 0;
+        int failed = 0;
+        Long firstBatchId = null;
+        StringBuilder detail = new StringBuilder();
+        for (int i = 0; i < files.size(); i++) {
+            try {
+                ImportService.ImportRunResult one = importOne(sourceValues.get(i), files.get(i));
+                if (firstBatchId == null) firstBatchId = one.batchId();
+                allFiles.addAll(one.files());
+                ok++;
+            } catch (Exception exception) {
+                failed++;
+                String name = files.get(i).getOriginalFilename();
+                detail.append(String.format("「%s」失败：%s；", name == null ? "未命名文件" : name, exception.getMessage()));
+            }
+        }
+        String message = String.format("批量导入完成：成功 %d 个文件，失败 %d 个。%s", ok, failed, detail);
+        return ApiResponse.ok(message, new ImportService.ImportRunResult(firstBatchId, "OK", message, allFiles));
+    }
+
+    private ImportService.ImportRunResult importOne(String sourceValue, MultipartFile file) throws IOException {
         ImportSource source;
         try {
             source = ImportSource.valueOf(sourceValue == null ? "" : sourceValue.trim().toUpperCase());
         } catch (RuntimeException exception) {
-            throw new IllegalArgumentException("未知导入类型");
+            throw new IllegalArgumentException("未知导入类型：" + sourceValue);
         }
         if (file == null || file.isEmpty()) {
-            throw new IllegalArgumentException("请选择要上传的工作簿");
+            throw new IllegalArgumentException("存在空文件，请重新选择");
         }
         String original = file.getOriginalFilename();
         String safeName = original == null ? "upload.xlsx" : Path.of(original).getFileName().toString();
         if (!safeName.toLowerCase().endsWith(".xlsx")) {
-            throw new IllegalArgumentException("仅支持 .xlsx 工作簿");
+            throw new IllegalArgumentException("仅支持 .xlsx 工作簿：" + safeName);
         }
         Path ownerRoot = properties.dataRoot().toAbsolutePath().normalize()
                 .resolve("workspace-uploads").resolve(String.valueOf(WorkspaceContext.requireId()));
@@ -110,7 +139,7 @@ public class ImportController {
                 ownershipService.verifyUploadedWorkbook(tempFile, source, safeName);
             }
             SourceFileCandidate candidate = sourceScanner.uploadedCandidate(tempFile, source);
-            return ApiResponse.ok("当前工作区文件导入完成", importService.importUploaded(candidate, source));
+            return importService.importUploaded(candidate, source);
         } finally {
             Files.deleteIfExists(tempFile);
             Files.deleteIfExists(tempDirectory);

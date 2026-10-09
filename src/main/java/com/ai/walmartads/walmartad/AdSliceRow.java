@@ -38,6 +38,5 @@ public record AdSliceRow(
         BigDecimal roas,
         BigDecimal aov,
         BigDecimal cpa,
-        String rawPayload,
         LocalDateTime syncedAt
 ) { }

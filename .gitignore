@@ -35,3 +35,16 @@ test_compile.log
 server-8081.log
 artifacts/
 .firecrawl/
+
+# --- local temp / agent artifacts (never commit) ---
+.codex-spreadsheets/
+.codex_tmp/
+.codex_pnk_analysis.py
+BOOT-INF/
+backups/
+accepted-outputs/
+outputs/
+node_modules/
+package.json
+package-lock.json
+README-WORKBUDDY-DEPLOY.md

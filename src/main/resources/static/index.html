@@ -8,9 +8,6 @@
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%232f90ff'/%3E%3Cpath d='M14 18h9l4 25 5-17h7l5 17 4-25h9L50 49H39l-4-13-4 13H20z' fill='%23edf4ff'/%3E%3C/svg%3E">
   <title>沃尔玛工作台</title>
 
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Fira+Sans:wght@300;400;500;600;700&display=swap">
   <link rel="stylesheet" href="app.css?v=20261008-store-chip">
 </head>
 <body>
@@ -48,18 +45,20 @@
           <span class="nav-caret" aria-hidden="true">⌄</span>
         </button>
         <nav class="nav-sublist" data-nav-sublist="inventory">
-          <button class="nav-button nav-subitem" type="button" data-view="inventory">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3 4h18v16H3z"/><path d="M3 9h18M8 4v16"/></svg>
-            <span>库存总览</span>
-          </button>
-          <button class="nav-button nav-subitem" type="button" data-view="demand-forecast">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 19V5m5 14V9m5 10V3m5 16v-6"/><path d="M3 21h18"/></svg>
-            <span>需求预测</span>
-          </button>
-          <button class="nav-button nav-subitem" type="button" data-view="supply-chain">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3 7h11v10H3z"/><path d="M14 10h4l3 3v4h-7z"/><circle cx="7" cy="18" r="2"/><circle cx="18" cy="18" r="2"/><path d="M6 4h11M9 7V4"/></svg>
-            <span>供应链生产订单</span>
-          </button>
+          <div class="nav-sublist-inner">
+            <button class="nav-button nav-subitem" type="button" data-view="inventory">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3 4h18v16H3z"/><path d="M3 9h18M8 4v16"/></svg>
+              <span>库存总览</span>
+            </button>
+            <button class="nav-button nav-subitem" type="button" data-view="demand-forecast">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 19V5m5 14V9m5 10V3m5 16v-6"/><path d="M3 21h18"/></svg>
+              <span>需求预测</span>
+            </button>
+            <button class="nav-button nav-subitem" type="button" data-view="supply-chain" style="display:none">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3 7h11v10H3z"/><path d="M14 10h4l3 3v4h-7z"/><circle cx="7" cy="18" r="2"/><circle cx="18" cy="18" r="2"/><path d="M6 4h11M9 7V4"/></svg>
+              <span>供应链生产订单</span>
+            </button>
+          </div>
         </nav>
         <button class="nav-button" type="button" data-view="products">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 4h14v16H5z"/><path d="M8 8h8M8 12h8M8 16h5"/><path d="M9 4V2m6 2V2"/></svg>
@@ -88,15 +87,17 @@
           <span>工具</span>
           <span class="nav-caret" aria-hidden="true">⌄</span>
         </button>
-        <nav class="nav-sublist" data-nav-sublist="tools" hidden>
-          <button class="nav-button nav-subitem" type="button" data-view="profit-estimate">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>
-            <span>毛利估算</span>
-          </button>
-          <button class="nav-button nav-subitem" type="button" data-view="box-convert">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3 7l9-4 9 4v10l-9 4-9-4V7z"/><path d="M3 7l9 4 9-4M12 11v10"/></svg>
-            <span>流水线装箱转换</span>
-          </button>
+        <nav class="nav-sublist" data-nav-sublist="tools" data-collapsed="true">
+          <div class="nav-sublist-inner">
+            <button class="nav-button nav-subitem" type="button" data-view="profit-estimate">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>
+              <span>毛利估算</span>
+            </button>
+            <button class="nav-button nav-subitem" type="button" data-view="box-convert">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3 7l9-4 9 4v10l-9 4-9-4V7z"/><path d="M3 7l9 4 9-4M12 11v10"/></svg>
+              <span>流水线装箱转换</span>
+            </button>
+          </div>
         </nav>
       </nav>
       <div class="nav-label">自动化准备</div>
@@ -1139,8 +1140,8 @@
                   <div class="import-help-rule">同日期或同月份报表更新后启用新版本；库存快照保留历史，用于库存变化曲线。</div>
                 </div>
               </div>
-              <input id="workspaceImportFile" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>
-              <button class="primary-button" id="scanImportPageButton" type="button">选择文件上传</button>
+              <input id="workspaceImportFile" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" multiple hidden>
+              <button class="primary-button" id="scanImportPageButton" type="button">选择文件上传（可多选）</button>
             </div>
           </div>
           <section class="panel table-panel" aria-labelledby="batchTitle">
@@ -1707,18 +1708,15 @@
     </div>
   </dialog>
 
-  <script src="js/xlsx.full.min.js"></script>
   <script type="module">
     // 店铺标识独立于驾驶舱大数据请求加载，避免页头长时间停留在占位状态。
     loadWorkspaceIdentity();
     const requestedViewAtStartup = location.hash.replace("#", "");
-    const lightweightBootstrap = requestedViewAtStartup === "diagnosis"
-      || requestedViewAtStartup === "agent"
-      || requestedViewAtStartup === "supply-chain";
-    const dashboardResponse = await fetch(lightweightBootstrap ? "/api/dashboard/bootstrap" : "/api/dashboard/data");
+    // 首屏只取时间边界；完整驾驶舱数据进入相关页面后再异步加载。
+    const dashboardResponse = await fetch("/api/dashboard/bootstrap");
     if (!dashboardResponse.ok) throw new Error(`加载数据失败：HTTP ${dashboardResponse.status}`);
     let DATA = await dashboardResponse.json();
-    let dashboardDataLoaded = !lightweightBootstrap;
+    let dashboardDataLoaded = false;
     let dashboardDataPromise = null;
     const importSourceGroups = [
       {
@@ -1772,7 +1770,7 @@
       diagnosisStatusFilter: "all",
       campaignSearch: "",
       campaignSort: "parentSku",
-      diagnosisMode: "all",
+      diagnosisMode: "recent",
       diagnosisStartDate: null,
       diagnosisEndDate: null,
       adWorkspace: "decision",
@@ -3560,12 +3558,23 @@
       showToast(`${decisionConfigType} 决策阈值已保存并即时生效。`);
     }
 
-    // 广告诊断默认「全量」：范围 = 数据首日 → 最新业务日，不依赖顶部周期
-    const DIAGNOSIS_DEFAULT_RECENT_DAYS = 7;
+    // 诊断结束日：16:00 后取当日，否则取昨日（当日广告数据通常在 16:00 前尚未回齐）
+    function diagnosisEffectiveEnd() {
+      const now = new Date();
+      const today = toIso(now);
+      const yesterday = toIso(addDays(now, -1));
+      return now.getHours() >= 16 ? today : yesterday;
+    }
+
+    // 广告诊断默认「近 30 天」：结束日按 16:00 规则取当日 / 昨日，不依赖顶部周期
+    const DIAGNOSIS_DEFAULT_RECENT_DAYS = 30;
 
     function diagnosisRange() {
-      const maxDate = DATA.meta.adLatestDate || DATA.meta.latestDate;
-      const minDate = DATA.meta.firstDate || DATA.campaignDaily.map((row) => row.date).sort()[0] || maxDate;
+      const dataMax = DATA.meta.adLatestDate || DATA.meta.latestDate;
+      const dataMin = DATA.meta.firstDate || DATA.campaignDaily.map((row) => row.date).sort()[0] || dataMax;
+      const effectiveEnd = diagnosisEffectiveEnd();
+      const maxDate = effectiveEnd < dataMin ? dataMin : effectiveEnd;
+      const minDate = dataMin > maxDate ? maxDate : dataMin;
       const mode = state.diagnosisMode;
       if (mode === "all") return { startDate: minDate, endDate: maxDate, minDate, maxDate };
       if (mode === "recent") {
@@ -3590,11 +3599,17 @@
 
     function diagnosisDailyCoverage(range) {
       const totals = new Map();
-      DATA.campaignDaily.filter((row) => row.date >= range.startDate && row.date <= range.endDate).forEach((row) => {
-        if (!totals.has(row.date)) totals.set(row.date, { date: row.date, rows: 0, spend: 0, adSales: 0, adOrders: 0 });
-        const day = totals.get(row.date);
-        day.rows += 1;
-        ["spend", "adSales", "adOrders"].forEach((key) => day[key] += number(row[key]));
+      DATA.daily.filter((row) => row.date >= range.startDate && row.date <= range.endDate).forEach((row) => {
+        const hasAdData = ["impressions", "clicks", "spend", "adSales", "adOrders"]
+          .some((key) => number(row[key]) !== 0);
+        if (!hasAdData) return;
+        totals.set(row.date, {
+          date: row.date,
+          rows: 1,
+          spend: number(row.spend),
+          adSales: number(row.adSales),
+          adOrders: number(row.adOrders),
+        });
       });
       return diagnosisCalendarDays(range.startDate, range.endDate).map((date) => ({ date, hasData: totals.has(date), ...(totals.get(date) || { rows: 0, spend: 0, adSales: 0, adOrders: 0 }) }));
     }
@@ -3626,7 +3641,7 @@
       const mode = state.diagnosisMode;
       const modeButtons = [["all", "全量"], ["single", "单日"], ["recent", "近期"], ["custom", "自定义"]].map(([value, label]) => `<button class="diagnosis-mode-button ${mode === value ? "active" : ""}" type="button" data-diagnosis-mode="${value}" aria-pressed="${mode === value}">${label}</button>`).join("");
       const recentDays = Math.max(1, number(state.diagnosisPresetDays) || DIAGNOSIS_DEFAULT_RECENT_DAYS);
-      const allControl = `<div class="diagnosis-range-content"><span class="diagnosis-mode-note">全量统计：${range.startDate} 至 ${range.endDate}，共 ${inclusiveDays(range.startDate, range.endDate)} 个自然日。<b>这是默认口径</b>；一旦选择单日 / 近期 / 自定义，立即改为按该筛选统计。</span></div>`;
+      const allControl = `<div class="diagnosis-range-content"><span class="diagnosis-mode-note">全量统计：${range.startDate} 至 ${range.endDate}，共 ${inclusiveDays(range.startDate, range.endDate)} 个自然日。<b>完整历史累计</b>；近期（默认近 30 天）为日常查看口径，单日 / 自定义可临时切换。</span></div>`;
       const recentControl = `<div class="diagnosis-range-content"><div class="diagnosis-period-chips" role="group" aria-label="近期诊断天数">${[1, 7, 14, 30].map((days) => `<button class="diagnosis-range-button ${recentDays === days ? "active" : ""}" type="button" data-diagnosis-recent="${days}">${days === 1 ? "最新日" : `近 ${days} 天`}</button>`).join("")}</div><span class="diagnosis-mode-note">当前固定${recentDays === 1 ? "最新业务日" : `近 ${recentDays} 天`}，不受顶部周期影响。</span></div>`;
       const singleControl = `<div class="diagnosis-range-content"><div class="diagnosis-single-picker"><button class="diagnosis-day-step" type="button" data-diagnosis-day-shift="-1" aria-label="上一天" ${range.endDate <= range.minDate ? "disabled" : ""}>‹</button><label class="diagnosis-single-date" for="diagnosisSingleDate">诊断日<input id="diagnosisSingleDate" type="date" min="${range.minDate}" max="${range.maxDate}" value="${range.endDate}"></label><button class="diagnosis-day-step" type="button" data-diagnosis-day-shift="1" aria-label="下一天" ${range.endDate >= range.maxDate ? "disabled" : ""}>›</button></div><span class="diagnosis-mode-note">按所选当天的数据诊断，不再需要设置两个日期。</span></div>`;
       const customControl = `<div class="diagnosis-range-content"><div class="diagnosis-custom-fields"><label class="diagnosis-date-field" for="diagnosisStartDate">开始日期<input id="diagnosisStartDate" type="date" min="${range.minDate}" max="${range.maxDate}" value="${range.startDate}"></label><span class="diagnosis-date-divider" aria-hidden="true">至</span><label class="diagnosis-date-field" for="diagnosisEndDate">结束日期<input id="diagnosisEndDate" type="date" min="${range.minDate}" max="${range.maxDate}" value="${range.endDate}"></label><button class="secondary-button diagnosis-apply-button" id="applyDiagnosisRange" type="button">应用范围</button></div><span class="diagnosis-mode-note">适合复盘某次调整前后的连续表现。</span></div>`;
@@ -9354,18 +9369,41 @@
       // 工具分组折叠（与计算器解耦）
       $$('[data-nav-group]').forEach((toggle) => {
         toggle.addEventListener("click", () => {
-          const expanded = toggle.getAttribute("aria-expanded") === "true";
-          toggle.setAttribute("aria-expanded", String(!expanded));
-          const sublist = document.querySelector(`[data-nav-sublist="${toggle.dataset.navGroup}"]`);
-          if (sublist) sublist.hidden = expanded;
+          const willExpand = toggle.getAttribute("aria-expanded") !== "true";
+          $$('[data-nav-group]').forEach((other) => {
+            const open = other === toggle && willExpand;
+            other.setAttribute("aria-expanded", String(open));
+            const sub = document.querySelector(`[data-nav-sublist="${other.dataset.navGroup}"]`);
+            if (sub) sub.dataset.collapsed = String(!open);
+          });
         });
       });
     }
 
+    let xlsxLibraryPromise = null;
+
+    function ensureXlsxLibrary() {
+      if (window.XLSX) return Promise.resolve(window.XLSX);
+      if (!xlsxLibraryPromise) {
+        xlsxLibraryPromise = new Promise((resolve, reject) => {
+          const script = document.createElement("script");
+          script.src = "/js/xlsx.full.min.js";
+          script.onload = () => window.XLSX
+            ? resolve(window.XLSX)
+            : reject(new Error("Excel 组件初始化失败"));
+          script.onerror = () => reject(new Error("Excel 组件加载失败"));
+          document.head.appendChild(script);
+        }).catch((error) => {
+          xlsxLibraryPromise = null;
+          throw error;
+        });
+      }
+      return xlsxLibraryPromise;
+    }
+
     /* ===== 流水线装箱转换工具（移植自 box_gavin.html，已去除维格登记外部调用） ===== */
     function initBoxConvert() {
-      const XLSX = window.XLSX;
-      if (!XLSX) { console.error("SheetJS 未加载"); return; }
+      let XLSX = window.XLSX;
       const $bc = (id) => document.getElementById(id);
       const drop = $bc("bcDrop");
       const fileInput = $bc("bcFile");
@@ -9388,11 +9426,12 @@
         selectedFileName = f.name;
         fileNameEl.textContent = "已选择文件：" + f.name;
         const reader = new FileReader();
-        reader.onload = (e) => {
+        reader.onload = async (e) => {
           try {
+            XLSX = await ensureXlsxLibrary();
             workbook = XLSX.read(new Uint8Array(e.target.result), { type: "array" });
           } catch (err) {
-            alert("文件读取失败，请确认是有效的 Excel 文件：" + err.message);
+            alert("Excel 组件或文件读取失败：" + err.message);
             return;
           }
           processWorkbook();
@@ -9689,7 +9728,9 @@
       $("#menuButton").setAttribute("aria-expanded", "false");
       window.scrollTo({ top: 0, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
       if (view === "dashboard") {
-        ensureDashboardData().then(() => { renderMetrics(); renderSkuSummary(); updatePageMeta(); });
+        ensureDashboardData()
+          .then(() => { renderMetrics(); renderSkuSummary(); updatePageMeta(); })
+          .catch((error) => showToast(error.message || "驾驶舱数据加载失败"));
       }
       if (view === "sales") {
         if (!state.sales) loadSales();
@@ -9697,7 +9738,11 @@
         // if (!state.orderFlow) loadOrderFlow();
       }
       if (view === "diagnosis" && !state.diagnosisData) renderDiagnosis();
-      if (view === "sku") ensureDashboardData().then(renderSkuMatrix);
+      if (view === "sku") {
+        ensureDashboardData()
+          .then(renderSkuMatrix)
+          .catch((error) => showToast(error.message || "销量矩阵加载失败"));
+      }
       if (view === "products" && !state.products) loadProducts();
       if (view === "operations") {
         if (!state.operationTargets.length) loadOperationTargets();
@@ -9712,20 +9757,20 @@
         const tg = document.querySelector('[data-nav-group="tools"]');
         const sl = document.querySelector('[data-nav-sublist="tools"]');
         if (tg) tg.setAttribute("aria-expanded", "true");
-        if (sl) sl.hidden = false;
+        if (sl) sl.dataset.collapsed = "false";
         updateProfitCalculator();
       }
       if (view === "box-convert") {
         const tg = document.querySelector('[data-nav-group="tools"]');
         const sl = document.querySelector('[data-nav-sublist="tools"]');
         if (tg) tg.setAttribute("aria-expanded", "true");
-        if (sl) sl.hidden = false;
+        if (sl) sl.dataset.collapsed = "false";
       }
       if (view === "inventory" || view === "demand-forecast" || view === "supply-chain") {
         const tg = document.querySelector('[data-nav-group="inventory"]');
         const sl = document.querySelector('[data-nav-sublist="inventory"]');
         if (tg) tg.setAttribute("aria-expanded", "true");
-        if (sl) sl.hidden = false;
+        if (sl) sl.dataset.collapsed = "false";
       }
       if (view === "inventory") {
         if (!state.inventory) loadInventory();
@@ -9747,6 +9792,17 @@
         requestAnimationFrame(() => renderTrend());
       }
       if (view === "operations" || view === "diagnosis") loadReminders();
+      syncNavGroups();
+    }
+
+    function syncNavGroups() {
+      const activeBtn = document.querySelector(".nav-button.active[data-view]");
+      const parentSub = activeBtn && activeBtn.closest(".nav-sublist");
+      if (!parentSub) return;                                   // 不在任何分组内 → 分组状态保持不动
+      if (parentSub.dataset.collapsed !== "true") return;       // 当前分组已展开 → 不做任何变化（侧栏绝不跳动）
+      parentSub.dataset.collapsed = "false";                    // 仅在收起时展开当前分组，绝不收起其他分组
+      const tg = document.querySelector(`[data-nav-group="${parentSub.dataset.navSublist}"]`);
+      if (tg) tg.setAttribute("aria-expanded", "true");
     }
 
     function emptyRow(columns, title, detail) { return `<tr><td colspan="${columns}"><div class="empty-state"><strong>${title}</strong>${detail}</div></td></tr>`; }
@@ -9970,14 +10026,17 @@
       input.click();
     }
 
-    async function uploadWorkspaceImport(file, source) {
-      if (!file || !source || state.importRunning) return;
+    async function uploadWorkspaceImport(files, source) {
+      if (!files || files.length === 0 || !source || state.importRunning) return;
       const buttons = [$("#scanImportButton"), $("#scanImportPageButton")].filter(Boolean);
+      const input = $("#workspaceImportFile");
       const body = new FormData();
-      body.append("source", source);
-      body.append("file", file, file.name);
+      for (const file of files) {
+        body.append("source", source);
+        body.append("file", file, file.name);
+      }
       state.importRunning = true;
-      buttons.forEach((button) => { button.disabled = true; button.textContent = "正在上传并解析…"; });
+      buttons.forEach((button) => { button.disabled = true; button.textContent = `正在上传 ${files.length} 个文件…`; });
       try {
         const response = await fetch("/api/imports/upload", { method: "POST", body });
         const payload = await response.json();
@@ -9988,8 +10047,9 @@
         showToast(`导入失败：${error.message}`);
       } finally {
         state.importRunning = false;
-        buttons.forEach((button) => { button.textContent = button.id === "scanImportButton" ? "上传文件" : "选择文件上传"; });
+        buttons.forEach((button) => { button.textContent = button.id === "scanImportButton" ? "上传文件" : "选择文件上传（可多选）"; });
         syncImportControls();
+        if (input) input.value = "";
       }
     }
 
@@ -11533,7 +11593,9 @@
     const scanPageButton = $("#scanImportPageButton");
     if (scanPageButton) scanPageButton.addEventListener("click", runImport);
     $("#workspaceImportFile")?.addEventListener("change", (event) => {
-      uploadWorkspaceImport(event.target.files?.[0], event.target.dataset.source);
+      if (event.target.files && event.target.files.length) {
+        uploadWorkspaceImport(event.target.files, event.target.dataset.source);
+      }
     });
     $("#refreshBatchesButton").addEventListener("click", loadBatches);
     const runAiButton = $("#runAiButton");

@@ -41,6 +41,7 @@ class RefundRateServiceTest {
                     """);
             jdbc.getJdbcTemplate().execute("""
                     create table wm_ads_sku_mapping (
+                        id bigint primary key,
                         item_id varchar(80),
                         parent_sku varchar(80),
                         current_version boolean
@@ -48,6 +49,7 @@ class RefundRateServiceTest {
                     """);
             jdbc.getJdbcTemplate().execute("""
                     create table wm_ads_product_record (
+                        id bigint primary key,
                         sku varchar(180),
                         parent_sku varchar(80),
                         current_version boolean
@@ -55,6 +57,7 @@ class RefundRateServiceTest {
                     """);
             jdbc.getJdbcTemplate().execute("""
                     create table wm_ads_order_record (
+                        id bigint primary key,
                         import_file_id bigint not null,
                         sku varchar(180),
                         parent_sku varchar(80),
@@ -75,7 +78,7 @@ class RefundRateServiceTest {
                     """);
             jdbc.getJdbcTemplate().update("insert into wm_ads_import_file values (1, true, timestamp '2026-07-01 00:00:00')");
             jdbc.getJdbcTemplate().update("insert into wm_ads_import_file values (2, true, timestamp '2026-07-02 00:00:00')");
-            jdbc.getJdbcTemplate().update("insert into wm_ads_product_record values ('SKU-1', 'PNK100', true)");
+            jdbc.getJdbcTemplate().update("insert into wm_ads_product_record (id, sku, parent_sku, current_version) values (1, 'SKU-1', 'PNK100', true)");
             jdbc.getJdbcTemplate().update("""
                     insert into wm_ads_return_order
                         (id, import_file_id, business_key, parent_sku, item_id, current_status, quantity, report_month)
@@ -85,12 +88,12 @@ class RefundRateServiceTest {
                         (3, 1, 'another-rma-line', 'PNK100', 'SKU-1', 'RETURN_INVOICED', 2, date '2025-09-01')
                     """);
             jdbc.getJdbcTemplate().update("""
-                    insert into wm_ads_order_record (import_file_id, sku, parent_sku, quantity, order_date)
+                    insert into wm_ads_order_record (id, import_file_id, sku, parent_sku, quantity, order_date)
                     values
-                        (1, 'SKU-1', 'PNK100', 100, date '2025-08-31'),
-                        (1, 'SKU-1', 'PNK100', 20, date '2025-09-01'),
-                        (1, 'SKU-1', 'PNK100', 30, date '2026-07-31'),
-                        (1, 'SKU-1', 'PNK100', 50, date '2026-08-01')
+                        (1, 1, 'SKU-1', 'PNK100', 100, date '2025-08-31'),
+                        (2, 1, 'SKU-1', 'PNK100', 20, date '2025-09-01'),
+                        (3, 1, 'SKU-1', 'PNK100', 30, date '2026-07-31'),
+                        (4, 1, 'SKU-1', 'PNK100', 50, date '2026-08-01')
                     """);
 
             var rates = new RefundRateService(jdbc).ratesByParent();

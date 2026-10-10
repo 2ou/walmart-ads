@@ -127,7 +127,7 @@ public class WorkspaceAccountService {
             id = insertAccount(storeName, request.password(), "ACTIVE", request.storeId(),
                     storeName, abbreviation, List.of(abbreviation), baseUrl, key,
                     false, false, creator.workspaceId(), "SYNCING");
-            List<Long> advertisers = normalizedAdvertisers(request.advertiserIds(), List.of());
+            List<Long> advertisers = normalizedAdvertisers(request.advertiserIds(), selected.advertiserIds());
             replaceAdvertisers(id, advertisers);
             seedSyncSettings(id, !advertisers.isEmpty());
         } catch (DataIntegrityViolationException exception) {
@@ -135,6 +135,46 @@ public class WorkspaceAccountService {
         }
         audit(creator.workspaceId(), creator.username(), "ACCOUNT_CREATE", true,
                 "创建并绑定店铺账号 " + storeName, ip, userAgent);
+        return new SetupResult(accountView(requireAccount(id), false));
+    }
+
+    public List<StoreOption> discoverRegistrationStores(RegisterDiscoveryRequest request) {
+        if (setupRequired()) {
+            throw new IllegalStateException("请先在服务器本机完成 PINKSIR 初始化");
+        }
+        String key = requireMcpKey(request == null ? null : request.mcpKey());
+        return discoverStores(DEFAULT_MCP_URL, key);
+    }
+
+    @Transactional
+    public SetupResult registerAccount(RegisterAccountRequest request, String ip, String userAgent) {
+        if (setupRequired()) {
+            throw new IllegalStateException("请先在服务器本机完成 PINKSIR 初始化");
+        }
+        if (request == null) {
+            throw new IllegalArgumentException("请填写注册信息");
+        }
+        validateConfirmedPassword(request.password(), request.confirmPassword());
+        String abbreviation = normalizeAbbreviation(request.storeAbbreviation());
+        String key = requireMcpKey(request.mcpKey());
+        List<StoreOption> stores = discoverStores(DEFAULT_MCP_URL, key);
+        StoreOption selected = stores.stream()
+                .filter(store -> store.storeId().equals(request.storeId()))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("所选店铺不在当前 MCP Key 的可访问范围内"));
+        String storeName = requireStoreName(selected.storeName());
+        long id;
+        try {
+            id = insertAccount(storeName, request.password(), "ACTIVE", selected.storeId(),
+                    storeName, abbreviation, List.of(abbreviation), DEFAULT_MCP_URL, key,
+                    false, false, null, "SYNCING");
+            replaceAdvertisers(id, selected.advertiserIds());
+            seedSyncSettings(id, !selected.advertiserIds().isEmpty());
+        } catch (DataIntegrityViolationException exception) {
+            throw new IllegalArgumentException("该店铺或店铺缩写已经注册，请直接登录或联系 PINKSIR 重置密码");
+        }
+        audit(id, storeName, "ACCOUNT_SELF_REGISTER", true,
+                "通过登录页注册并绑定领星店铺 " + storeName, ip, userAgent);
         return new SetupResult(accountView(requireAccount(id), false));
     }
 
@@ -512,7 +552,8 @@ public class WorkspaceAccountService {
         String platform = firstText(node, "platform_code", "platformCode", "platform");
         if (StringUtils.hasText(storeId) && (!StringUtils.hasText(platform) || platform.contains("10008") || platform.toLowerCase(Locale.ROOT).contains("walmart"))) {
             String name = firstText(node, "store_name", "storeName", "shop", "name", "seller_name");
-            stores.add(new StoreOption(storeId, valueOr(name, "Walmart " + storeId), valueOr(platform, "10008")));
+            stores.add(new StoreOption(storeId, valueOr(name, "Walmart " + storeId), valueOr(platform, "10008"),
+                    advertiserIdsFrom(node)));
         }
         node.fields().forEachRemaining(field -> collectStores(field.getValue(), stores));
     }
@@ -525,6 +566,32 @@ public class WorkspaceAccountService {
             }
         }
         return null;
+    }
+
+    private static List<Long> advertiserIdsFrom(JsonNode node) {
+        List<Long> values = new ArrayList<>();
+        for (String field : List.of("walmart_advertiser_id", "walmartAdvertiserId", "advertiser_id",
+                "advertiserId", "mpAdvertiserId", "advertiser_ids", "advertiserIds")) {
+            JsonNode value = node.get(field);
+            if (value == null || value.isNull()) continue;
+            if (value.isArray()) {
+                value.forEach(item -> addAdvertiserIds(values, item.asText()));
+            } else if (!value.isContainerNode()) {
+                addAdvertiserIds(values, value.asText());
+            }
+        }
+        return values.stream().filter(value -> value > 0).distinct().toList();
+    }
+
+    private static void addAdvertiserIds(List<Long> values, String raw) {
+        if (!StringUtils.hasText(raw)) return;
+        for (String value : raw.trim().split("[,;\\s]+")) {
+            try {
+                values.add(Long.parseLong(value));
+            } catch (NumberFormatException ignored) {
+                // Ignore non-numeric labels returned alongside an advertiser identifier.
+            }
+        }
     }
 
     private static void validatePassword(String password) {
@@ -544,6 +611,17 @@ public class WorkspaceAccountService {
         String normalized = value == null ? "" : value.trim();
         if (normalized.isEmpty() || normalized.length() > 64) {
             throw new IllegalArgumentException("领星店铺名不能为空且不能超过 64 个字符");
+        }
+        return normalized;
+    }
+
+    private static String requireMcpKey(String value) {
+        String normalized = blankToNull(value);
+        if (normalized == null) {
+            throw new IllegalArgumentException("请填写领星 MCP Key");
+        }
+        if (normalized.length() > 512) {
+            throw new IllegalArgumentException("领星 MCP Key 长度异常");
         }
         return normalized;
     }
@@ -635,7 +713,7 @@ public class WorkspaceAccountService {
                                   String baseUrl, String keyLast4) {
     }
 
-    public record StoreOption(String storeId, String storeName, String platformCode) {
+    public record StoreOption(String storeId, String storeName, String platformCode, List<Long> advertiserIds) {
     }
 
     public record AccountView(long id, String username, String status, String storeId, String storeName,
@@ -671,6 +749,13 @@ public class WorkspaceAccountService {
 
     public record CreateAccountRequest(String password, String confirmPassword, String mcpKey, String baseUrl,
                                        String storeId, String storeAbbreviation, List<Long> advertiserIds) {
+    }
+
+    public record RegisterDiscoveryRequest(String mcpKey) {
+    }
+
+    public record RegisterAccountRequest(String password, String confirmPassword, String mcpKey,
+                                         String storeId, String storeAbbreviation) {
     }
 
     public record LoginRequest(String username, String password) {

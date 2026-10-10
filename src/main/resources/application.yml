@@ -17,6 +17,8 @@ spring:
     multipart:
       max-file-size: 100MB
       max-request-size: 105MB
+      # Keep accepted workbooks in request memory so browser uploads never create application-local files.
+      file-size-threshold: 100MB
   jpa:
     open-in-view: false
     hibernate:

@@ -144,6 +144,7 @@ class SalesDataServiceTest {
         when(transitInventoryService.load()).thenReturn(new TransitInventoryService.TransitData(
                 Map.of("SKU-A", 4.0, "SKU-B", 2.0),
                 List.of(),
+                List.of(),
                 List.of()
         ));
         service = new SalesDataService(jdbc, transitInventoryService);

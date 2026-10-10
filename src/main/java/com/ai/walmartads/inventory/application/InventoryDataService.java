@@ -610,7 +610,7 @@ public class InventoryDataService {
                 Map.of(),
                 List.of(),
                 List.of(),
-                new TransitInventoryService.TransitData(Map.of(), List.of(), List.of()),
+                new TransitInventoryService.TransitData(Map.of(), List.of(), List.of(), List.of()),
                 new DomesticStock(0, 0, 0, List.of())
         );
     }

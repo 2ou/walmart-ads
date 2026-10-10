@@ -28,4 +28,13 @@ public class FileFingerprint {
             throw new IllegalStateException("JVM 不支持 SHA-256", exception);
         }
     }
+
+    public String sha256(byte[] content) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            return HexFormat.of().formatHex(digest.digest(content));
+        } catch (NoSuchAlgorithmException exception) {
+            throw new IllegalStateException("JVM 不支持 SHA-256", exception);
+        }
+    }
 }

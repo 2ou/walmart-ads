@@ -8,6 +8,7 @@ import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.ss.usermodel.WorkbookFactory;
 import org.springframework.stereotype.Component;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
@@ -27,10 +28,21 @@ public class ProductWorkbookParser {
     }
 
     public ParsedRows<ProductRecord> parse(Path path, ImportFile importFile) throws IOException {
+        try (InputStream input = Files.newInputStream(path)) {
+            return parse(input, importFile);
+        }
+    }
+
+    public ParsedRows<ProductRecord> parse(byte[] content, ImportFile importFile) throws IOException {
+        try (InputStream input = new ByteArrayInputStream(content)) {
+            return parse(input, importFile);
+        }
+    }
+
+    private ParsedRows<ProductRecord> parse(InputStream input, ImportFile importFile) throws IOException {
         List<ProductRecord> records = new ArrayList<>();
         int sourceRows = 0;
-        try (InputStream input = Files.newInputStream(path);
-             Workbook workbook = WorkbookFactory.create(input)) {
+        try (Workbook workbook = WorkbookFactory.create(input)) {
             Sheet sheet = findProductSheet(workbook);
             Header header = findTechnicalHeader(sheet);
             for (int rowIndex = header.rowIndex() + 1; rowIndex <= sheet.getLastRowNum(); rowIndex++) {

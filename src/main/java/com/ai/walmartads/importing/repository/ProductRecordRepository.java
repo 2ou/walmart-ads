@@ -20,6 +20,17 @@ public interface ProductRecordRepository extends JpaRepository<ProductRecord, Lo
 
     List<ProductRecord> findAllBySkuInAndCurrentVersionTrue(Collection<String> skus);
 
+    @Query(value = """
+            select parent_sku, cutting_yield
+              from wm_ads_product_manual_setting
+             where workspace_id = :workspaceId
+               and parent_sku in (:parentSkus)
+            """, nativeQuery = true)
+    List<Object[]> findManualCuttingYields(
+            @Param("workspaceId") long workspaceId,
+            @Param("parentSkus") Collection<String> parentSkus
+    );
+
     Optional<ProductRecord> findFirstByProductIdAndCurrentVersionTrueOrderBySourceUpdatedAtDesc(String productId);
 
     Optional<ProductRecord> findFirstBySkuAndCurrentVersionTrueOrderBySourceUpdatedAtDesc(String sku);

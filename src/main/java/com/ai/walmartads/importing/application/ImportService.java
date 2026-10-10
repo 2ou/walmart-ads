@@ -63,12 +63,105 @@ public class ImportService {
         return runImport(candidates, null, selectedSources);
     }
 
+    public ImportRunResult scanAndImport(Set<ImportSource> requestedSources, Path sourceRoot) throws IOException {
+        Set<ImportSource> selectedSources = resolveSources(requestedSources);
+        Path normalizedRoot = normalizeSourceRoot(sourceRoot);
+        guardSourceRoot(selectedSources, normalizedRoot);
+        List<SourceFileCandidate> candidates = scanner.scan(normalizedRoot).stream()
+                .filter(candidate -> selectedSources.stream().anyMatch(source -> source.matches(candidate)))
+                .toList();
+        return runImport(candidates, null, selectedSources, normalizedRoot);
+    }
+
     public ImportRunResult importUploaded(SourceFileCandidate candidate, ImportSource source) throws IOException {
         if (candidate == null || source == null || candidate.fileType() != source.fileType()) {
             throw new IllegalArgumentException("上传文件与导入类型不匹配");
         }
         ImportFileType replacementType = candidate.fileType().fullReplace() ? candidate.fileType() : null;
         return runImport(List.of(candidate), replacementType, EnumSet.of(source));
+    }
+
+    /**
+     * Imports one browser upload from request memory. Only its fingerprint, audit metadata and parsed rows
+     * are persisted; the original workbook is not copied to an application-local directory.
+     */
+    public ImportRunResult importUploaded(
+            SourceFileCandidate candidate,
+            ImportSource source,
+            byte[] content
+    ) throws IOException {
+        if (candidate == null || source == null || candidate.fileType() != source.fileType()) {
+            throw new IllegalArgumentException("上传文件与导入类型不匹配");
+        }
+        if (content == null || content.length == 0) {
+            throw new IllegalArgumentException("上传文件为空");
+        }
+
+        String name = candidate.path().getFileName().toString();
+        String sourceReference = "database://workspace-upload/" + name;
+        ImportBatch batch = batchRepository.save(new ImportBatch("database://workspace-upload"));
+        ImportFileType replacementType = candidate.fileType().fullReplace() ? candidate.fileType() : null;
+        List<FileResult> results = new ArrayList<>();
+        List<Long> retainedFileIds = new ArrayList<>();
+        int imported = 0;
+        int skipped = 0;
+        int failed = 0;
+
+        String sha256 = processor.importFingerprint(candidate.fileType(), fingerprint.sha256(content));
+        ImportFile existingReplacement = replacementType == null
+                ? null
+                : fileRepository.findBySha256AndFileType(sha256, candidate.fileType()).orElse(null);
+        if (existingReplacement != null && existingReplacement.getStatus() == ImportFileStatus.IMPORTED) {
+            retainedFileIds.add(existingReplacement.getId());
+            skipped = 1;
+            results.add(FileResult.reused(candidate.path(), candidateLabel(candidate)));
+        } else if (existingReplacement != null) {
+            failed = 1;
+            results.add(FileResult.failed(candidate.path(), candidateLabel(candidate),
+                    "The same document previously failed. Change the file content before rebuilding."));
+        } else if (alreadyImported(candidate, sha256, replacementType)) {
+            skipped = 1;
+            results.add(FileResult.skipped(candidate.path(), candidateLabel(candidate)));
+        } else {
+            ImportFile file = new ImportFile(
+                    batch,
+                    candidate.fileType(),
+                    candidate.reportKind(),
+                    name,
+                    sourceReference,
+                    sha256,
+                    content.length,
+                    LocalDateTime.now(),
+                    candidate.reportDate(),
+                    candidate.snapshotAt()
+            );
+            fileRepository.saveAndFlush(file);
+            try {
+                DocumentImportTool.ImportOutcome processed =
+                        processor.processUploaded(file.getId(), content, sourceReference);
+                retainedFileIds.add(file.getId());
+                imported = 1;
+                results.add(FileResult.imported(candidate.path(), candidateLabel(candidate),
+                        processed.sourceRows(), processed.importedRows()));
+            } catch (Exception exception) {
+                failed = 1;
+                log.error("Memory upload import failed for {}", name, exception);
+                ImportFile failedFile = fileRepository.findById(file.getId()).orElse(file);
+                failedFile.failed(sourceReference, rootMessage(exception));
+                fileRepository.save(failedFile);
+                results.add(FileResult.failed(candidate.path(), candidateLabel(candidate), rootMessage(exception)));
+            }
+        }
+
+        if (replacementType != null && failed == 0 && !retainedFileIds.isEmpty()) {
+            fileRepository.activateImportedVersions(retainedFileIds, ImportFileStatus.IMPORTED);
+            fileRepository.deactivateFileTypeVersionsExcept(replacementType, retainedFileIds);
+        }
+        String message = "发现 1 个文件，导入 %d，跳过 %d，失败 %d"
+                .formatted(imported, skipped, failed);
+        batch.complete(1, imported, skipped, failed, message);
+        batchRepository.save(batch);
+        return new ImportRunResult(batch.getId(), batch.getStatus().name(), message, results);
     }
 
     private static EnumSet<ImportSource> defaultDailySources() {
@@ -103,6 +196,19 @@ public class ImportService {
         return runImport(candidates, ImportFileType.RETURN_ORDER, EnumSet.of(ImportSource.RETURN_ORDER));
     }
 
+    public ImportRunResult replaceReturnOrders(Path sourceRoot) throws IOException {
+        Path normalizedRoot = normalizeSourceRoot(sourceRoot);
+        List<SourceFileCandidate> candidates = scanner.scan(normalizedRoot).stream()
+                .filter(candidate -> candidate.fileType() == ImportFileType.RETURN_ORDER)
+                .toList();
+        if (candidates.isEmpty()) {
+            throw new IllegalArgumentException("退款目录中未找到 Customer returns-YYYYMM.xlsx："
+                    + normalizedRoot.resolve("Return_Orders"));
+        }
+        return runImport(candidates, ImportFileType.RETURN_ORDER,
+                EnumSet.of(ImportSource.RETURN_ORDER), normalizedRoot);
+    }
+
     /**
      * 置空预检：列出本次导入会「因为源目录为空而整体置空」的来源及其当前行数。
      *
@@ -115,6 +221,28 @@ public class ImportService {
         Set<ImportSource> selectedSources = resolveSources(requestedSources);
         guardSourceRoot(selectedSources);
         Set<ImportFileType> presentTypes = scanner.scan().stream()
+                .filter(candidate -> selectedSources.stream().anyMatch(source -> source.matches(candidate)))
+                .map(SourceFileCandidate::fileType)
+                .collect(Collectors.toSet());
+        List<PendingClear> pending = new ArrayList<>();
+        for (ImportSource source : selectedSources) {
+            ImportFileType type = source.fileType();
+            if (!type.fullReplace() || presentTypes.contains(type)) {
+                continue;
+            }
+            long currentRows = processor.countCurrentRows(type);
+            if (currentRows > 0) {
+                pending.add(new PendingClear(type.name(), currentRows));
+            }
+        }
+        return pending;
+    }
+
+    public List<PendingClear> preflight(Set<ImportSource> requestedSources, Path sourceRoot) throws IOException {
+        Set<ImportSource> selectedSources = resolveSources(requestedSources);
+        Path normalizedRoot = normalizeSourceRoot(sourceRoot);
+        guardSourceRoot(selectedSources, normalizedRoot);
+        Set<ImportFileType> presentTypes = scanner.scan(normalizedRoot).stream()
                 .filter(candidate -> selectedSources.stream().anyMatch(source -> source.matches(candidate)))
                 .map(SourceFileCandidate::fileType)
                 .collect(Collectors.toSet());
@@ -145,10 +273,13 @@ public class ImportService {
      * 一次扫描就把三套数据全清光。这里宁可直接拒绝，也不做这种「静默大扫除」。
      */
     private void guardSourceRoot(Set<ImportSource> selectedSources) {
+        guardSourceRoot(selectedSources, properties.dataRoot().toAbsolutePath().normalize().resolve("source"));
+    }
+
+    private void guardSourceRoot(Set<ImportSource> selectedSources, Path sourceRoot) {
         if (selectedSources.stream().noneMatch(ImportSource::fullReplace)) {
             return;
         }
-        Path sourceRoot = properties.dataRoot().toAbsolutePath().normalize().resolve("source");
         if (!Files.isDirectory(sourceRoot)) {
             throw new IllegalArgumentException(
                     "源数据目录不存在，已中止扫描导入（避免误将生产订单/货件/物流数据置空）：" + sourceRoot
@@ -161,7 +292,17 @@ public class ImportService {
             ImportFileType replacementType,
             Set<ImportSource> selectedSources
     ) throws IOException {
-        ImportBatch batch = batchRepository.save(new ImportBatch(properties.dataRoot().toString()));
+        return runImport(candidates, replacementType, selectedSources,
+                properties.dataRoot().toAbsolutePath().normalize().resolve("source"));
+    }
+
+    private ImportRunResult runImport(
+            List<SourceFileCandidate> candidates,
+            ImportFileType replacementType,
+            Set<ImportSource> selectedSources,
+            Path sourceRoot
+    ) throws IOException {
+        ImportBatch batch = batchRepository.save(new ImportBatch(sourceRoot.toString()));
 
         int imported = 0;
         int skipped = 0;
@@ -258,6 +399,13 @@ public class ImportService {
         batch.complete(candidates.size(), imported, skipped, failed, message);
         batchRepository.save(batch);
         return new ImportRunResult(batch.getId(), batch.getStatus().name(), message, results);
+    }
+
+    private static Path normalizeSourceRoot(Path sourceRoot) {
+        if (sourceRoot == null) {
+            throw new IllegalArgumentException("请先设置本地扫描路径");
+        }
+        return sourceRoot.toAbsolutePath().normalize();
     }
 
     /**

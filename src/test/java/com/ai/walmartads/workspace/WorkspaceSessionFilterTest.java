@@ -77,4 +77,30 @@ class WorkspaceSessionFilterTest {
         assertThat(response.getStatus()).isEqualTo(200);
         verify(chain).doFilter(request, response);
     }
+
+    @Test
+    void allowsUnauthenticatedRegistrationStoreDiscovery() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/auth/register/discover");
+        request.setRemoteAddr("192.168.1.20");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        FilterChain chain = mock(FilterChain.class);
+
+        filter.doFilter(request, response, chain);
+
+        assertThat(response.getStatus()).isEqualTo(200);
+        verify(chain).doFilter(request, response);
+    }
+
+    @Test
+    void allowsUnauthenticatedRegistration() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/auth/register");
+        request.setRemoteAddr("192.168.1.20");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        FilterChain chain = mock(FilterChain.class);
+
+        filter.doFilter(request, response, chain);
+
+        assertThat(response.getStatus()).isEqualTo(200);
+        verify(chain).doFilter(request, response);
+    }
 }

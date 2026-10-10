@@ -5,6 +5,7 @@ import com.ai.walmartads.importing.domain.ProductRecord;
 import com.ai.walmartads.importing.repository.ProductRecordRepository;
 import com.ai.walmartads.inventory.application.ParentLifecycleService;
 import com.ai.walmartads.product.domain.ProfitAssumption;
+import com.ai.walmartads.workspace.WorkspaceContext;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
@@ -178,13 +179,20 @@ public class ProductCatalogService {
         validateCuttingYield(cuttingYield);
         ProductRecord record = productRecordRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("产品记录不存在：" + id));
-        record.setCuttingYield(cuttingYield);
-        productRecordRepository.save(record);
+        persistCuttingYield(record.getParentSku(), cuttingYield);
     }
 
     @Transactional
     public void updateCuttingYieldByParent(String parentSku, Integer cuttingYield) {
         validateCuttingYield(cuttingYield);
+        String safeParentSku = parentSku == null ? "" : parentSku.trim();
+        if (safeParentSku.isEmpty()) {
+            throw new IllegalArgumentException("父 SKU 不能为空。");
+        }
+        persistCuttingYield(safeParentSku, cuttingYield);
+    }
+
+    private void persistCuttingYield(String parentSku, Integer cuttingYield) {
         String safeParentSku = parentSku == null ? "" : parentSku.trim();
         if (safeParentSku.isEmpty()) {
             throw new IllegalArgumentException("父 SKU 不能为空。");
@@ -197,6 +205,23 @@ public class ProductCatalogService {
             record.setCuttingYield(cuttingYield);
         }
         productRecordRepository.saveAll(records);
+        MapSqlParameterSource parameters = new MapSqlParameterSource()
+                .addValue("workspaceId", WorkspaceContext.requireId())
+                .addValue("parentSku", safeParentSku)
+                .addValue("cuttingYield", cuttingYield);
+        if (cuttingYield == null) {
+            jdbc.update("""
+                    delete from wm_ads_product_manual_setting
+                     where workspace_id=:workspaceId and parent_sku=:parentSku
+                    """, parameters);
+        } else {
+            jdbc.update("""
+                    insert into wm_ads_product_manual_setting
+                        (workspace_id, parent_sku, cutting_yield)
+                    values (:workspaceId, :parentSku, :cuttingYield)
+                    on duplicate key update cutting_yield=values(cutting_yield), updated_at=now(6)
+                    """, parameters);
+        }
     }
 
     /**

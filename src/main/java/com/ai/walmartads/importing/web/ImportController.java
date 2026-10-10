@@ -3,9 +3,9 @@ package com.ai.walmartads.importing.web;
 import com.ai.walmartads.importing.application.FileImportProcessor;
 import com.ai.walmartads.importing.application.ImportSource;
 import com.ai.walmartads.importing.application.ImportService;
+import com.ai.walmartads.importing.application.LocalImportPathService;
 import com.ai.walmartads.importing.application.SourceFileCandidate;
 import com.ai.walmartads.importing.application.SourceScanner;
-import com.ai.walmartads.config.WalmartAdsProperties;
 import com.ai.walmartads.importing.domain.ImportBatch;
 import com.ai.walmartads.importing.domain.ImportFile;
 import com.ai.walmartads.importing.repository.ImportBatchRepository;
@@ -15,18 +15,18 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.multipart.MultipartFile;
-import com.ai.walmartads.workspace.WorkspaceContext;
 import com.ai.walmartads.workspace.WorkspaceOwnershipService;
 
 import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -41,7 +41,7 @@ public class ImportController {
     private final ImportBatchRepository batchRepository;
     private final ImportFileRepository fileRepository;
     private final SourceScanner sourceScanner;
-    private final WalmartAdsProperties properties;
+    private final LocalImportPathService localImportPathService;
     @Autowired(required = false)
     private WorkspaceOwnershipService ownershipService;
 
@@ -52,14 +52,14 @@ public class ImportController {
             ImportBatchRepository batchRepository,
             ImportFileRepository fileRepository,
             SourceScanner sourceScanner,
-            WalmartAdsProperties properties
+            LocalImportPathService localImportPathService
     ) {
         this.importService = importService;
         this.fileImportProcessor = fileImportProcessor;
         this.batchRepository = batchRepository;
         this.fileRepository = fileRepository;
         this.sourceScanner = sourceScanner;
-        this.properties = properties;
+        this.localImportPathService = localImportPathService;
     }
 
     ImportController(
@@ -75,13 +75,13 @@ public class ImportController {
     public ApiResponse<ImportService.ImportRunResult> scan(
             @RequestParam(name = "source", required = false) Set<ImportSource> sources
     ) throws IOException {
-        throw new IllegalArgumentException("共享目录扫描已停用，请在当前账号的数据导入页上传文件");
+        return ApiResponse.ok(importService.scanAndImport(sources, localImportPathService.currentRoot()));
     }
 
     @PostMapping(value = "/upload", consumes = "multipart/form-data")
     public ApiResponse<ImportService.ImportRunResult> upload(
-            @RequestPart("source") List<String> sourceValues,
-            @RequestPart("file") List<MultipartFile> files
+            @RequestParam("source") List<String> sourceValues,
+            @RequestParam("file") List<MultipartFile> files
     ) throws IOException {
         if (files == null || files.isEmpty()) {
             throw new IllegalArgumentException("请选择要上传的工作簿");
@@ -125,25 +125,12 @@ public class ImportController {
         if (!safeName.toLowerCase().endsWith(".xlsx")) {
             throw new IllegalArgumentException("仅支持 .xlsx 工作簿：" + safeName);
         }
-        Path ownerRoot = properties.dataRoot().toAbsolutePath().normalize()
-                .resolve("workspace-uploads").resolve(String.valueOf(WorkspaceContext.requireId()));
-        Files.createDirectories(ownerRoot);
-        Path tempDirectory = Files.createTempDirectory(ownerRoot, "upload-");
-        Path tempFile = tempDirectory.resolve(safeName).normalize();
-        if (!tempFile.startsWith(tempDirectory)) {
-            throw new IllegalArgumentException("文件名无效");
+        byte[] content = file.getBytes();
+        if (ownershipService != null) {
+            ownershipService.verifyUploadedWorkbook(content, source, safeName);
         }
-        try {
-            file.transferTo(tempFile);
-            if (ownershipService != null) {
-                ownershipService.verifyUploadedWorkbook(tempFile, source, safeName);
-            }
-            SourceFileCandidate candidate = sourceScanner.uploadedCandidate(tempFile, source);
-            return importService.importUploaded(candidate, source);
-        } finally {
-            Files.deleteIfExists(tempFile);
-            Files.deleteIfExists(tempDirectory);
-        }
+        SourceFileCandidate candidate = sourceScanner.uploadedCandidate(safeName, source, LocalDateTime.now());
+        return importService.importUploaded(candidate, source, content);
     }
 
     /**
@@ -155,12 +142,26 @@ public class ImportController {
     public ApiResponse<List<ImportService.PendingClear>> preflight(
             @RequestParam(name = "source", required = false) Set<ImportSource> sources
     ) throws IOException {
-        throw new IllegalArgumentException("共享目录扫描已停用");
+        return ApiResponse.ok(importService.preflight(sources, localImportPathService.currentRoot()));
     }
 
     @PostMapping("/rebuild/return-orders")
     public ApiResponse<ImportService.ImportRunResult> rebuildReturnOrders() throws IOException {
-        throw new IllegalArgumentException("共享目录扫描已停用，请上传当前账号的退款文件");
+        return ApiResponse.ok(importService.replaceReturnOrders(localImportPathService.currentRoot()));
+    }
+
+    @GetMapping("/local-source")
+    public ApiResponse<LocalSourceView> localSource() {
+        return ApiResponse.ok(LocalSourceView.from(localImportPathService.current()));
+    }
+
+    @PutMapping("/local-source")
+    public ApiResponse<LocalSourceView> updateLocalSource(@RequestBody LocalSourceUpdate request) {
+        if (request == null) {
+            throw new IllegalArgumentException("请输入本地扫描路径");
+        }
+        return ApiResponse.ok("本地扫描路径已保存",
+                LocalSourceView.from(localImportPathService.save(request.path())));
     }
 
     @GetMapping("/tools")
@@ -259,6 +260,15 @@ public class ImportController {
                     file.getImportedRowCount(),
                     file.getErrorMessage()
             );
+        }
+    }
+
+    public record LocalSourceUpdate(String path) {
+    }
+
+    public record LocalSourceView(String sourceRoot, String displayPath, boolean exists) {
+        static LocalSourceView from(LocalImportPathService.Setting setting) {
+            return new LocalSourceView(setting.sourceRoot().toString(), setting.displayPath(), setting.exists());
         }
     }
 }

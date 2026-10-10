@@ -11,6 +11,7 @@ import org.springframework.stereotype.Component;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.ByteArrayInputStream;
 import java.math.BigDecimal;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -25,11 +26,15 @@ import java.util.Set;
 /**
  * 解析 source/货件 中导出的 WFS 货件列表。一个货件的公共字段只出现在第一行，
  * 因此后续 SKU 行需要沿用上一行的货件号、创建时间和本地状态。
+ *
+ * <p>2026-10-10 起保留「已完成」行：已完成批次只用于路途抽屉的「已完成」视图
+ * （看结案后仍未到齐的货件），由 {@code TransitInventoryService} 的状态白名单
+ * 挡在在途量、补货与需求预测之外，因此入库不影响任何库存口径。
  */
 @Component
 public class ShipmentWorkbookParser {
 
-    private static final Set<String> TRANSIT_STATUSES = Set.of("入库中", "已发货", "已申报");
+    private static final Set<String> TRANSIT_STATUSES = Set.of("入库中", "已发货", "已申报", "已完成");
 
     private final JsonPayloadWriter json;
 
@@ -38,8 +43,19 @@ public class ShipmentWorkbookParser {
     }
 
     public ParsedRows<ShipmentRecord> parse(Path path, ImportFile importFile) throws IOException {
-        try (InputStream input = Files.newInputStream(path);
-             Workbook workbook = WorkbookFactory.create(input)) {
+        try (InputStream input = Files.newInputStream(path)) {
+            return parse(input, importFile);
+        }
+    }
+
+    public ParsedRows<ShipmentRecord> parse(byte[] content, ImportFile importFile) throws IOException {
+        try (InputStream input = new ByteArrayInputStream(content)) {
+            return parse(input, importFile);
+        }
+    }
+
+    private ParsedRows<ShipmentRecord> parse(InputStream input, ImportFile importFile) throws IOException {
+        try (Workbook workbook = WorkbookFactory.create(input)) {
             Sheet sheet = workbook.getSheetAt(0);
             Row headerRow = findHeaderRow(sheet, "货件单号", "SKU", "申收差异");
             Headers headers = headers(headerRow);

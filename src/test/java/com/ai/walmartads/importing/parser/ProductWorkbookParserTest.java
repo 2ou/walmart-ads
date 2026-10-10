@@ -51,7 +51,7 @@ class ProductWorkbookParserTest {
 
         ParsedRows<ProductRecord> parsed = new ProductWorkbookParser(
                 new JsonPayloadWriter(new ObjectMapper())
-        ).parse(path, importFile);
+        ).parse(Files.readAllBytes(path), importFile);
 
         assertThat(parsed.rows()).hasSize(1);
         assertThat(parsed.rows().getFirst().getRawPayload())

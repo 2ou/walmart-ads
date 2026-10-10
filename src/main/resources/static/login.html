@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="color-scheme" content="light">
   <title>登录 · 沃尔玛工作台</title>
-  <link rel="stylesheet" href="auth.css?v=20261008-simple-login">
+  <link rel="stylesheet" href="auth.css?v=20261010-register">
 </head>
 <body>
   <main class="auth-page">
@@ -23,9 +23,64 @@
         <p class="form-error" id="loginError" role="alert" hidden></p>
         <button class="primary-action" type="submit">登录</button>
       </form>
-      <a class="emergency-link" href="/pinksir-reset.html">本机紧急重置 PINKSIR</a>
+      <div class="login-secondary-actions">
+        <button class="register-trigger" id="openRegister" type="button">没有账号？注册新店铺</button>
+        <a class="emergency-link" href="/pinksir-reset.html">本机紧急重置 PINKSIR</a>
+      </div>
     </section>
+
+    <dialog class="register-dialog" id="registerDialog" aria-labelledby="registerTitle">
+      <section class="register-panel">
+        <header class="register-heading">
+          <div>
+            <span class="eyebrow">CREATE STORE ACCOUNT</span>
+            <h2 id="registerTitle">注册新店铺</h2>
+            <p>连接领星并选择店铺，店铺真实名称将自动成为登录账号。</p>
+          </div>
+          <button class="dialog-close" id="closeRegister" type="button" aria-label="关闭注册窗口">×</button>
+        </header>
+
+        <form class="register-form" id="registerForm">
+          <label class="full-field">领星 MCP Key
+            <input id="registerMcpKey" type="password" autocomplete="off" required aria-describedby="registerKeyHelp registerError">
+            <small id="registerKeyHelp">仅用于验证店铺和后续自动同步，不作为登录密码。</small>
+          </label>
+
+          <div class="store-discovery full-field">
+            <button class="secondary-action" id="discoverRegisterStores" type="button">验证并读取店铺</button>
+            <p class="status-note" id="registerStoreStatus" role="status">填写 MCP Key 后读取可注册店铺。</p>
+          </div>
+
+          <label class="full-field">领星店铺
+            <select id="registerStore" required disabled aria-describedby="registerAccountHint registerError">
+              <option value="">请先验证 MCP Key</option>
+            </select>
+            <small id="registerAccountHint">选择后自动确定登录账号。</small>
+          </label>
+
+          <div class="register-grid full-field">
+            <label class="abbreviation-field">店铺缩写
+              <input id="registerAbbreviation" required minlength="2" maxlength="12" pattern="[A-Za-z0-9]{2,12}" autocomplete="off" placeholder="例如 ABC" aria-describedby="registerAbbreviationHelp registerError">
+              <small id="registerAbbreviationHelp">2–12 位字母或数字，保存后不可修改。</small>
+            </label>
+            <label>初始密码
+              <input id="registerPassword" type="password" autocomplete="new-password" required minlength="8" maxlength="128" aria-describedby="registerPasswordHelp registerError">
+              <small id="registerPasswordHelp">至少 8 位。</small>
+            </label>
+            <label class="confirm-field">确认密码
+              <input id="registerPasswordConfirm" type="password" autocomplete="new-password" required minlength="8" maxlength="128" aria-describedby="registerError">
+            </label>
+          </div>
+
+          <p class="form-error full-field" id="registerError" role="alert" hidden></p>
+          <div class="register-actions full-field">
+            <button class="secondary-action" id="cancelRegister" type="button">取消</button>
+            <button class="primary-action" id="submitRegister" type="submit" disabled>注册并进入工作台</button>
+          </div>
+        </form>
+      </section>
+    </dialog>
   </main>
-  <script src="auth.js?v=20261008-simple-login"></script>
+  <script src="auth.js?v=20261010-register"></script>
 </body>
 </html>

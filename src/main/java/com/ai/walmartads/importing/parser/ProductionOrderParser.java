@@ -11,6 +11,7 @@ import org.springframework.stereotype.Component;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.ByteArrayInputStream;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.nio.file.Files;
@@ -43,10 +44,21 @@ public class ProductionOrderParser {
     }
 
     public ParsedRows<ProductionOrderRecord> parse(Path path, ImportFile importFile) throws IOException {
+        try (InputStream input = Files.newInputStream(path)) {
+            return parse(input, importFile);
+        }
+    }
+
+    public ParsedRows<ProductionOrderRecord> parse(byte[] content, ImportFile importFile) throws IOException {
+        try (InputStream input = new ByteArrayInputStream(content)) {
+            return parse(input, importFile);
+        }
+    }
+
+    private ParsedRows<ProductionOrderRecord> parse(InputStream input, ImportFile importFile) throws IOException {
         List<ProductionOrderRecord> records = new ArrayList<>();
         int sourceRows = 0;
-        try (InputStream input = Files.newInputStream(path);
-             Workbook workbook = WorkbookFactory.create(input)) {
+        try (Workbook workbook = WorkbookFactory.create(input)) {
             Sheet sheet = workbook.getSheet(SHEET_NAME);
             if (sheet == null) {
                 sheet = workbook.getSheetAt(0);

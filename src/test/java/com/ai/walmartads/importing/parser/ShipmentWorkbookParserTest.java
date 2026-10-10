@@ -20,7 +20,7 @@ class ShipmentWorkbookParserTest {
     Path temp;
 
     @Test
-    void keepsOnlyTransitStatusesCarriesShipmentFieldsAndClampsNegativeDifference() throws Exception {
+    void keepsTransitAndClosedStatusesCarriesShipmentFieldsAndClampsNegativeDifference() throws Exception {
         Path workbookPath = temp.resolve("货件列表.xlsx");
         try (XSSFWorkbook workbook = new XSSFWorkbook()) {
             var sheet = workbook.createSheet("sheet1");
@@ -59,7 +59,9 @@ class ShipmentWorkbookParserTest {
                 .parse(workbookPath, importFile());
 
         assertThat(parsed.sourceRowCount()).isEqualTo(4);
-        assertThat(parsed.rows()).hasSize(3);
+        // 2026-10-10 起「已完成」也落库（供路途抽屉的已完成视图对账），
+        // 由 TransitInventoryService 的状态白名单挡在在途口径之外。
+        assertThat(parsed.rows()).hasSize(4);
         assertThat(parsed.rows().get(0))
                 .extracting("shipmentNo", "localStatus", "receiptDifference")
                 .containsExactly("SHP-1", "已发货", BigDecimal.ZERO);
@@ -67,6 +69,9 @@ class ShipmentWorkbookParserTest {
                 .extracting("shipmentNo", "sku", "receiptDifference")
                 .containsExactly("SHP-1", "PNK100-B-WFS", BigDecimal.valueOf(6));
         assertThat(parsed.rows().get(2))
+                .extracting("shipmentNo", "localStatus", "receiptDifference")
+                .containsExactly("SHP-2", "已完成", BigDecimal.valueOf(9));
+        assertThat(parsed.rows().get(3))
                 .extracting("shipmentNo", "localStatus")
                 .containsExactly("SHP-3", "已申报");
     }

@@ -439,6 +439,31 @@
     .secondary-button:disabled, .primary-button:disabled, .danger-button:disabled { opacity: .5; cursor: not-allowed; pointer-events: none; transform: none; }
     .secondary-button svg, .primary-button svg { width: 16px; height: 16px; }
     .import-action-cluster { display: inline-flex; align-items: center; gap: 8px; }
+    .local-import-bar {
+      display: grid;
+      grid-template-columns: auto minmax(280px, 1fr) auto auto;
+      align-items: center;
+      gap: 10px;
+      margin: -4px 0 16px;
+      padding: 12px 14px;
+      border: 1px solid var(--line-soft);
+      border-radius: var(--radius-md);
+      background: rgba(255, 255, 255, .68);
+    }
+    .local-import-bar label { display: grid; gap: 2px; color: var(--frost-ink); font-size: 11px; font-weight: 800; }
+    .local-import-bar label small { color: var(--slate-dim); font-size: 9px; font-weight: 600; }
+    .local-import-bar input {
+      width: 100%;
+      min-height: 44px;
+      padding: 0 12px;
+      border: 1px solid var(--line-strong);
+      border-radius: 10px;
+      color: var(--frost-ink);
+      background: #fff;
+      font: 11px "Cascadia Mono", monospace;
+      outline: none;
+    }
+    .local-import-bar input:focus { border-color: rgba(22, 104, 214, .62); box-shadow: 0 0 0 3px var(--blue-soft); }
     .import-scope, .import-help { position: relative; }
     .import-scope-trigger { min-width: 116px; justify-content: space-between; }
     .import-scope-count {
@@ -1314,17 +1339,27 @@
     .transit-drawer-section-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 5px; }
     .transit-drawer-section h3 { margin: 0; color: var(--frost-ink); font-size: 13px; }
     .transit-drawer-section p { margin: 0 0 12px; color: var(--steel-copy); font-size: 11px; line-height: 1.55; }
+    /* 货件 SKU 明细：复用右抽屉外观，收窄以贴合四列对账表；背板压淡，保持上层主抽屉可见。 */
+    .transit-sku-drawer { width: min(660px, calc(100vw - 24px)); }
+    .transit-sku-drawer::backdrop { background: rgba(16, 32, 58, .16); }
+    .transit-sku-note { margin: 0 0 12px; color: var(--steel-copy); font-size: 11px; line-height: 1.55; }
+    .transit-sku-table { min-width: 0; }
+    .transit-shipment-table tbody tr.transit-shipment-row { cursor: pointer; }
+    .transit-shipment-table tbody tr.transit-shipment-row:hover td { background: rgba(24, 95, 165, .06); }
+    .transit-shipment-table tbody tr.transit-shipment-row:focus-visible { outline: 2px solid #185fa5; outline-offset: -2px; }
     .transit-section-toggle { flex: 0 0 auto; min-height: 28px; padding: 0 10px; border: 1px solid var(--line-soft); border-radius: 7px; color: var(--steel-copy); background: rgba(22, 104, 214, .05); font-size: 11px; cursor: pointer; transition: border-color .16s var(--ease), color .16s var(--ease), background .16s var(--ease); }
     .transit-section-toggle:hover { border-color: rgba(22, 104, 214, .42); color: var(--frost-ink); background: rgba(22, 104, 214, .12); }
     .transit-shipment-tools { margin-left: auto; }
     .transit-shipment-tools .search-input { min-height: 32px; font-size: 11px; }
     .transit-parent-list { display: block; max-width: 280px; overflow: hidden; color: var(--frost-ink); font: 700 11px "Cascadia Mono", monospace; text-overflow: ellipsis; white-space: nowrap; }
-    .transit-buckets { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 0 0 14px; }
+    .transit-buckets { display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 10px; margin: 0 0 14px; }
     .transit-bucket { padding: 11px 13px; border: 1px solid var(--line-soft); border-left-width: 3px; border-radius: 10px; background: rgba(16, 32, 58, .05); }
     .transit-bucket.b7 { border-left-color: var(--signal-red); }
     .transit-bucket.b14 { border-left-color: var(--signal-orange); }
     .transit-bucket.b30 { border-left-color: #a9710b; }
     .transit-bucket.b60 { border-left-color: var(--walmart-blue); }
+    .transit-bucket.bpend { border-left-color: var(--steel-copy); }
+    .transit-bucket.bdone { border-left-color: var(--signal-green); }
     .transit-bucket .bk-label { display: block; color: var(--steel-copy); font-size: 11px; font-weight: 600; }
     .transit-bucket .bk-units { display: block; margin: 6px 0 2px; color: var(--frost-ink); font: 760 24px/1 "Cascadia Mono", monospace; letter-spacing: -.04em; }
     .transit-bucket .bk-count { color: var(--steel-copy); font-size: 10px; }
@@ -1341,6 +1376,13 @@
     .transit-countdown.cd-far { color: var(--steel-copy); }
     .transit-countdown.cd-overdue { color: var(--signal-red); }
     .transit-countdown.cd-arrived { color: var(--signal-green); font-weight: 700; }
+    /* 「预计到达」列内直改：日期输入 + 人工标记 + 清空按钮 */
+    .transit-eta-cell { display: flex; align-items: center; gap: 4px; white-space: nowrap; }
+    .transit-eta-input { width: 116px; padding: 3px 5px; border: 1px solid var(--line-soft); border-radius: 6px; background: #fff; color: var(--frost-ink); font: 600 11px/1.4 "Cascadia Mono", monospace; }
+    .transit-eta-input:focus { outline: 2px solid var(--walmart-blue); outline-offset: 1px; }
+    .transit-eta-manual { padding: 1px 5px; border-radius: 999px; background: rgba(24, 95, 165, .12); color: #1668d6; font-size: 9px; font-weight: 700; }
+    .transit-eta-clear { width: 18px; height: 18px; padding: 0; border: 1px solid var(--line-soft); border-radius: 50%; background: #fff; color: var(--steel-copy); font-size: 11px; line-height: 1; cursor: pointer; }
+    .transit-eta-clear:hover { border-color: var(--signal-red); color: var(--signal-red); }
     .transit-cell-clickable { cursor: pointer; color: var(--walmart-blue); text-decoration: underline; text-underline-offset: 2px; }
     .transit-cell-clickable:hover { color: #1668d6; }
     .fc-suggest-jump { cursor: pointer; color: var(--spark-yellow, #a9710b); font-weight: 600; }
@@ -2438,6 +2480,8 @@
       .history-ad-card-metrics, .history-ad-card-status { grid-column: 1; }
       .history-ad-card-summary > .style-diagnosis-chevron { grid-column: 2; grid-row: 1; }
       .history-ad-detail-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .local-import-bar { grid-template-columns: 1fr auto auto; }
+      .local-import-bar label { grid-column: 1 / -1; }
     }
     @media (max-width: 640px) {
       :root { --topbar: auto; }
@@ -2449,6 +2493,9 @@
       .import-scope-trigger { min-width: 76px; padding-inline: 10px; }
       .import-scope-popover { position: fixed; top: 124px; right: 18px; left: 18px; width: auto; max-height: calc(100dvh - 142px); }
       .import-help-tooltip { position: fixed; top: auto; right: 18px; bottom: 18px; left: 18px; width: auto; }
+      .local-import-bar { grid-template-columns: 1fr; }
+      .local-import-bar label { grid-column: auto; }
+      .local-import-bar .secondary-button, .local-import-bar .primary-button { width: 100%; }
       .section-intro > .import-action-cluster { margin-top: 16px; }
       .metric-grid, .queue-grid, .form-grid, .diagnosis-metric-grid { grid-template-columns: 1fr; }
       .agent-findings { grid-template-columns: 1fr; }

@@ -10,6 +10,7 @@ import org.springframework.stereotype.Component;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.ByteArrayInputStream;
 import java.math.BigDecimal;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -29,8 +30,19 @@ public class ShipmentLogisticsWorkbookParser {
     }
 
     public ParsedRows<ShipmentLogisticsRecord> parse(Path path, ImportFile importFile) throws IOException {
-        try (InputStream input = Files.newInputStream(path);
-             Workbook workbook = WorkbookFactory.create(input)) {
+        try (InputStream input = Files.newInputStream(path)) {
+            return parse(input, importFile);
+        }
+    }
+
+    public ParsedRows<ShipmentLogisticsRecord> parse(byte[] content, ImportFile importFile) throws IOException {
+        try (InputStream input = new ByteArrayInputStream(content)) {
+            return parse(input, importFile);
+        }
+    }
+
+    private ParsedRows<ShipmentLogisticsRecord> parse(InputStream input, ImportFile importFile) throws IOException {
+        try (Workbook workbook = WorkbookFactory.create(input)) {
             Sheet sheet = workbook.getSheetAt(0);
             Row headerRow = ShipmentWorkbookParser.findHeaderRow(sheet, "货件号", "渠道", "货代");
             ShipmentWorkbookParser.Headers headers = ShipmentWorkbookParser.headers(headerRow);

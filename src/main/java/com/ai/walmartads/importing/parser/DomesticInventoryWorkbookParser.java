@@ -12,6 +12,7 @@ import org.springframework.stereotype.Component;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.ByteArrayInputStream;
 import java.math.BigDecimal;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -34,10 +35,21 @@ public class DomesticInventoryWorkbookParser {
     }
 
     public ParsedRows<DomesticInventorySnapshot> parse(Path path, ImportFile importFile) throws IOException {
+        try (InputStream input = Files.newInputStream(path)) {
+            return parse(input, importFile);
+        }
+    }
+
+    public ParsedRows<DomesticInventorySnapshot> parse(byte[] content, ImportFile importFile) throws IOException {
+        try (InputStream input = new ByteArrayInputStream(content)) {
+            return parse(input, importFile);
+        }
+    }
+
+    private ParsedRows<DomesticInventorySnapshot> parse(InputStream input, ImportFile importFile) throws IOException {
         List<DomesticInventorySnapshot> rows = new ArrayList<>();
         int sourceRows = 0;
-        try (InputStream input = Files.newInputStream(path);
-             Workbook workbook = WorkbookFactory.create(input)) {
+        try (Workbook workbook = WorkbookFactory.create(input)) {
             Sheet sheet = workbook.getSheetAt(0);
             Row header = findHeader(sheet);
             Map<String, Integer> headers = headers(header);

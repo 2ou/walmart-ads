@@ -84,4 +84,14 @@ public class ShipmentRecord extends com.ai.walmartads.workspace.WorkspaceOwnedEn
     public String getSku() { return sku; }
     public String getParentSku() { return parentSku; }
     public BigDecimal getReceiptDifference() { return receiptDifference; }
+
+    /**
+     * 导入时留存的本行原始快照（JSON）。
+     *
+     * <p>货件表里「申报量」（发货数量）、「收发差异」（已收货）、「申收差异」（未入库路途）
+     * 三个源列都完整保存在这份快照中，但只有「申收差异」被解析成了实体字段
+     * （且入库时已做过负数归零）。路途库存明细需要按源表原值逐列对账，
+     * 因此从这份快照现取原值，避免新增库字段并重导历史数据。
+     */
+    public String getRawPayload() { return rawPayload; }
 }

@@ -89,6 +89,7 @@ class ProductCatalogServiceTest {
                 """);
         jdbc.getJdbcTemplate().execute("""
                 create table wm_ads_sku_mapping (
+                    id bigint,
                     item_id varchar(40),
                     sku varchar(180),
                     parent_sku varchar(80),
@@ -97,6 +98,7 @@ class ProductCatalogServiceTest {
                 """);
         jdbc.getJdbcTemplate().execute("""
                 create table wm_ads_order_record (
+                    id bigint,
                     import_file_id bigint not null,
                     sku varchar(180),
                     parent_sku varchar(80),
@@ -252,8 +254,8 @@ class ProductCatalogServiceTest {
                 ) values ('PNK100', 10, 2, 100, 1, 0.12)
                 """);
         jdbc.getJdbcTemplate().update("""
-                insert into wm_ads_order_record (import_file_id, sku, parent_sku, quantity, item_cost, order_date)
-                values (1, 'PNK100-Blue-M-WFS', 'PNK100', 10, 0, date '2026-07-01')
+                insert into wm_ads_order_record (id, import_file_id, sku, parent_sku, quantity, item_cost, order_date)
+                values (1, 1, 'PNK100-Blue-M-WFS', 'PNK100', 10, 0, date '2026-07-01')
                 """);
         jdbc.getJdbcTemplate().update("""
                 insert into wm_ads_return_order (

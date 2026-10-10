@@ -35,6 +35,7 @@ import com.ai.walmartads.importing.repository.ShipmentLogisticsRepository;
 import com.ai.walmartads.importing.repository.ShipmentRecordRepository;
 import com.ai.walmartads.inventory.application.TransitInventoryService;
 import com.ai.walmartads.inventory.application.ReplenishmentPlanCache;
+import com.ai.walmartads.workspace.WorkspaceContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -171,7 +172,9 @@ public class FileImportProcessor {
                 ImportFileType.PRODUCTION_ORDER
         );
         register(
-                "1",
+                // 2026-10-10 v2：「已完成」货件也落库（供路途「已完成」视图对账），
+                // 版本号提升以强制重新解析既有货件表（否则同内容文件会被指纹判为已导入而跳过）。
+                "2",
                 (path, file) -> saveShipments(shipmentParser.parse(path, file), file),
                 ImportFileType.SHIPMENT
         );
@@ -191,7 +194,34 @@ public class FileImportProcessor {
             throw new IllegalArgumentException("No code import tool registered for " + file.getFileType());
         }
         DocumentImportTool.ImportOutcome result = tool.importDocument(sourcePath, file);
-        file.imported(sourcePath.toString(), result.sourceRows(), result.importedRows());
+        return finishImport(file, result, sourcePath.toString());
+    }
+
+    /** Imports a browser upload directly from request memory, without creating an application-local file. */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public DocumentImportTool.ImportOutcome processUploaded(Long fileId, byte[] content, String sourceReference)
+            throws IOException {
+        ImportFile file = fileRepository.findById(fileId)
+                .orElseThrow(() -> new IllegalArgumentException("导入文件记录不存在：" + fileId));
+        DocumentImportTool.ImportOutcome result = switch (file.getFileType()) {
+            case PRODUCT -> saveProducts(productParser.parse(content, file));
+            case RETURN_ORDER -> saveReturnOrders(returnOrderParser.parse(content, file), file);
+            case DOMESTIC_INVENTORY -> saveDomesticInventory(domesticInventoryParser.parse(content, file));
+            case PRODUCTION_ORDER -> saveProductionOrders(productionOrderParser.parse(content, file), file);
+            case SHIPMENT -> saveShipments(shipmentParser.parse(content, file), file);
+            case SHIPMENT_LOGISTICS -> saveShipmentLogistics(shipmentLogisticsParser.parse(content, file), file);
+            default -> throw new IllegalArgumentException(
+                    "Browser memory import is not supported for " + file.getFileType());
+        };
+        return finishImport(file, result, sourceReference);
+    }
+
+    private DocumentImportTool.ImportOutcome finishImport(
+            ImportFile file,
+            DocumentImportTool.ImportOutcome result,
+            String sourceReference
+    ) {
+        file.imported(sourceReference, result.sourceRows(), result.importedRows());
         if (file.getReportDate() != null && file.getReportKind() != null) {
             fileRepository.deactivateAdReportVersion(file.getReportKind(), file.getReportDate(), file.getId());
         } else if (file.getFileType() == ImportFileType.INVENTORY && file.getSnapshotAt() != null) {
@@ -309,6 +339,23 @@ public class FileImportProcessor {
                 .map(ProductRecord::getSku)
                 .distinct()
                 .toList();
+        List<String> parentSkus = parsed.rows().stream()
+                .map(ProductRecord::getParentSku)
+                .filter(parentSku -> parentSku != null && !parentSku.isBlank())
+                .distinct()
+                .toList();
+        Map<String, Integer> manualCuttingYields = parentSkus.isEmpty()
+                ? Map.of()
+                : productRepository.findManualCuttingYields(
+                                WorkspaceContext.current().map(principal -> principal.workspaceId()).orElse(1L),
+                                parentSkus
+                        ).stream()
+                        .filter(row -> row.length >= 2 && row[0] != null && row[1] instanceof Number)
+                        .collect(Collectors.toMap(
+                                row -> row[0].toString(),
+                                row -> ((Number) row[1]).intValue(),
+                                (first, second) -> first
+                        ));
         Map<String, ProductRecord> previous = Map.of();
         if (!skus.isEmpty()) {
             // 重新导入产品库时，保留此前由「沃尔玛商品」扫描回写的列，避免被上传文件里的空值覆盖。
@@ -318,6 +365,7 @@ public class FileImportProcessor {
         }
         for (ProductRecord record : parsed.rows()) {
             ProductRecord old = previous.get(record.getSku());
+            applyCuttingYield(record, old, manualCuttingYields);
             if (old != null) {
                 if (record.getPrice() == null) record.setPrice(old.getPrice());
                 if (record.getStrikethroughPrice() == null) record.setStrikethroughPrice(old.getStrikethroughPrice());
@@ -344,6 +392,19 @@ public class FileImportProcessor {
         }
         productRepository.saveAll(parsed.rows());
         return new DocumentImportTool.ImportOutcome(parsed.sourceRowCount(), parsed.rows().size());
+    }
+
+    static void applyCuttingYield(
+            ProductRecord replacement,
+            ProductRecord previous,
+            Map<String, Integer> manualCuttingYields
+    ) {
+        if (manualCuttingYields.containsKey(replacement.getParentSku())) {
+            replacement.setCuttingYield(manualCuttingYields.get(replacement.getParentSku()));
+        } else if (previous != null && replacement.getCuttingYield() == null) {
+            // Compatibility fallback for databases that predate the durable setting migration.
+            replacement.setCuttingYield(previous.getCuttingYield());
+        }
     }
 
     private DocumentImportTool.ImportOutcome saveHistory(HistoricalWorkbookRows parsed, ImportFile file) {

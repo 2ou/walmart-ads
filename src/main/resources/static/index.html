@@ -1108,19 +1108,19 @@
 
         <section class="view" id="view-imports" aria-labelledby="pageTitle">
           <div class="section-intro">
-            <div><h2>上传当前店铺的专项文件</h2><p>共享目录扫描已停用。每次选择一种资料并上传，文件与结构化数据都会自动归属当前登录工作区；订单与广告继续由领星 MCP 自动同步。</p></div>
+            <div><h2>扫描本地目录或上传专项文件</h2><p>保留原始本地路径扫描，也可临时选择文件上传；两种方式都会写入当前登录店铺，订单与广告继续由领星 MCP 自动同步。</p></div>
             <div class="import-action-cluster">
               <div class="import-scope" data-import-control>
                 <button class="secondary-button import-scope-trigger" type="button" aria-expanded="false" aria-controls="pageImportScope">
                   <span class="import-scope-label">导入范围</span>
-                  <span class="import-scope-count" data-import-count>7/7</span>
+                  <span class="import-scope-count" data-import-count>6/6</span>
                   <span class="import-scope-chevron" aria-hidden="true">⌄</span>
                 </button>
                 <div class="import-scope-popover" id="pageImportScope" hidden>
-                  <div class="import-scope-header"><strong>选择文件类型</strong><span>每次选择一项</span></div>
+                  <div class="import-scope-header"><strong>选择导入范围</strong><span>扫描可多选 · 上传单选</span></div>
                   <div class="import-source-groups" data-import-options></div>
                   <div class="import-scope-footer">
-                    <span class="import-scope-note">请选择与待上传工作簿一致的一项，系统不会扫描服务器目录。</span>
+                    <span class="import-scope-note">目录扫描可同时选择多类；直接上传时请只保留一种文件类型。</span>
                     <div class="import-scope-actions"><button class="import-text-button" type="button" data-import-action="all">默认类型</button><button class="import-text-button" type="button" data-import-action="clear">清空</button></div>
                   </div>
                 </div>
@@ -1129,23 +1129,29 @@
                 <button class="import-help-button" type="button" aria-label="查看扫描导入说明" aria-describedby="pageImportHelp">i</button>
                 <div class="import-help-tooltip" id="pageImportHelp" role="tooltip">
                   <strong>扫描导入规则</strong>
-                  <p>全部由本地 Java 解析，不调用 AI。相同内容自动跳过，原文件归档后写入当前账号的数据范围。</p>
+                  <p>路径填写 source 文件夹，可保留末尾 *。系统只读取所选类型，全部由本地 Java 解析，不调用 AI；相同内容自动跳过。</p>
                   <ul class="import-help-paths">
-                    <li><span>产品资料</span><code>*-upload.xlsx</code></li>
-                    <li><span>月度退款</span><code>Return_Orders/*.xlsx</code></li>
-                    <li><span>SKU 映射</span><code>WFS上传模板.xlsx</code></li>
-                    <li><span>早期历史（已冻结）</span><code>PNK 每日销售数据统计.xlsx</code></li>
+                    <li><span>产品资料</span><code>upload/*-upload.xlsx</code></li>
+                    <li><span>月度退款</span><code>Return_Orders/Customer returns-YYYYMM.xlsx</code></li>
                     <li><span>生产订单（做货）</span><code>生产订单/*.xlsx</code></li>
+                    <li><span>货件 / 物流</span><code>货件/*.xlsx（按文件名识别）</code></li>
+                    <li><span>国内仓库存</span><code>国内仓库存/*.xlsx</code></li>
                   </ul>
-                  <div class="import-help-rule">同日期或同月份报表更新后启用新版本；库存快照保留历史，用于库存变化曲线。</div>
+                  <div class="import-help-rule">生产订单、货件和物流采用整表替换：对应目录为空时会先提示，确认后才清空旧数据。直接上传不依赖本地扫描路径。</div>
                 </div>
               </div>
               <input id="workspaceImportFile" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" multiple hidden>
-              <button class="primary-button" id="scanImportPageButton" type="button">选择文件上传（可多选）</button>
+              <button class="secondary-button" id="uploadImportPageButton" type="button">选择文件上传（可多选）</button>
             </div>
           </div>
+          <div class="local-import-bar">
+            <label for="localImportPath"><span>本地扫描路径</span><small id="localImportPathStatus">读取中…</small></label>
+            <input id="localImportPath" type="text" spellcheck="false" autocomplete="off" value="D:\PNK\17DATA\source\*" placeholder="D:\PNK\17DATA\source\*">
+            <button class="secondary-button" id="saveLocalImportPathButton" type="button">保存路径</button>
+            <button class="primary-button" id="scanImportPageButton" type="button">扫描本地路径</button>
+          </div>
           <section class="panel table-panel" aria-labelledby="batchTitle">
-            <div class="panel-header"><div><h2 class="panel-title" id="batchTitle">最近导入批次</h2><p class="panel-subtitle">原文件保存在 archive，结构化字段写入独立 MySQL 数据库</p></div><button class="secondary-button" id="refreshBatchesButton" type="button">刷新</button></div>
+            <div class="panel-header"><div><h2 class="panel-title" id="batchTitle">最近导入批次</h2><p class="panel-subtitle">上传文件只在请求内解析；数据库保存文件哈希、导入结果和结构化数据</p></div><button class="secondary-button" id="refreshBatchesButton" type="button">刷新</button></div>
             <div class="table-scroll"><table><thead><tr><th>批次</th><th>开始时间</th><th>状态</th><th class="num">发现</th><th class="num">导入</th><th class="num">跳过</th><th class="num">失败</th></tr></thead><tbody id="batchBody"></tbody></table></div>
           </section>
         </section>
@@ -1359,7 +1365,7 @@
   </dialog>
   <dialog class="transit-drawer" id="transitDrawer" aria-labelledby="transitDrawerTitle">
     <div class="transit-drawer-header">
-      <div><h2 id="transitDrawerTitle">路途库存明细</h2><p>所有渠道到达时效均由人工维护；货件明细只用于核对，不需要逐货件维护。</p></div>
+      <div><h2 id="transitDrawerTitle">路途库存明细</h2><p>渠道到达时效与货件到达日期均由人工维护；「已完成」批次只用于对账，不进入在途库存。</p></div>
       <button class="dialog-close" id="closeTransitDrawer" type="button" aria-label="关闭路途库存明细">×</button>
     </div>
     <div class="transit-drawer-body">
@@ -1381,9 +1387,19 @@
             <input class="search-input" id="transitShipmentParentFilter" type="search" placeholder="筛选款号，如 PNK366076" autocomplete="off">
           </div>
         </div>
-        <p>仅显示入库中、已发货和已申报货件；申收差异为负时按 0 计入路途库存。</p>
+        <p>仅显示入库中、已发货和已申报货件。四列数量均取货件表源列原值（申报量 / 已发货 / 签收量 / 申收差异），负数原样显示；<strong>库存总览的在途只累计正数申收差异</strong>，所以明细各列相加不必然等于在途总数。「预计到达」可直接改：物流表查不到渠道或推算日期已过期时，填上货代给的真实到达日即可归入对应时间段。点任一行可看该货件每个 SKU 的明细。</p>
         <div class="table-scroll" id="transitShipmentList"></div>
       </section>
+    </div>
+  </dialog>
+  <dialog class="transit-drawer transit-sku-drawer" id="transitSkuDrawer" aria-labelledby="transitSkuDrawerTitle">
+    <div class="transit-drawer-header">
+      <div><h2 id="transitSkuDrawerTitle">货件 SKU 明细</h2><p id="transitSkuDrawerSummary">正在读取</p></div>
+      <button class="dialog-close" id="closeTransitSkuDrawer" type="button" aria-label="关闭货件 SKU 明细">×</button>
+    </div>
+    <div class="transit-drawer-body">
+      <p class="transit-sku-note">四列数量均取货件表源列原值（申报量 / 已发货 / 签收量 / 申收差异），负数原样保留，用于与沃尔玛导出的货件表逐行对账；它不是在途库存口径。</p>
+      <div class="table-scroll" id="transitSkuList"></div>
     </div>
   </dialog>
 
@@ -1908,7 +1924,7 @@
       operationsLoading: false,
       operationSearch: "",
       aiStatus: null,
-      importSources: new Set(importSources.length ? [importSources[0].key] : []),
+      importSources: new Set(importSources.map((source) => source.key)),
       importRunning: false,
       recent: null,
       recentRequestId: 0,
@@ -5393,13 +5409,19 @@
       return "cd-far";
     }
 
+    // 货件到达日：人工补充值优先，其次系统按「创建时间→下周三 + 渠道时效」的推算值。
+    function transitEffectiveArrival(shipment) {
+      return (shipment && (shipment.manualArrival || shipment.estimatedArrival)) || null;
+    }
+
     // 货件「还有几天到」单元格：入库中的货件已到仓，不再显示倒计时（避免显示误导性的 0 / 已超）
     function transitCountdownCell(shipment) {
       if ((shipment.localStatus || "").trim() === "入库中") {
         return `<span class="transit-countdown cd-arrived">已入库</span>`;
       }
-      const cls = transitCountdownClass(shipment.estimatedArrival);
-      const text = transitCountdownText(shipment.estimatedArrival);
+      const arrival = transitEffectiveArrival(shipment);
+      const cls = transitCountdownClass(arrival);
+      const text = transitCountdownText(arrival);
       return `<span class="transit-countdown ${cls}">${text}</span>`;
     }
 
@@ -5421,53 +5443,109 @@
           <td class="mono">${transitDateTimeText(channel.updatedAt)}</td>
           <td><button type="button" class="table-link" data-save-transit-channel="${index}">保存时效</button></td>
         </tr>`).join("")}</tbody></table>` : `<div class="empty-state"><strong>暂无可维护渠道</strong>扫描导入物流信息登记表后，系统会按渠道生成时效规则。</div>`;
+      // 货件到达日：人工补充值优先，其次系统推算值。
+      const arrivalOf = transitEffectiveArrival;
+      // 分桶键：入库中的货件已到仓，固定归「7 天内」；算不出到达日、或推算日已过期(>60 天)的归「时间待定」。
+      const bucketKeyOf = (shipment) => {
+        if ((shipment.localStatus || "").trim() === "入库中") return "b7";
+        const days = transitDaysUntil(arrivalOf(shipment));
+        if (days == null || days < 0 || days > 60) return "bpend";
+        if (days <= 7) return "b7";
+        if (days <= 14) return "b14";
+        if (days <= 30) return "b30";
+        return "b60";
+      };
       const BUCKETS = [
-        { key: "b7", label: "7 天内", lo: 0, hi: 7 },
-        { key: "b14", label: "8–14 天", lo: 8, hi: 14 },
-        { key: "b30", label: "15–30 天", lo: 15, hi: 30 },
-        { key: "b60", label: "31–60 天", lo: 31, hi: 60 },
+        { key: "b7", label: "7 天内", hint: "含已到仓的「入库中」货件" },
+        { key: "b14", label: "8–14 天", hint: "" },
+        { key: "b30", label: "15–30 天", hint: "" },
+        { key: "b60", label: "31–60 天", hint: "" },
+        { key: "bpend", label: "时间待定", hint: "算不出到达日，或推算日期已过期" },
       ];
       const sortByArrival = (list) => [...list].sort((a, b) => {
-        const av = a.estimatedArrival || "9999-12-31";
-        const bv = b.estimatedArrival || "9999-12-31";
+        const av = arrivalOf(a) || "9999-12-31";
+        const bv = arrivalOf(b) || "9999-12-31";
         return av < bv ? -1 : av > bv ? 1 : 0;
       });
+      const completedShipments = parentQuery
+        ? (transit?.completedShipments || []).filter((shipment) => (shipment.parentSkus || []).some((parentSku) => String(parentSku || "").toLowerCase().includes(parentQuery)))
+        : (transit?.completedShipments || []);
+      const showingCompleted = state.transitBucketFilter === "bdone";
       const activeBucket = BUCKETS.find((bk) => bk.key === state.transitBucketFilter) || null;
       const tableShipments = activeBucket
-        ? parentFiltered.filter((s) => {
-            const d = transitDaysUntil(s.estimatedArrival);
-            return d != null && d >= activeBucket.lo && d <= activeBucket.hi;
-          })
+        ? parentFiltered.filter((s) => bucketKeyOf(s) === activeBucket.key)
         : parentFiltered;
       const sortedShipments = sortByArrival(tableShipments);
-      const bucketHtml = parentFiltered.length ? `<div class="transit-buckets" role="list">${BUCKETS.map((bk) => {
-        const items = sortByArrival(parentFiltered).filter((s) => {
-          const d = transitDaysUntil(s.estimatedArrival);
-          return d != null && d >= bk.lo && d <= bk.hi;
-        });
+      // 筛选条 / 清除按钮 / 表格 三者分开渲染：一旦共用一个三元分支，
+      // 筛到「0 批」的时间段就会把整条筛选连同清除入口一起替换成空态，用户被困在空结果里出不来。
+      const bucketBar = (parentFiltered.length || completedShipments.length) ? `<div class="transit-buckets" role="list">${BUCKETS.map((bk) => {
+        const items = parentFiltered.filter((s) => bucketKeyOf(s) === bk.key);
         const isActive = activeBucket && activeBucket.key === bk.key;
-        return `<div class="transit-bucket ${bk.key} clickable${items.length ? "" : " empty"}${isActive ? " active" : ""}" role="button" tabindex="0" data-bucket="${bk.key}" aria-pressed="${isActive}" title="点击只看 ${bk.label} 到达的货件">
+        return `<div class="transit-bucket ${bk.key} clickable${items.length ? "" : " empty"}${isActive ? " active" : ""}" role="button" tabindex="0" data-bucket="${bk.key}" aria-pressed="${isActive}" title="点击只看「${bk.label}」的货件${bk.hint ? "（" + bk.hint + "）" : ""}">
           <span class="bk-label">${bk.label}</span>
           <strong class="bk-units">${integer(sum(items, "units"))}</strong>
           <span class="bk-count">${items.length} 批</span>
         </div>`;
-      }).join("")}</div>${activeBucket ? `<button class="transit-bucket-clear" type="button" data-clear-bucket="1">× 仅看：${activeBucket.label}（清除）</button>` : ""}` : "";
-      shipmentBox.innerHTML = sortedShipments.length
-        ? bucketHtml + `<table class="transit-shipment-table"><thead><tr>
-          <th>货件编号</th><th>状态</th><th>货代 / 渠道</th><th>款号</th><th class="num">路途数量</th><th class="num">SKU</th><th>预计开船</th><th class="num">到达时效</th><th>预计到达</th><th class="num">还有几天到</th>
-        </tr></thead><tbody>${sortedShipments.map((shipment) => `<tr>
+      }).join("")}<div class="transit-bucket bdone clickable${completedShipments.length ? "" : " empty"}${showingCompleted ? " active" : ""}" role="button" tabindex="0" data-bucket="bdone" aria-pressed="${showingCompleted}" title="点击查看已结案的货件；数字是结案后仍未到齐的件数">
+          <span class="bk-label">已完成</span>
+          <strong class="bk-units">${integer(sum(completedShipments, "units"))}</strong>
+          <span class="bk-count">${completedShipments.length} 批</span>
+        </div></div>` : "";
+      const clearBucketButton = (activeBucket || showingCompleted)
+        ? `<button class="transit-bucket-clear" type="button" data-clear-bucket="1">× 仅看：${activeBucket ? activeBucket.label : "已完成"}（清除）</button>`
+        : "";
+      const emptyHtml = activeBucket && parentFiltered.length
+        ? `<div class="empty-state"><strong>「${activeBucket.label}」的货件为 0 批</strong>点击上方其它时间段，或点清除按钮看全部货件。</div>`
+        : shipments.length
+          ? `<div class="empty-state"><strong>未找到匹配款号的货件</strong>请调整款号筛选条件后重试。</div>`
+          : `<div class="empty-state"><strong>暂无路途货件</strong>导入货件列表后，这里只显示入库中、已发货和已申报的货件。</div>`;
+      // 「预计到达」列内直改：人工补过的格子带「人工」标记 + 一键清空，回到系统推算。
+      const etaCell = (shipment) => {
+        const value = arrivalOf(shipment) || "";
+        const manual = !!shipment.manualArrival;
+        const hint = manual
+          ? "人工补充的到达日期；点 × 清除后回到系统推算"
+          : "系统按「创建时间→下周三 + 渠道时效」推算；可直接改成货代给的真实到达日";
+        return `<td class="transit-eta-cell">
+          <input class="transit-eta-input" type="date" value="${escapeHtml(value)}" data-shipment-eta="${escapeHtml(shipment.shipmentNo || "")}" title="${escapeHtml(hint)}" aria-label="${escapeHtml(shipment.shipmentNo || "")} 预计到达日期">
+          ${manual ? `<span class="transit-eta-manual" title="人工补充">人工</span><button type="button" class="transit-eta-clear" data-clear-shipment-eta="${escapeHtml(shipment.shipmentNo || "")}" title="清除人工日期，回到系统推算">×</button>` : ""}
+        </td>`;
+      };
+      const inTransitTable = `<table class="transit-shipment-table"><thead><tr>
+          <th>货件编号</th><th>状态</th><th>货代 / 渠道</th><th>款号</th><th class="num" title="源表列「申报量」：这批货申报发出的数量">申报量</th><th class="num" title="源表列「已发货」：卖家侧标记整批已发出（状态位，通常是 0 或等于申报量）">已发货</th><th class="num" title="源表列「签收量(损坏)」括号前的数字：仓库实际签收量">签收量</th><th class="num" title="源表列「申收差异」：未入库的实际路途数量；负数表示超收。在途库存只累计其中正数部分">在途</th><th class="num">SKU</th><th>预计开船</th><th class="num">到达时效</th><th>预计到达</th><th class="num">还有几天到</th>
+        </tr></thead><tbody>${sortedShipments.map((shipment) => `<tr class="transit-shipment-row" data-shipment-row="${escapeHtml(shipment.shipmentNo || "")}" tabindex="0" title="点击查看该货件每个 SKU 的四列明细">
           <td class="mono">${escapeHtml(shipment.shipmentNo || "—")}</td>
           <td>${escapeHtml(shipment.localStatus || "—")}</td>
           <td title="${escapeHtml(shipment.channel || "")}"><strong>${escapeHtml(shipment.forwarder || "未匹配货代")}</strong><br><span class="muted">${escapeHtml(shipment.channel || "未匹配渠道")}</span></td>
           <td title="${escapeHtml((shipment.parentSkus || []).join("、"))}"><span class="transit-parent-list">${escapeHtml((shipment.parentSkus || []).join("、") || "—")}</span></td>
-          <td class="num">${integer(shipment.units)}</td>
+          <td class="num">${integer(shipment.declaredUnits)}</td>
+          <td class="num">${integer(shipment.shippedUnits)}</td>
+          <td class="num">${integer(shipment.signedUnits)}</td>
+          <td class="num">${integer(shipment.rawTransitUnits)}</td>
           <td class="num">${integer(shipment.skuCount)}</td>
           <td>${transitDateText(shipment.estimatedDeparture)}</td>
           <td class="num">${shipment.leadDays == null ? "—" : `${number(shipment.leadDays).toFixed(1)} 天`}</td>
-          <td>${transitDateText(shipment.estimatedArrival)}</td>
+          ${etaCell(shipment)}
           <td class="num">${transitCountdownCell(shipment)}</td>
-        </tr>`).join("")}</tbody></table>`
-        : `<div class="empty-state"><strong>${shipments.length ? "未找到匹配款号的货件" : "暂无路途货件"}</strong>${shipments.length ? "请调整款号筛选条件后重试。" : "导入货件列表后，这里只显示入库中、已发货和已申报的货件。"}</div>`;
+        </tr>`).join("")}</tbody></table>`;
+      const completedTable = `<table class="transit-shipment-table"><thead><tr>
+          <th>货件编号</th><th>结案时间</th><th>款号</th><th class="num" title="源表列「申报量」">申报量</th><th class="num" title="源表列「已发货」">已发货</th><th class="num" title="源表列「签收量(损坏)」括号前的数字">签收量</th><th class="num" title="结案后仍未到齐的件数（申收差异为正的行合计）">未到量</th><th class="num" title="申收差异为负的行取绝对值合计（超收）">超收量</th><th class="num">SKU</th>
+        </tr></thead><tbody>${completedShipments.map((shipment) => `<tr class="transit-shipment-row" data-shipment-row="${escapeHtml(shipment.shipmentNo || "")}" tabindex="0" title="点击查看该货件每个 SKU 的四列明细">
+          <td class="mono">${escapeHtml(shipment.shipmentNo || "—")}</td>
+          <td class="mono">${transitDateTimeText(shipment.closedAt)}</td>
+          <td title="${escapeHtml((shipment.parentSkus || []).join("、"))}"><span class="transit-parent-list">${escapeHtml((shipment.parentSkus || []).join("、") || "—")}</span></td>
+          <td class="num">${integer(shipment.declaredUnits)}</td>
+          <td class="num">${integer(shipment.shippedUnits)}</td>
+          <td class="num">${integer(shipment.signedUnits)}</td>
+          <td class="num">${integer(shipment.units)}</td>
+          <td class="num">${integer(shipment.overUnits)}</td>
+          <td class="num">${integer(shipment.skuCount)}</td>
+        </tr>`).join("")}</tbody></table>`;
+      shipmentBox.innerHTML = bucketBar + clearBucketButton + (showingCompleted
+        ? (completedShipments.length
+            ? completedTable
+            : `<div class="empty-state"><strong>没有已结案的货件</strong>导入包含「已完成」货件的货件表后，这里显示结案后仍未到齐的批次。</div>`)
+        : sortedShipments.length ? inTransitTable : emptyHtml);
     }
 
     function openTransitInventoryDetails(parentSku) {
@@ -5486,6 +5564,37 @@
       const hasUnfilledChannel = channels.some((c) => c.leadDays == null);
       setTransitChannelLeadTimeCollapsed(!hasUnfilledChannel);
       if (drawer && !drawer.open) drawer.showModal();
+    }
+
+    // 货件行 → SKU 级对账明细：四列与货件明细同口径，全部取源表原值（负数原样保留）。
+    function openTransitSkuDetails(shipmentNo) {
+      const drawer = $("#transitSkuDrawer");
+      const listBox = $("#transitSkuList");
+      if (!drawer || !listBox) return;
+      const transit = state.inventory?.transit || {};
+      const pool = [...(transit.shipments || []), ...(transit.completedShipments || [])];
+      const shipment = pool.find((item) => item.shipmentNo === shipmentNo);
+      if (!shipment) return;
+      const title = $("#transitSkuDrawerTitle");
+      const summary = $("#transitSkuDrawerSummary");
+      if (title) title.textContent = `货件 SKU 明细 · ${shipment.shipmentNo}`;
+      if (summary) {
+        const arrival = shipment.manualArrival ? ` · 人工到达 ${shipment.manualArrival}` : "";
+        summary.textContent = `${shipment.localStatus || "—"} · ${integer(shipment.skuCount)} 个 SKU · 申报 ${integer(shipment.declaredUnits)} / 已发货 ${integer(shipment.shippedUnits)} / 签收 ${integer(shipment.signedUnits)} / 在途 ${integer(shipment.rawTransitUnits)}${arrival}`;
+      }
+      const items = shipment.items || [];
+      listBox.innerHTML = items.length
+        ? `<table class="transit-shipment-table transit-sku-table"><thead><tr>
+          <th>SKU</th><th class="num" title="源表列「申报量」">申报量</th><th class="num" title="源表列「已发货」">已发货</th><th class="num" title="源表列「签收量(损坏)」括号前的数字">签收量</th><th class="num" title="源表列「申收差异」，负数表示超收">在途</th>
+        </tr></thead><tbody>${items.map((item) => `<tr>
+          <td class="mono">${escapeHtml(item.sku || "—")}</td>
+          <td class="num">${integer(item.declaredUnits)}</td>
+          <td class="num">${integer(item.shippedUnits)}</td>
+          <td class="num">${integer(item.signedUnits)}</td>
+          <td class="num">${integer(item.transitUnits)}</td>
+        </tr>`).join("")}</tbody></table>`
+        : `<div class="empty-state"><strong>该货件没有 SKU 级原始数据</strong>导入这份货件表时未留存逐行快照，重新导入一次货件列表即可补齐。</div>`;
+      if (!drawer.open) drawer.showModal();
     }
 
     function domesticThumb(url, code) {
@@ -5566,6 +5675,26 @@
       content.hidden = collapsed;
       button.textContent = collapsed ? "展开" : "收起";
       button.setAttribute("aria-expanded", String(!collapsed));
+    }
+
+    // 人工补充 / 清空货件到达日期。传 null 表示清空，回到系统推算。
+    // 只影响路途明细的分桶与倒计时，不影响需求预测的供应扣减。
+    async function saveTransitShipmentArrival(shipmentNo, arrivalDate) {
+      if (!shipmentNo) return;
+      try {
+        const response = await fetch(`/api/transit/shipments/${encodeURIComponent(shipmentNo)}/arrival`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ arrivalDate: arrivalDate || null }),
+        });
+        const payload = await response.json();
+        if (!response.ok || !payload.success) throw new Error(payload.message || `HTTP ${response.status}`);
+        await fetchInventoryData();
+        renderInventory();
+        showToast(arrivalDate ? `${shipmentNo} 的到达日期已记为 ${arrivalDate}` : `${shipmentNo} 已清除人工到达日期`);
+      } catch (error) {
+        showToast(`到达日期保存失败：${error.message}`);
+      }
     }
 
     async function saveTransitChannelLeadTime(index, button) {
@@ -9953,7 +10082,7 @@
       $$("[data-import-count]").forEach((counter) => {
         counter.textContent = `${selectedCount}/${importSources.length}`;
       });
-      [$("#scanImportButton"), $("#scanImportPageButton")].filter(Boolean).forEach((button) => {
+      [$("#scanImportPageButton"), $("#uploadImportPageButton"), $("#saveLocalImportPathButton")].filter(Boolean).forEach((button) => {
         button.disabled = state.importRunning || selectedCount === 0;
       });
     }
@@ -9988,14 +10117,14 @@
         control.addEventListener("change", (event) => {
           const checkbox = event.target.closest("[data-import-source]");
           if (!checkbox) return;
-          if (checkbox.checked) state.importSources = new Set([checkbox.value]);
+          if (checkbox.checked) state.importSources.add(checkbox.value);
           else state.importSources.delete(checkbox.value);
           syncImportControls();
         });
         control.addEventListener("click", (event) => {
           const action = event.target.closest("[data-import-action]")?.dataset.importAction;
           if (!action) return;
-          if (action === "all") state.importSources = new Set(importSources.length ? [importSources[0].key] : []);
+          if (action === "all") state.importSources = new Set(importSources.map((source) => source.key));
           if (action === "clear") state.importSources.clear();
           syncImportControls();
         });
@@ -10028,7 +10157,7 @@
 
     async function uploadWorkspaceImport(files, source) {
       if (!files || files.length === 0 || !source || state.importRunning) return;
-      const buttons = [$("#scanImportButton"), $("#scanImportPageButton")].filter(Boolean);
+      const buttons = [$("#scanImportPageButton"), $("#uploadImportPageButton"), $("#saveLocalImportPathButton")].filter(Boolean);
       const input = $("#workspaceImportFile");
       const body = new FormData();
       for (const file of files) {
@@ -10047,10 +10176,48 @@
         showToast(`导入失败：${error.message}`);
       } finally {
         state.importRunning = false;
-        buttons.forEach((button) => { button.textContent = button.id === "scanImportButton" ? "上传文件" : "选择文件上传（可多选）"; });
+        const uploadButton = $("#uploadImportPageButton");
+        const scanButton = $("#scanImportPageButton");
+        const saveButton = $("#saveLocalImportPathButton");
+        if (uploadButton) uploadButton.textContent = "选择文件上传（可多选）";
+        if (scanButton) scanButton.textContent = "扫描本地路径";
+        if (saveButton) saveButton.textContent = "保存路径";
         syncImportControls();
         if (input) input.value = "";
       }
+    }
+
+    async function loadLocalImportPath() {
+      const input = $("#localImportPath");
+      const status = $("#localImportPathStatus");
+      if (!input) return;
+      try {
+        const response = await fetch("/api/imports/local-source");
+        const payload = await response.json();
+        if (!response.ok || !payload.success) throw new Error(payload.message || `HTTP ${response.status}`);
+        input.value = payload.data.displayPath;
+        if (status) status.textContent = payload.data.exists ? "目录可用 · 当前店铺独立保存" : "目录不存在，请修改后保存";
+      } catch (error) {
+        if (status) status.textContent = "路径读取失败";
+      }
+    }
+
+    async function saveLocalImportPath(silent = false) {
+      const input = $("#localImportPath");
+      const status = $("#localImportPathStatus");
+      const path = input?.value?.trim();
+      if (!path) throw new Error("请输入本地扫描路径");
+      const response = await fetch("/api/imports/local-source", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path }),
+      });
+      const payload = await response.json();
+      if (!response.ok || !payload.success) throw new Error(payload.message || `HTTP ${response.status}`);
+      input.value = payload.data.displayPath;
+      if (status) status.textContent = "目录可用 · 当前店铺独立保存";
+      if (!silent) showToast("本地扫描路径已保存。");
+      return payload.data;
     }
 
     async function runLegacyDirectoryImport() {
@@ -10058,6 +10225,12 @@
       const selectedSources = importSources
         .map((source) => source.key)
         .filter((key) => state.importSources.has(key));
+      try {
+        await saveLocalImportPath(true);
+      } catch (error) {
+        showToast(`路径保存失败：${error.message}`);
+        return;
+      }
       // 置空预检：「整类型替换」的来源（生产订单 / 货件 / 物流登记）在源目录为空时会把已有数据整体清空。
       // 这类明细只有工厂侧有、补不回来，所以先问一次。预检失败不阻断，交给正式导入报错。
       let pending = [];
@@ -10091,12 +10264,12 @@
       const total = pending.reduce((sum, item) => sum + Number(item.currentRows || 0), 0);
       $("#importClearConfirmNote").textContent =
         `合计 ${integer(total)} 行做货 / 在途明细将被物理删除，做货量与在途量会同步归零。` +
-        "原始文件仍保留在 archive 批次目录里，放回源目录重新扫描即可重新导入生效。" +
+        "本地扫描的源文件仍保留在你配置的 source 目录；直接上传的原文件不在服务器留存，需重新选择上传。" +
         "如果只是临时把文件移走（或网络盘没挂上），请先点取消。";
     }
 
     async function executeImport(selectedSources) {
-      const buttons = [$("#scanImportButton"), $("#scanImportPageButton")].filter(Boolean);
+      const buttons = [$("#scanImportPageButton"), $("#uploadImportPageButton"), $("#saveLocalImportPathButton")].filter(Boolean);
       const query = new URLSearchParams();
       selectedSources.forEach((source) => query.append("source", source));
       state.importRunning = true;
@@ -10112,7 +10285,12 @@
         showToast(`导入失败：${error.message}`);
       } finally {
         state.importRunning = false;
-        buttons.forEach((button) => { button.textContent = button.id === "scanImportButton" ? "扫描导入" : "开始扫描导入"; });
+        const uploadButton = $("#uploadImportPageButton");
+        const scanButton = $("#scanImportPageButton");
+        const saveButton = $("#saveLocalImportPathButton");
+        if (uploadButton) uploadButton.textContent = "选择文件上传（可多选）";
+        if (scanButton) scanButton.textContent = "扫描本地路径";
+        if (saveButton) saveButton.textContent = "保存路径";
         syncImportControls();
       }
     }
@@ -11455,14 +11633,37 @@
         renderTransitInventory(state.inventory?.transit);
         return;
       }
+      const etaClear = event.target.closest("[data-clear-shipment-eta]");
+      if (etaClear) {
+        saveTransitShipmentArrival(etaClear.dataset.clearShipmentEta, null);
+        return;
+      }
+      // 「预计到达」单元格内的点击（日期控件）不触发行展开。
+      if (event.target.closest(".transit-eta-cell")) return;
+      const row = event.target.closest("[data-shipment-row]");
+      if (row) {
+        openTransitSkuDetails(row.dataset.shipmentRow);
+        return;
+      }
       const bucket = event.target.closest("[data-bucket]");
       if (!bucket) return;
       const key = bucket.dataset.bucket;
       state.transitBucketFilter = state.transitBucketFilter === key ? "" : key;
       renderTransitInventory(state.inventory?.transit);
     });
+    $("#transitShipmentList").addEventListener("change", (event) => {
+      const etaInput = event.target.closest("[data-shipment-eta]");
+      if (!etaInput) return;
+      saveTransitShipmentArrival(etaInput.dataset.shipmentEta, etaInput.value || null);
+    });
     $("#transitShipmentList").addEventListener("keydown", (event) => {
       if (event.key !== "Enter" && event.key !== " ") return;
+      const row = event.target.closest("[data-shipment-row]");
+      if (row) {
+        event.preventDefault();
+        openTransitSkuDetails(row.dataset.shipmentRow);
+        return;
+      }
       const bucket = event.target.closest("[data-bucket]");
       if (!bucket) return;
       event.preventDefault();
@@ -11558,6 +11759,7 @@
     });
     $("#closeProductDrawer").addEventListener("click", () => $("#productDrawer").close());
     $("#closeTransitDrawer").addEventListener("click", () => $("#transitDrawer").close());
+    $("#closeTransitSkuDrawer").addEventListener("click", () => $("#transitSkuDrawer").close());
     // 全站图片放大：事件委托，命中缩略图/主图即弹层查看（点击图片本身不关闭，点击其余区域关闭）
     document.addEventListener("click", (event) => {
       const thumb = event.target.closest(".product-thumb, .product-hero-image, .variant-image, .inventory-thumb, .sales-thumb, .sales-rank-thumb");
@@ -11589,9 +11791,24 @@
     $("#exportButton").addEventListener("click", exportRecommendations);
     initializeCustomPeriodControl();
     initializeImportControls();
+    loadLocalImportPath();
     bindProfitCalculator();
     const scanPageButton = $("#scanImportPageButton");
-    if (scanPageButton) scanPageButton.addEventListener("click", runImport);
+    if (scanPageButton) scanPageButton.addEventListener("click", runLegacyDirectoryImport);
+    $("#uploadImportPageButton")?.addEventListener("click", runImport);
+    $("#saveLocalImportPathButton")?.addEventListener("click", async () => {
+      try {
+        await saveLocalImportPath(false);
+      } catch (error) {
+        showToast(`路径保存失败：${error.message}`);
+      }
+    });
+    $("#localImportPath")?.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        runLegacyDirectoryImport();
+      }
+    });
     $("#workspaceImportFile")?.addEventListener("change", (event) => {
       if (event.target.files && event.target.files.length) {
         uploadWorkspaceImport(event.target.files, event.target.dataset.source);

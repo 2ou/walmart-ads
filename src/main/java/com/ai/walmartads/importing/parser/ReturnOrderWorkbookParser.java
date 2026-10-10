@@ -10,6 +10,7 @@ import org.springframework.stereotype.Component;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -60,14 +61,26 @@ public class ReturnOrderWorkbookParser {
     }
 
     public ParsedRows<ReturnOrderRecord> parse(Path path, ImportFile importFile) throws IOException {
+        try (InputStream input = Files.newInputStream(path)) {
+            return parse(input, importFile, path.toString());
+        }
+    }
+
+    public ParsedRows<ReturnOrderRecord> parse(byte[] content, ImportFile importFile) throws IOException {
+        try (InputStream input = new ByteArrayInputStream(content)) {
+            return parse(input, importFile, importFile.getFileName());
+        }
+    }
+
+    private ParsedRows<ReturnOrderRecord> parse(InputStream input, ImportFile importFile, String sourceName)
+            throws IOException {
         LocalDate reportMonth = importFile.getReportDate();
         if (reportMonth == null) {
-            throw new IllegalArgumentException("退款报表缺少文件月份：" + path);
+            throw new IllegalArgumentException("退款报表缺少文件月份：" + sourceName);
         }
         List<ReturnOrderRecord> records = new ArrayList<>();
         int sourceRows = 0;
-        try (InputStream input = Files.newInputStream(path);
-             Workbook workbook = WorkbookFactory.create(input)) {
+        try (Workbook workbook = WorkbookFactory.create(input)) {
             Sheet sheet = workbook.getSheet(SHEET_NAME);
             if (sheet == null) {
                 sheet = workbook.getSheetAt(0);

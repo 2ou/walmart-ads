@@ -36,10 +36,21 @@ public class SourceScanner {
     }
 
     public List<SourceFileCandidate> scan() throws IOException {
-        Path root = properties.dataRoot().toAbsolutePath().normalize();
-        if (!Files.isDirectory(root)) {
-            throw new IllegalArgumentException("数据目录不存在：" + root);
+        Path dataRoot = properties.dataRoot().toAbsolutePath().normalize();
+        if (!Files.isDirectory(dataRoot)) {
+            throw new IllegalArgumentException("数据目录不存在：" + dataRoot);
         }
+        Path sourceRoot = dataRoot.resolve("source");
+        return Files.isDirectory(sourceRoot) ? scan(sourceRoot) : List.of();
+    }
+
+    /** Scans a caller-selected source directory (for example {@code D:\\PNK\\17DATA\\source}). */
+    public List<SourceFileCandidate> scan(Path sourceRoot) throws IOException {
+        Path root = sourceRoot.toAbsolutePath().normalize();
+        if (!Files.isDirectory(root)) {
+            throw new IllegalArgumentException("源数据目录不存在：" + root);
+        }
+        Path relativeBase = root.getParent() == null ? root : root.getParent();
         List<SourceFileCandidate> files = new ArrayList<>();
         // 扫描入口 = 6 类：产品资料 / 月度退款 / 生产订单 / 货件 / 物流信息登记 / 国内仓库存。
         //
@@ -50,11 +61,11 @@ public class SourceScanner {
         //   • DEMAND_FORECAST —— source/demand-forecast/ 目录已不存在（死链路）
         //   • ORDER / AD_* / INVENTORY / WEEKLY_INVENTORY / WALMART_LISTING / CAMPAIGN_SNAPSHOT
         //     —— 分别由领星 MCP 在线同步或已下线（见 FileImportProcessor 注册表注释）
-        scanProducts(root, files);
-        scanReturnOrders(root, files);
-        scanProductionOrder(root, files);
-        scanShipments(root, files);
-        scanDomesticInventory(root, files);
+        scanProducts(root, relativeBase, files);
+        scanReturnOrders(root, relativeBase, files);
+        scanProductionOrder(root, relativeBase, files);
+        scanShipments(root, relativeBase, files);
+        scanDomesticInventory(root, relativeBase, files);
         files.sort(Comparator
                 .comparingInt((SourceFileCandidate item) -> priority(item.fileType()))
                 .thenComparing(item -> item.path().toString()));
@@ -87,8 +98,34 @@ public class SourceScanner {
                 null, reportDate, snapshotAt);
     }
 
-    private void scanProducts(Path root, List<SourceFileCandidate> files) throws IOException {
-        Path uploadRoot = root.resolve("source").resolve("upload");
+    /** Classifies a browser upload held in memory; no server-local file is created. */
+    public SourceFileCandidate uploadedCandidate(String fileName, ImportSource source, LocalDateTime uploadedAt) {
+        if (fileName == null || source == null) {
+            throw new IllegalArgumentException("上传文件或导入类型无效");
+        }
+        String name = Path.of(fileName).getFileName().toString();
+        if (name.startsWith("~$") || !name.toLowerCase(Locale.ROOT).endsWith(".xlsx")) {
+            throw new IllegalArgumentException("仅支持 .xlsx 工作簿");
+        }
+        LocalDate reportDate = null;
+        LocalDateTime snapshotAt = uploadedAt == null ? LocalDateTime.now() : uploadedAt;
+        if (source == ImportSource.RETURN_ORDER) {
+            Matcher matcher = RETURN_ORDER_MONTH.matcher(name);
+            if (!matcher.matches()) {
+                throw new IllegalArgumentException("退款文件名必须为 Customer returns-YYYYMM.xlsx");
+            }
+            reportDate = YearMonth.of(Integer.parseInt(matcher.group(1)), Integer.parseInt(matcher.group(2))).atDay(1);
+            snapshotAt = null;
+        } else if (source == ImportSource.DOMESTIC_INVENTORY) {
+            snapshotAt = domesticInventorySnapshotAt(name, snapshotAt);
+            reportDate = snapshotAt.toLocalDate();
+        }
+        Path logicalPath = Path.of("database-upload").resolve(name);
+        return new SourceFileCandidate(logicalPath, logicalPath, source.fileType(), null, reportDate, snapshotAt);
+    }
+
+    private void scanProducts(Path root, Path relativeBase, List<SourceFileCandidate> files) throws IOException {
+        Path uploadRoot = root.resolve("upload");
         if (!Files.isDirectory(uploadRoot)) {
             return;
         }
@@ -100,7 +137,7 @@ public class SourceScanner {
                 }
                 files.add(new SourceFileCandidate(
                         path,
-                        root.relativize(path),
+                        relativeBase.relativize(path),
                         ImportFileType.PRODUCT,
                         null,
                         null,
@@ -110,8 +147,8 @@ public class SourceScanner {
         }
     }
 
-    private void scanReturnOrders(Path root, List<SourceFileCandidate> files) throws IOException {
-        Path returnRoot = root.resolve("source").resolve("Return_Orders");
+    private void scanReturnOrders(Path root, Path relativeBase, List<SourceFileCandidate> files) throws IOException {
+        Path returnRoot = root.resolve("Return_Orders");
         if (!Files.isDirectory(returnRoot)) {
             return;
         }
@@ -136,7 +173,7 @@ public class SourceScanner {
                 }
                 files.add(new SourceFileCandidate(
                         path,
-                        root.relativize(path),
+                        relativeBase.relativize(path),
                         ImportFileType.RETURN_ORDER,
                         null,
                         reportMonth,
@@ -146,8 +183,8 @@ public class SourceScanner {
         }
     }
 
-    private void scanProductionOrder(Path root, List<SourceFileCandidate> files) throws IOException {
-        Path productionRoot = root.resolve("source").resolve("生产订单");
+    private void scanProductionOrder(Path root, Path relativeBase, List<SourceFileCandidate> files) throws IOException {
+        Path productionRoot = root.resolve("生产订单");
         if (!Files.isDirectory(productionRoot)) {
             return;
         }
@@ -159,7 +196,7 @@ public class SourceScanner {
                 }
                 files.add(new SourceFileCandidate(
                         path,
-                        root.relativize(path),
+                        relativeBase.relativize(path),
                         ImportFileType.PRODUCTION_ORDER,
                         null,
                         null,
@@ -169,8 +206,8 @@ public class SourceScanner {
         }
     }
 
-    private void scanShipments(Path root, List<SourceFileCandidate> files) throws IOException {
-        Path shipmentRoot = root.resolve("source").resolve("货件");
+    private void scanShipments(Path root, Path relativeBase, List<SourceFileCandidate> files) throws IOException {
+        Path shipmentRoot = root.resolve("货件");
         if (!Files.isDirectory(shipmentRoot)) {
             return;
         }
@@ -191,7 +228,7 @@ public class SourceScanner {
                 }
                 files.add(new SourceFileCandidate(
                         path,
-                        root.relativize(path),
+                        relativeBase.relativize(path),
                         type,
                         null,
                         null,
@@ -201,8 +238,8 @@ public class SourceScanner {
         }
     }
 
-    private void scanDomesticInventory(Path root, List<SourceFileCandidate> files) throws IOException {
-        Path domesticRoot = root.resolve("source").resolve("国内仓库存");
+    private void scanDomesticInventory(Path root, Path relativeBase, List<SourceFileCandidate> files) throws IOException {
+        Path domesticRoot = root.resolve("国内仓库存");
         if (!Files.isDirectory(domesticRoot)) {
             return;
         }
@@ -215,7 +252,7 @@ public class SourceScanner {
                 LocalDateTime snapshotAt = domesticInventorySnapshotAt(name, path);
                 files.add(new SourceFileCandidate(
                         path,
-                        root.relativize(path),
+                        relativeBase.relativize(path),
                         ImportFileType.DOMESTIC_INVENTORY,
                         null,
                         snapshotAt.toLocalDate(),
@@ -226,6 +263,16 @@ public class SourceScanner {
     }
 
     private static LocalDateTime domesticInventorySnapshotAt(String fileName, Path path) {
+        LocalDateTime fallback;
+        try {
+            fallback = ImportValues.fileTime(Files.getLastModifiedTime(path).toInstant());
+        } catch (IOException exception) {
+            throw new IllegalArgumentException("Unable to read domestic inventory modification time: " + path, exception);
+        }
+        return domesticInventorySnapshotAt(fileName, fallback);
+    }
+
+    private static LocalDateTime domesticInventorySnapshotAt(String fileName, LocalDateTime fallback) {
         Matcher matcher = DOMESTIC_INVENTORY_DATE.matcher(fileName);
         if (matcher.matches()) {
             try {
@@ -238,11 +285,7 @@ public class SourceScanner {
                 // Fall through to file modification time.
             }
         }
-        try {
-            return ImportValues.fileTime(Files.getLastModifiedTime(path).toInstant());
-        } catch (IOException exception) {
-            throw new IllegalArgumentException("Unable to read domestic inventory modification time: " + path, exception);
-        }
+        return fallback;
     }
 
     private static int priority(ImportFileType type) {

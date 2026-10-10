@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.net.InetAddress;
 import java.time.Duration;
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -21,9 +22,11 @@ import java.util.Map;
 public class WorkspaceAuthController {
 
     private final WorkspaceAccountService accounts;
+    private final WorkspaceInitializationService initialization;
 
-    public WorkspaceAuthController(WorkspaceAccountService accounts) {
+    public WorkspaceAuthController(WorkspaceAccountService accounts, WorkspaceInitializationService initialization) {
         this.accounts = accounts;
+        this.initialization = initialization;
     }
 
     @GetMapping("/status")
@@ -72,6 +75,31 @@ public class WorkspaceAuthController {
                 request.username(), request.password(), clientIp(servletRequest), servletRequest.getHeader("User-Agent"));
         response.addHeader(HttpHeaders.SET_COOKIE, sessionCookie(login.token(), login.maxAgeSeconds()).toString());
         return ApiResponse.ok(Map.of("account", login.principal(),
+                "redirect", login.principal().ready() ? "/" : "/workspace.html"));
+    }
+
+    @PostMapping("/register/discover")
+    public ApiResponse<List<WorkspaceAccountService.StoreOption>> discoverRegistrationStores(
+            @RequestBody WorkspaceAccountService.RegisterDiscoveryRequest request
+    ) {
+        return ApiResponse.ok(accounts.discoverRegistrationStores(request));
+    }
+
+    @PostMapping("/register")
+    public ApiResponse<Map<String, Object>> register(
+            @RequestBody WorkspaceAccountService.RegisterAccountRequest request,
+            HttpServletRequest servletRequest,
+            HttpServletResponse response
+    ) {
+        WorkspaceAccountService.SetupResult created = accounts.registerAccount(
+                request, clientIp(servletRequest), servletRequest.getHeader("User-Agent"));
+        WorkspaceAccountService.LoginResult login = accounts.login(
+                created.account().username(), request.password(), clientIp(servletRequest),
+                servletRequest.getHeader("User-Agent"));
+        response.addHeader(HttpHeaders.SET_COOKIE, sessionCookie(login.token(), login.maxAgeSeconds()).toString());
+        initialization.startIfNeeded(login.principal());
+        return ApiResponse.ok("注册成功", Map.of(
+                "account", login.principal(),
                 "redirect", login.principal().ready() ? "/" : "/workspace.html"));
     }
 

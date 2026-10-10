@@ -88,6 +88,7 @@ public class WorkspaceSessionFilter extends OncePerRequestFilter {
                 || path.equals("/pinksir-reset.html") || path.equals("/pinksir-reset.js")
                 || path.startsWith("/favicon") || path.startsWith("/error")) return true;
         if (path.equals("/api/auth/status") || path.equals("/api/auth/login")
+                || path.equals("/api/auth/register/discover") || path.equals("/api/auth/register")
                 || path.equals("/api/auth/pinksir-reset")) return true;
         if ((path.equals("/setup.html") || path.equals("/setup.js")) && accounts.setupRequired()) return true;
         if ((path.equals("/api/auth/setup") || path.equals("/api/auth/discover") || path.equals("/api/auth/bootstrap"))

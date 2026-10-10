@@ -53,7 +53,8 @@ class ImportServiceTest {
         // 指纹必须给出非 null 值：否则 importFingerprint(type, null) 会绕开 anyString() 桩，
         // 让整条导入链路走进「新文件」分支，把「判重」这件事测没了。
         fingerprint = mock(FileFingerprint.class);
-        when(fingerprint.sha256(any())).thenReturn("content-sha");
+        when(fingerprint.sha256(any(java.nio.file.Path.class))).thenReturn("content-sha");
+        when(fingerprint.sha256(any(byte[].class))).thenReturn("content-sha");
         service = buildService(dataRoot);
     }
 
@@ -190,6 +191,33 @@ class ImportServiceTest {
         assertThat(result.files()).singleElement()
                 .satisfies(file -> assertThat(file.status()).isEqualTo("SKIPPED"));
         verify(fileRepository, never()).existsByFileTypeAndSha256AndActiveTrue(any(), anyString());
+    }
+
+    @Test
+    void importsBrowserUploadFromMemoryWithoutReadingAPath() throws Exception {
+        byte[] content = {1, 2, 3, 4};
+        SourceFileCandidate candidate = new SourceFileCandidate(
+                Path.of("database-upload/products-upload.xlsx"),
+                Path.of("database-upload/products-upload.xlsx"),
+                ImportFileType.PRODUCT,
+                null,
+                null,
+                null
+        );
+        when(processor.importFingerprint(ImportFileType.PRODUCT, "content-sha")).thenReturn("sha-product");
+        when(fileRepository.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(processor.processUploaded(any(), any(byte[].class), anyString()))
+                .thenReturn(new DocumentImportTool.ImportOutcome(2, 2));
+
+        ImportService.ImportRunResult result = service.importUploaded(candidate, ImportSource.PRODUCT, content);
+
+        assertThat(result.files()).singleElement().satisfies(file -> {
+            assertThat(file.status()).isEqualTo("IMPORTED");
+            assertThat(file.importedRows()).isEqualTo(2);
+        });
+        verify(processor).processUploaded(any(), any(byte[].class),
+                org.mockito.ArgumentMatchers.startsWith("database://workspace-upload/"));
+        verify(fingerprint, never()).sha256(any(Path.class));
     }
 
     private static SourceFileCandidate candidate(Path path, ImportFileType type) {

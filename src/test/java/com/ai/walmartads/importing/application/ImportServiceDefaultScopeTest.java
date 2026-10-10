@@ -88,7 +88,7 @@ class ImportServiceDefaultScopeTest {
         when(scanner.scan()).thenReturn(List.of(candidates));
 
         FileFingerprint fingerprint = mock(FileFingerprint.class);
-        when(fingerprint.sha256(any())).thenReturn("sha-test");
+        when(fingerprint.sha256(any(java.nio.file.Path.class))).thenReturn("sha-test");
 
         FileImportProcessor processor = mock(FileImportProcessor.class);
         when(processor.importFingerprint(any(), anyString())).thenReturn("sha-test");

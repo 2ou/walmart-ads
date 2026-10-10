@@ -1,6 +1,5 @@
 package com.ai.walmartads.workspace;
 
-import com.ai.walmartads.config.WalmartAdsProperties;
 import com.ai.walmartads.importing.application.ImportSource;
 import org.apache.poi.ss.usermodel.DataFormatter;
 import org.apache.poi.ss.usermodel.Row;
@@ -13,11 +12,10 @@ import org.springframework.util.StringUtils;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.ByteArrayInputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashSet;
@@ -35,12 +33,10 @@ public class WorkspaceOwnershipService {
     private static final int MAX_IDENTIFIERS = 30;
 
     private final JdbcTemplate jdbc;
-    private final WalmartAdsProperties properties;
     private final DataFormatter formatter = new DataFormatter(Locale.ROOT);
 
-    public WorkspaceOwnershipService(JdbcTemplate jdbc, WalmartAdsProperties properties) {
+    public WorkspaceOwnershipService(JdbcTemplate jdbc) {
         this.jdbc = jdbc;
-        this.properties = properties;
     }
 
     public List<String> currentPrefixes() {
@@ -67,22 +63,35 @@ public class WorkspaceOwnershipService {
                 prefixes.stream().anyMatch(value::startsWith));
     }
 
-    /** Quarantines a complete workbook when an ownership column contains another prefix. */
+    /** Rejects a workbook and stores only database audit metadata when it contains another prefix. */
     public void verifyUploadedWorkbook(Path workbookPath, ImportSource source, String originalFilename)
+            throws IOException {
+        try (InputStream input = Files.newInputStream(workbookPath)) {
+            verifyUploadedWorkbook(input, source, originalFilename);
+        }
+    }
+
+    public void verifyUploadedWorkbook(byte[] content, ImportSource source, String originalFilename)
+            throws IOException {
+        try (InputStream input = new ByteArrayInputStream(content)) {
+            verifyUploadedWorkbook(input, source, originalFilename);
+        }
+    }
+
+    private void verifyUploadedWorkbook(InputStream input, ImportSource source, String originalFilename)
             throws IOException {
         List<String> prefixes = currentPrefixes();
         if (prefixes.isEmpty()) return;
-        Set<String> identifiers = workbookIdentifiers(workbookPath);
+        Set<String> identifiers = workbookIdentifiers(input);
         if (identifiers.isEmpty()) return;
         List<String> mismatches = identifiers.stream()
                 .filter(value -> prefixes.stream().noneMatch(value.toUpperCase(Locale.ROOT)::startsWith))
                 .limit(MAX_IDENTIFIERS)
                 .toList();
         if (mismatches.isEmpty()) return;
-        Path quarantined = quarantineFile(workbookPath, originalFilename);
         String reason = "SKU/款号前缀与当前工作区不匹配；允许前缀：" + String.join(", ", prefixes);
-        record(source.name(), originalFilename, mismatches, reason, quarantined.toString(), null);
-        throw new IllegalArgumentException(reason + "。文件已进入待归属区，未写入业务数据");
+        record(source.name(), originalFilename, mismatches, reason, null, null);
+        throw new IllegalArgumentException(reason + "。已记录待归属审计，未保存原文件，未写入业务数据");
     }
 
     public void quarantineRecord(String sourceType, String sourceKey, String rawPayload, String... identifiers) {
@@ -103,11 +112,17 @@ public class WorkspaceOwnershipService {
                 rs.getTimestamp("created_at").toLocalDateTime()), WorkspaceContext.requireId());
     }
 
-    private Set<String> workbookIdentifiers(Path path) throws IOException {
+    private Set<String> workbookIdentifiers(InputStream input) throws IOException {
         Set<String> identifiers = new LinkedHashSet<>();
-        try (InputStream input = Files.newInputStream(path); Workbook workbook = WorkbookFactory.create(input)) {
-            for (Sheet sheet : workbook) {
+        try (Workbook workbook = WorkbookFactory.create(input)) {
+            for (int sheetIndex = 0; sheetIndex < workbook.getNumberOfSheets(); sheetIndex++) {
+                // Walmart templates contain hidden metadata sheets whose cells describe the SKU field
+                // (Required / String / examples). They are schema definitions, not merchant identifiers.
+                if (workbook.isSheetHidden(sheetIndex) || workbook.isSheetVeryHidden(sheetIndex)) continue;
+                Sheet sheet = workbook.getSheetAt(sheetIndex);
                 int lastHeaderCandidate = Math.min(sheet.getLastRowNum(), HEADER_SCAN_ROWS - 1);
+                Row ownershipHeader = null;
+                List<Integer> ownershipColumns = List.of();
                 for (int rowIndex = sheet.getFirstRowNum(); rowIndex <= lastHeaderCandidate; rowIndex++) {
                     Row header = sheet.getRow(rowIndex);
                     if (header == null) continue;
@@ -116,15 +131,23 @@ public class WorkspaceOwnershipService {
                         if (isOwnershipHeader(formatter.formatCellValue(cell))) columns.add(cell.getColumnIndex());
                     });
                     if (columns.isEmpty()) continue;
-                    for (int dataIndex = rowIndex + 1; dataIndex <= sheet.getLastRowNum(); dataIndex++) {
+                    // Templates often repeat the friendly header and then the machine header. The last
+                    // matching row is the one immediately above the field description and actual data.
+                    ownershipHeader = header;
+                    ownershipColumns = columns;
+                }
+                if (ownershipHeader != null) {
+                    for (int dataIndex = ownershipHeader.getRowNum() + 1;
+                         dataIndex <= sheet.getLastRowNum(); dataIndex++) {
                         Row row = sheet.getRow(dataIndex);
                         if (row == null) continue;
-                        for (int column : columns) {
+                        for (int column : ownershipColumns) {
                             String value = formatter.formatCellValue(row.getCell(column)).trim();
-                            if (StringUtils.hasText(value)) identifiers.add(value);
+                            // Walmart's field-description row is prose and can be hundreds of characters.
+                            // Real SKU/style identifiers in these imports are capped well below this limit.
+                            if (StringUtils.hasText(value) && value.length() <= 100) identifiers.add(value);
                         }
                     }
-                    break;
                 }
             }
         }
@@ -135,18 +158,6 @@ public class WorkspaceOwnershipService {
         if (!StringUtils.hasText(value)) return false;
         String normalized = value.toLowerCase(Locale.ROOT).replaceAll("[\\s_\\-/#()（）]+", "");
         return OWNERSHIP_HEADERS.contains(normalized);
-    }
-
-    private Path quarantineFile(Path source, String originalFilename) throws IOException {
-        Path root = properties.dataRoot().toAbsolutePath().normalize()
-                .resolve("workspace-unassigned").resolve(String.valueOf(WorkspaceContext.requireId()));
-        Files.createDirectories(root);
-        String safeName = Path.of(StringUtils.hasText(originalFilename) ? originalFilename : "upload.xlsx")
-                .getFileName().toString();
-        String stamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss-SSS"));
-        Path target = root.resolve(stamp + "-" + safeName).normalize();
-        if (!target.startsWith(root)) throw new IllegalArgumentException("文件名无效");
-        return Files.copy(source, target, StandardCopyOption.COPY_ATTRIBUTES);
     }
 
     private void record(String sourceType, String sourceKey, List<String> identifiers, String reason,

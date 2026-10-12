@@ -1376,13 +1376,69 @@
     .transit-countdown.cd-far { color: var(--steel-copy); }
     .transit-countdown.cd-overdue { color: var(--signal-red); }
     .transit-countdown.cd-arrived { color: var(--signal-green); font-weight: 700; }
-    /* 「预计到达」列内直改：日期输入 + 人工标记 + 清空按钮 */
-    .transit-eta-cell { display: flex; align-items: center; gap: 4px; white-space: nowrap; }
-    .transit-eta-input { width: 116px; padding: 3px 5px; border: 1px solid var(--line-soft); border-radius: 6px; background: #fff; color: var(--frost-ink); font: 600 11px/1.4 "Cascadia Mono", monospace; }
-    .transit-eta-input:focus { outline: 2px solid var(--walmart-blue); outline-offset: 1px; }
-    .transit-eta-manual { padding: 1px 5px; border-radius: 999px; background: rgba(24, 95, 165, .12); color: #1668d6; font-size: 9px; font-weight: 700; }
-    .transit-eta-clear { width: 18px; height: 18px; padding: 0; border: 1px solid var(--line-soft); border-radius: 50%; background: #fff; color: var(--steel-copy); font-size: 11px; line-height: 1; cursor: pointer; }
-    .transit-eta-clear:hover { border-color: var(--signal-red); color: var(--signal-red); }
+    /* 「预计到达」：用统一的日期按钮触发自定义日历，避免浏览器原生日历的视觉割裂。 */
+    .transit-eta-guide { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 9px; margin: 0 0 12px; padding: 9px 11px; border: 1px solid rgba(22, 104, 214, .14); border-radius: 9px; color: var(--steel-copy); background: rgba(22, 104, 214, .045); font-size: 10px; line-height: 1.45; }
+    .transit-eta-guide-divider { width: 1px; height: 16px; background: var(--line-soft); }
+    .transit-eta-cell { min-width: 184px; white-space: normal; }
+    .transit-eta-control { width: 176px; display: grid; gap: 5px; }
+    .transit-eta-trigger { width: 100%; min-height: 46px; display: flex; align-items: center; justify-content: space-between; gap: 8px; box-sizing: border-box; padding: 6px 7px 6px 10px; border: 1px solid rgba(16, 32, 58, .14); border-radius: 10px; color: var(--frost-ink); background: #fff; box-shadow: 0 1px 2px rgba(16, 32, 58, .045); cursor: pointer; text-align: left; transition: border-color .16s var(--ease), background .16s var(--ease), box-shadow .16s var(--ease); }
+    .transit-eta-trigger:hover { border-color: rgba(22, 104, 214, .42); background: rgba(22, 104, 214, .025); box-shadow: 0 5px 14px rgba(16, 32, 58, .08); }
+    .transit-eta-trigger:focus-visible { outline: 2px solid var(--walmart-blue); outline-offset: 2px; }
+    .transit-eta-trigger:disabled { opacity: .58; cursor: wait; }
+    .transit-eta-date-copy { min-width: 0; display: grid; gap: 3px; }
+    .transit-eta-date-value { overflow: hidden; color: var(--frost-ink); font: 750 11px/1.1 "Cascadia Mono", monospace; letter-spacing: -.025em; text-overflow: ellipsis; white-space: nowrap; }
+    .transit-eta-date-caption { color: var(--slate-dim); font-size: 9px; font-weight: 650; line-height: 1; white-space: nowrap; }
+    .transit-eta-calendar-icon { width: 30px; height: 30px; display: grid; place-items: center; flex: 0 0 auto; border-radius: 8px; color: var(--walmart-blue); background: var(--blue-soft); }
+    .transit-eta-calendar-icon svg { width: 15px; height: 15px; }
+    .transit-eta-control.is-manual .transit-eta-trigger { border-color: rgba(22, 104, 214, .30); background: rgba(22, 104, 214, .035); }
+    .transit-eta-control.is-saving .transit-eta-trigger { border-color: rgba(22, 104, 214, .52); box-shadow: 0 0 0 3px rgba(22, 104, 214, .09); }
+    .transit-eta-control.has-error .transit-eta-trigger { border-color: rgba(229, 72, 77, .60); background: rgba(229, 72, 77, .035); }
+    .transit-eta-meta { min-height: 22px; display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+    .transit-eta-source { display: inline-flex; min-height: 20px; align-items: center; gap: 5px; padding: 0 7px; border: 1px solid var(--line-soft); border-radius: 999px; color: var(--steel-copy); background: rgba(16, 32, 58, .035); font-size: 9px; font-weight: 750; white-space: nowrap; }
+    .transit-eta-source::before { width: 5px; height: 5px; border-radius: 50%; background: currentColor; content: ""; }
+    .transit-eta-source.manual { border-color: rgba(22, 104, 214, .24); color: var(--walmart-blue); background: rgba(22, 104, 214, .09); }
+    .transit-eta-source.pending { border-color: rgba(179, 95, 0, .24); color: var(--signal-orange); background: rgba(179, 95, 0, .07); }
+    .transit-eta-helper, .transit-eta-feedback { color: var(--slate-dim); font-size: 9px; font-weight: 650; white-space: nowrap; }
+    .transit-eta-feedback:empty { display: none; }
+    .transit-eta-control.is-saving .transit-eta-feedback { color: var(--walmart-blue); }
+    .transit-eta-control.has-error .transit-eta-feedback { display: block; color: var(--signal-red); white-space: normal; }
+    .transit-eta-reset { min-height: 24px; padding: 0 4px; border: 0; border-radius: 6px; color: var(--walmart-blue); background: transparent; font-size: 9px; font-weight: 750; white-space: nowrap; cursor: pointer; }
+    .transit-eta-reset:hover { background: var(--blue-soft); }
+    .transit-eta-reset:focus-visible { outline: 2px solid var(--walmart-blue); outline-offset: 1px; }
+    .transit-eta-reset:disabled { opacity: .5; cursor: wait; }
+    .transit-date-picker { position: absolute; z-index: 30; width: min(292px, calc(100% - 24px)); box-sizing: border-box; padding: 12px; border: 1px solid rgba(16, 32, 58, .13); border-radius: 14px; color: var(--frost-ink); background: #fff; box-shadow: 0 22px 58px rgba(16, 32, 58, .22), 0 4px 12px rgba(16, 32, 58, .09); transform-origin: top right; animation: transit-calendar-in .16s var(--ease) both; }
+    .transit-date-picker[hidden] { display: none; }
+    .transit-date-picker-header { display: grid; grid-template-columns: 36px 1fr 36px; align-items: center; gap: 6px; margin-bottom: 10px; }
+    .transit-date-picker-title { text-align: center; font-size: 12px; font-weight: 800; letter-spacing: -.015em; }
+    .transit-date-picker-nav { width: 36px; height: 36px; display: grid; place-items: center; padding: 0; border: 1px solid transparent; border-radius: 9px; color: var(--steel-copy); background: transparent; cursor: pointer; }
+    .transit-date-picker-nav:hover { color: var(--walmart-blue); border-color: rgba(22, 104, 214, .16); background: var(--blue-soft); }
+    .transit-date-picker-nav:focus-visible, .transit-date-day:focus-visible, .transit-date-picker-action:focus-visible { outline: 2px solid var(--walmart-blue); outline-offset: 1px; }
+    .transit-date-picker-nav svg { width: 16px; height: 16px; }
+    .transit-date-weekdays, .transit-date-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+    .transit-date-week { display: contents; }
+    .transit-date-weekdays { margin-bottom: 4px; color: var(--slate-dim); text-align: center; font-size: 9px; font-weight: 750; }
+    .transit-date-weekdays span { line-height: 24px; }
+    .transit-date-day { width: 100%; max-width: 36px; min-height: 34px; aspect-ratio: 1; display: grid; place-items: center; justify-self: center; padding: 0; border: 0; border-radius: 9px; color: var(--steel-copy); background: transparent; cursor: pointer; font: 700 10px/1 "Cascadia Mono", monospace; transition: color .12s var(--ease), background .12s var(--ease), box-shadow .12s var(--ease); }
+    .transit-date-day:hover { color: var(--walmart-blue); background: var(--blue-soft); }
+    .transit-date-day.is-outside { color: rgba(72, 91, 120, .40); }
+    .transit-date-day.is-today { box-shadow: inset 0 0 0 1px rgba(22, 104, 214, .34); color: var(--walmart-blue); }
+    .transit-date-day.is-selected { color: #fff; background: var(--walmart-blue); box-shadow: 0 5px 12px rgba(22, 104, 214, .24); }
+    .transit-date-day.is-selected:hover { color: #fff; background: #105abc; }
+    .transit-date-picker-footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line-soft); }
+    .transit-date-picker-action { min-height: 32px; padding: 0 10px; border: 0; border-radius: 8px; color: var(--steel-copy); background: transparent; cursor: pointer; font-size: 10px; font-weight: 750; }
+    .transit-date-picker-action:hover { color: var(--walmart-blue); background: var(--blue-soft); }
+    .transit-date-picker-action.primary { color: var(--walmart-blue); background: var(--blue-soft); }
+    @keyframes transit-calendar-in { from { opacity: 0; transform: translateY(-4px) scale(.985); } to { opacity: 1; transform: none; } }
+    @media (prefers-reduced-motion: reduce) { .transit-date-picker { animation: none; } }
+    @media (pointer: coarse) {
+      .transit-eta-trigger { min-height: 48px; }
+      .transit-eta-reset { min-height: 44px; padding-inline: 8px; }
+      .transit-eta-control { width: 188px; }
+      .transit-eta-cell { min-width: 196px; }
+      .transit-date-picker { width: min(320px, calc(100% - 24px)); }
+      .transit-date-day { max-width: 40px; min-height: 38px; }
+      .transit-date-picker-nav, .transit-date-picker-action { min-width: 44px; min-height: 44px; }
+    }
     .transit-cell-clickable { cursor: pointer; color: var(--walmart-blue); text-decoration: underline; text-underline-offset: 2px; }
     .transit-cell-clickable:hover { color: #1668d6; }
     .fc-suggest-jump { cursor: pointer; color: var(--spark-yellow, #a9710b); font-weight: 600; }

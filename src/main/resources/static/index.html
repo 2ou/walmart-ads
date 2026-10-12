@@ -8,7 +8,7 @@
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%232f90ff'/%3E%3Cpath d='M14 18h9l4 25 5-17h7l5 17 4-25h9L50 49H39l-4-13-4 13H20z' fill='%23edf4ff'/%3E%3C/svg%3E">
   <title>沃尔玛工作台</title>
 
-  <link rel="stylesheet" href="app.css?v=20261008-store-chip">
+  <link rel="stylesheet" href="app.css?v=20261012-transit-calendar">
 </head>
 <body>
   <a href="#main" class="skip-link">跳到主要内容</a>
@@ -1365,7 +1365,7 @@
   </dialog>
   <dialog class="transit-drawer" id="transitDrawer" aria-labelledby="transitDrawerTitle">
     <div class="transit-drawer-header">
-      <div><h2 id="transitDrawerTitle">路途库存明细</h2><p>渠道到达时效与货件到达日期均由人工维护；「已完成」批次只用于对账，不进入在途库存。</p></div>
+      <div><h2 id="transitDrawerTitle">路途库存明细</h2><p>到达日默认按开船时间与渠道时效推算；货代确认后可在表内直接覆盖。</p></div>
       <button class="dialog-close" id="closeTransitDrawer" type="button" aria-label="关闭路途库存明细">×</button>
     </div>
     <div class="transit-drawer-body">
@@ -1387,9 +1387,31 @@
             <input class="search-input" id="transitShipmentParentFilter" type="search" placeholder="筛选款号，如 PNK366076" autocomplete="off">
           </div>
         </div>
-        <p>仅显示入库中、已发货和已申报货件。四列数量均取货件表源列原值（申报量 / 已发货 / 签收量 / 申收差异），负数原样显示；<strong>库存总览的在途只累计正数申收差异</strong>，所以明细各列相加不必然等于在途总数。「预计到达」可直接改：物流表查不到渠道或推算日期已过期时，填上货代给的真实到达日即可归入对应时间段。点任一行可看该货件每个 SKU 的明细。</p>
+        <p>仅显示入库中、已发货和已申报货件。数量列均取货件表源值；<strong>库存总览的在途只累计正数申收差异</strong>。点击行可查看 SKU 明细。</p>
+        <div class="transit-eta-guide" aria-label="预计到达日期说明">
+          <span class="transit-eta-source">系统推算</span><span>按开船时间＋渠道时效计算</span>
+          <span class="transit-eta-guide-divider" aria-hidden="true"></span>
+          <span class="transit-eta-source manual">人工确认</span><span>选择日期后自动保存，可随时恢复系统推算</span>
+        </div>
         <div class="table-scroll" id="transitShipmentList"></div>
       </section>
+    </div>
+    <div class="transit-date-picker" id="transitDatePicker" role="dialog" aria-modal="false" aria-labelledby="transitDatePickerTitle" hidden>
+      <div class="transit-date-picker-header">
+        <button class="transit-date-picker-nav" type="button" data-transit-calendar-nav="-1" aria-label="上个月">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+        </button>
+        <strong class="transit-date-picker-title" id="transitDatePickerTitle"></strong>
+        <button class="transit-date-picker-nav" type="button" data-transit-calendar-nav="1" aria-label="下个月">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
+        </button>
+      </div>
+      <div class="transit-date-weekdays" aria-hidden="true"><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span></div>
+      <div class="transit-date-grid" id="transitDateGrid" role="grid" aria-label="选择预计到达日期"></div>
+      <div class="transit-date-picker-footer">
+        <button class="transit-date-picker-action primary" type="button" data-transit-calendar-today>选择今天</button>
+        <button class="transit-date-picker-action" type="button" data-transit-calendar-close>取消</button>
+      </div>
     </div>
   </dialog>
   <dialog class="transit-drawer transit-sku-drawer" id="transitSkuDrawer" aria-labelledby="transitSkuDrawerTitle">
@@ -1907,7 +1929,11 @@
       demandForecastSearch: "",
       demandForecastSort: { key: "sku", dir: "asc" },
       products: null,
-      productsLoading: false,
+      productEtag: "",
+      productsRevalidating: false,
+      productDetailCache: new Map(),
+      productDetailEtag: new Map(),
+      productRawFieldsCache: new Map(),
       productSearch: "",
       productTagFilter: "all",
       productStrikethroughFilter: "all",
@@ -2459,21 +2485,58 @@
     }
 
     /**
+     * 产品库列表缓存（sessionStorage）。
+     *
+     * 列表整包约 105KB、详情（80 变体款）约 328KB，此前只存在 JS 内存里：
+     * 一旦刷新页面或重开应用缓存即丢，进产品库就得从头等一次全量请求。
+     * 现在把列表落到 sessionStorage（同一标签页会话内有效），进入模块先秒渲染，
+     * 再带 ETag 后台校验：数据没变服务端回 304（零响应体、零计算），变了才覆盖。
+     */
+    const PRODUCT_CACHE_KEY = "wm_ads_product_catalog_v1";
+    const PRODUCT_CACHE_TTL_MS = 12 * 60 * 60 * 1000;
+
+    function readProductCache() {
+      try {
+        const raw = sessionStorage.getItem(PRODUCT_CACHE_KEY);
+        if (!raw) return null;
+        const box = JSON.parse(raw);
+        if (!box || box.v !== 1 || !box.data || !box.data.products) return null;
+        if (Date.now() - Number(box.t || 0) > PRODUCT_CACHE_TTL_MS) return null;
+        return box;
+      } catch (error) {
+        return null;
+      }
+    }
+
+    function writeProductCache(data, etag) {
+      if (!data || !data.products) return;
+      try {
+        sessionStorage.setItem(PRODUCT_CACHE_KEY, JSON.stringify({ v: 1, t: Date.now(), etag: etag || "", data }));
+      } catch (error) {
+        // 超出配额或隐私模式：静默降级为纯内存缓存
+      }
+    }
+
+    function clearProductCache() {
+      try { sessionStorage.removeItem(PRODUCT_CACHE_KEY); } catch (error) {}
+    }
+
+    /** 本地改动（裁床数 / 手工配送费）后同步缓存，避免刷新后拿旧值渲染。 */
+    function syncProductCache() {
+      if (state.products) writeProductCache(state.products, state.productEtag);
+    }
+
+    /** 服务端数据已变更（保存退款率 / 经营标签 / 导入完成）：清缓存并失效版本，下次强制回源。 */
+    function invalidateProductCache() {
+      clearProductCache();
+      state.productEtag = "";
+    }
+
+    /**
      * 款卡片墙的骨架取自产品库（28 款有效款），因此口碑页依赖产品库数据。
-     * 与 loadProducts() 分开：这里只取数据、不触发产品页任何渲染，避免在口碑页重绘产品库视图。
      */
     async function ensureProductsData() {
-      if (state.products) return state.products;
-      if (state.productsPromise) return state.productsPromise;
-      state.productsPromise = fetch("/api/products/catalog")
-        .then(async (response) => {
-          const payload = await response.json();
-          if (!response.ok || !payload.success) throw new Error(payload.message || `HTTP ${response.status}`);
-          state.products = payload.data;
-          return state.products;
-        })
-        .finally(() => { state.productsPromise = null; });
-      return state.productsPromise;
+      return loadProducts();
     }
 
     async function loadReputation() {
@@ -5425,7 +5488,146 @@
       return `<span class="transit-countdown ${cls}">${text}</span>`;
     }
 
+    let transitDatePickerState = null;
+
+    function parseTransitDate(value) {
+      const match = String(value || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      if (!match) return null;
+      const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+      if (date.getFullYear() !== Number(match[1]) || date.getMonth() !== Number(match[2]) - 1 || date.getDate() !== Number(match[3])) return null;
+      return date;
+    }
+
+    function transitDateIso(date) {
+      const pad = (value) => String(value).padStart(2, "0");
+      return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+    }
+
+    function transitDateDisplay(value) {
+      const date = parseTransitDate(value);
+      if (!date) return { value: "选择到达日期", caption: "打开日历选择" };
+      const weekdays = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
+      return {
+        value: `${date.getMonth() + 1}月${date.getDate()}日 · ${weekdays[date.getDay()]}`,
+        caption: `${date.getFullYear()}年 · 点击修改`,
+      };
+    }
+
+    function closeTransitDatePicker(restoreFocus = false) {
+      const picker = $("#transitDatePicker");
+      const trigger = transitDatePickerState?.trigger;
+      if (picker) {
+        picker.hidden = true;
+        picker.style.left = "";
+        picker.style.top = "";
+      }
+      trigger?.setAttribute("aria-expanded", "false");
+      transitDatePickerState = null;
+      if (restoreFocus && trigger?.isConnected) trigger.focus();
+    }
+
+    function positionTransitDatePicker() {
+      const picker = $("#transitDatePicker");
+      const drawer = $("#transitDrawer");
+      const trigger = transitDatePickerState?.trigger;
+      if (!picker || !drawer || !trigger?.isConnected || picker.hidden) return;
+      const triggerRect = trigger.getBoundingClientRect();
+      const drawerRect = drawer.getBoundingClientRect();
+      const inset = 12;
+      const gap = 8;
+      const width = picker.offsetWidth;
+      const height = picker.offsetHeight;
+      let left = triggerRect.right - drawerRect.left - width;
+      let top = triggerRect.bottom - drawerRect.top + gap;
+      left = Math.max(inset, Math.min(left, drawerRect.width - width - inset));
+      if (top + height > drawerRect.height - inset) top = triggerRect.top - drawerRect.top - height - gap;
+      top = Math.max(inset, Math.min(top, drawerRect.height - height - inset));
+      picker.style.left = `${Math.round(left)}px`;
+      picker.style.top = `${Math.round(top)}px`;
+    }
+
+    function renderTransitDatePicker(focusDate = false) {
+      const picker = $("#transitDatePicker");
+      const grid = $("#transitDateGrid");
+      const title = $("#transitDatePickerTitle");
+      const pickerState = transitDatePickerState;
+      if (!picker || !grid || !title || !pickerState) return;
+      const year = pickerState.viewYear;
+      const month = pickerState.viewMonth;
+      const firstDay = new Date(year, month, 1);
+      const mondayIndex = (firstDay.getDay() + 6) % 7;
+      const gridStart = new Date(year, month, 1 - mondayIndex);
+      const todayIso = transitDateIso(new Date());
+      title.textContent = `${year}年 ${month + 1}月`;
+      grid.innerHTML = Array.from({ length: 6 }, (_, week) => `<div class="transit-date-week" role="row">${Array.from({ length: 7 }, (_, weekday) => {
+        const index = week * 7 + weekday;
+        const date = new Date(gridStart.getFullYear(), gridStart.getMonth(), gridStart.getDate() + index);
+        const iso = transitDateIso(date);
+        const outside = date.getMonth() !== month;
+        const selected = iso === pickerState.selectedValue;
+        const today = iso === todayIso;
+        const tabbable = iso === pickerState.focusValue || (!pickerState.focusValue && (selected || today));
+        const classNames = ["transit-date-day", outside ? "is-outside" : "", today ? "is-today" : "", selected ? "is-selected" : ""].filter(Boolean).join(" ");
+        const ariaLabel = `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日${today ? "，今天" : ""}${selected ? "，已选择" : ""}`;
+        return `<button class="${classNames}" type="button" role="gridcell" data-transit-date="${iso}" tabindex="${tabbable ? "0" : "-1"}" aria-label="${ariaLabel}" aria-selected="${selected}"${today ? ' aria-current="date"' : ""}>${date.getDate()}</button>`;
+      }).join("")}</div>`).join("");
+      if (focusDate) requestAnimationFrame(() => grid.querySelector('[tabindex="0"]')?.focus());
+      requestAnimationFrame(positionTransitDatePicker);
+    }
+
+    function openTransitDatePicker(trigger) {
+      if (!trigger || trigger.disabled) return;
+      if (transitDatePickerState?.trigger === trigger) {
+        closeTransitDatePicker(true);
+        return;
+      }
+      closeTransitDatePicker(false);
+      const selectedValue = trigger.dataset.dateValue || "";
+      const selectedDate = parseTransitDate(selectedValue);
+      const focusDate = selectedDate || new Date();
+      transitDatePickerState = {
+        trigger,
+        selectedValue,
+        focusValue: transitDateIso(focusDate),
+        viewYear: focusDate.getFullYear(),
+        viewMonth: focusDate.getMonth(),
+      };
+      trigger.setAttribute("aria-expanded", "true");
+      $("#transitDatePicker").hidden = false;
+      renderTransitDatePicker(true);
+    }
+
+    function moveTransitCalendarFocus(date) {
+      if (!transitDatePickerState) return;
+      transitDatePickerState.focusValue = transitDateIso(date);
+      transitDatePickerState.viewYear = date.getFullYear();
+      transitDatePickerState.viewMonth = date.getMonth();
+      renderTransitDatePicker(true);
+    }
+
+    function shiftTransitCalendarMonth(delta, focusGrid = true) {
+      if (!transitDatePickerState) return;
+      const current = parseTransitDate(transitDatePickerState.focusValue) || new Date(transitDatePickerState.viewYear, transitDatePickerState.viewMonth, 1);
+      const targetMonth = new Date(current.getFullYear(), current.getMonth() + delta, 1);
+      const lastDay = new Date(targetMonth.getFullYear(), targetMonth.getMonth() + 1, 0).getDate();
+      const target = new Date(targetMonth.getFullYear(), targetMonth.getMonth(), Math.min(current.getDate(), lastDay));
+      transitDatePickerState.focusValue = transitDateIso(target);
+      transitDatePickerState.viewYear = target.getFullYear();
+      transitDatePickerState.viewMonth = target.getMonth();
+      renderTransitDatePicker(focusGrid);
+    }
+
+    function chooseTransitCalendarDate(value) {
+      const pickerState = transitDatePickerState;
+      if (!pickerState || !parseTransitDate(value)) return;
+      const trigger = pickerState.trigger;
+      const shipmentNo = trigger.dataset.shipmentEta;
+      closeTransitDatePicker(false);
+      saveTransitShipmentArrival(shipmentNo, value, trigger);
+    }
+
     function renderTransitInventory(transit) {
+      if (transitDatePickerState) closeTransitDatePicker(false);
       const channelBox = $("#transitChannelLeadTime");
       const shipmentBox = $("#transitShipmentList");
       const channels = transit?.channels || [];
@@ -5499,17 +5701,31 @@
         : shipments.length
           ? `<div class="empty-state"><strong>未找到匹配款号的货件</strong>请调整款号筛选条件后重试。</div>`
           : `<div class="empty-state"><strong>暂无路途货件</strong>导入货件列表后，这里只显示入库中、已发货和已申报的货件。</div>`;
-      // 「预计到达」列内直改：人工补过的格子带「人工」标记 + 一键清空，回到系统推算。
+      // 「预计到达」列内直改：明确显示数据来源，人工日期可恢复为系统推算。
       const etaCell = (shipment) => {
         const value = arrivalOf(shipment) || "";
         const manual = !!shipment.manualArrival;
+        const pending = !value;
         const hint = manual
-          ? "人工补充的到达日期；点 × 清除后回到系统推算"
+          ? "货代确认的人工到达日，优先于系统推算"
           : "系统按「创建时间→下周三 + 渠道时效」推算；可直接改成货代给的真实到达日";
-        return `<td class="transit-eta-cell">
-          <input class="transit-eta-input" type="date" value="${escapeHtml(value)}" data-shipment-eta="${escapeHtml(shipment.shipmentNo || "")}" title="${escapeHtml(hint)}" aria-label="${escapeHtml(shipment.shipmentNo || "")} 预计到达日期">
-          ${manual ? `<span class="transit-eta-manual" title="人工补充">人工</span><button type="button" class="transit-eta-clear" data-clear-shipment-eta="${escapeHtml(shipment.shipmentNo || "")}" title="清除人工日期，回到系统推算">×</button>` : ""}
-        </td>`;
+        const feedbackId = `eta-status-${String(shipment.shipmentNo || "shipment").replace(/[^a-zA-Z0-9_-]/g, "-")}`;
+        const sourceClass = manual ? "manual" : pending ? "pending" : "";
+        const sourceText = manual ? "人工确认" : pending ? "待补充" : "系统推算";
+        const display = transitDateDisplay(value);
+        return `<td class="transit-eta-cell"><div class="transit-eta-control${manual ? " is-manual" : ""}" data-transit-eta-control data-shipment-no="${escapeHtml(shipment.shipmentNo || "")}">
+          <button class="transit-eta-trigger" type="button" data-date-value="${escapeHtml(value)}" data-previous-eta="${escapeHtml(value)}" data-shipment-eta="${escapeHtml(shipment.shipmentNo || "")}" title="${escapeHtml(hint)}" aria-label="${escapeHtml(shipment.shipmentNo || "")} 预计到达日期，当前${escapeHtml(display.value)}" aria-describedby="${feedbackId}" aria-haspopup="dialog" aria-controls="transitDatePicker" aria-expanded="false">
+            <span class="transit-eta-date-copy"><span class="transit-eta-date-value">${escapeHtml(display.value)}</span><span class="transit-eta-date-caption">${escapeHtml(display.caption)}</span></span>
+            <span class="transit-eta-calendar-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3v3M17 3v3M4 9h16M5 5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Z"/></svg></span>
+          </button>
+          <div class="transit-eta-meta">
+            <span class="transit-eta-source ${sourceClass}">${sourceText}</span>
+            ${manual
+              ? `<button type="button" class="transit-eta-reset" data-clear-shipment-eta="${escapeHtml(shipment.shipmentNo || "")}" aria-label="恢复 ${escapeHtml(shipment.shipmentNo || "")} 的系统推算到达日">恢复推算</button>`
+              : `<span class="transit-eta-helper">${pending ? "请选择日期" : "修改后自动保存"}</span>`}
+          </div>
+          <span class="transit-eta-feedback" id="${feedbackId}" role="status" aria-live="polite"></span>
+        </div></td>`;
       };
       const inTransitTable = `<table class="transit-shipment-table"><thead><tr>
           <th>货件编号</th><th>状态</th><th>货代 / 渠道</th><th>款号</th><th class="num" title="源表列「申报量」：这批货申报发出的数量">申报量</th><th class="num" title="源表列「已发货」：卖家侧标记整批已发出（状态位，通常是 0 或等于申报量）">已发货</th><th class="num" title="源表列「签收量(损坏)」括号前的数字：仓库实际签收量">签收量</th><th class="num" title="源表列「申收差异」：未入库的实际路途数量；负数表示超收。在途库存只累计其中正数部分">在途</th><th class="num">SKU</th><th>预计开船</th><th class="num">到达时效</th><th>预计到达</th><th class="num">还有几天到</th>
@@ -5677,10 +5893,35 @@
       button.setAttribute("aria-expanded", String(!collapsed));
     }
 
+    function findTransitShipment(shipmentNo) {
+      const transit = state.inventory?.transit || {};
+      return [...(transit.shipments || []), ...(transit.completedShipments || [])]
+        .find((shipment) => shipment.shipmentNo === shipmentNo) || null;
+    }
+
+    function setTransitEtaFeedback(control, message, type = "") {
+      if (!control) return;
+      const dateTrigger = control.querySelector("[data-shipment-eta]");
+      const feedback = control.querySelector(".transit-eta-feedback");
+      control.classList.toggle("has-error", type === "error");
+      if (dateTrigger) dateTrigger.setAttribute("aria-invalid", String(type === "error"));
+      if (feedback) feedback.textContent = message || "";
+    }
+
     // 人工补充 / 清空货件到达日期。传 null 表示清空，回到系统推算。
     // 只影响路途明细的分桶与倒计时，不影响需求预测的供应扣减。
-    async function saveTransitShipmentArrival(shipmentNo, arrivalDate) {
+    async function saveTransitShipmentArrival(shipmentNo, arrivalDate, trigger) {
       if (!shipmentNo) return;
+      const shipment = findTransitShipment(shipmentNo);
+      const control = trigger?.closest("[data-transit-eta-control]") || null;
+      const dateTrigger = control?.querySelector("[data-shipment-eta]");
+      const action = control?.querySelector("[data-clear-shipment-eta]");
+      control?.classList.remove("has-error");
+      control?.classList.add("is-saving");
+      control?.setAttribute("aria-busy", "true");
+      if (dateTrigger) dateTrigger.disabled = true;
+      if (action) action.disabled = true;
+      setTransitEtaFeedback(control, arrivalDate ? "正在保存日期…" : "正在恢复系统推算…");
       try {
         const response = await fetch(`/api/transit/shipments/${encodeURIComponent(shipmentNo)}/arrival`, {
           method: "PATCH",
@@ -5689,11 +5930,19 @@
         });
         const payload = await response.json();
         if (!response.ok || !payload.success) throw new Error(payload.message || `HTTP ${response.status}`);
-        await fetchInventoryData();
-        renderInventory();
-        showToast(arrivalDate ? `${shipmentNo} 的到达日期已记为 ${arrivalDate}` : `${shipmentNo} 已清除人工到达日期`);
+        if (shipment) shipment.manualArrival = arrivalDate || null;
+        renderTransitInventory(state.inventory?.transit);
+        showToast(arrivalDate ? `${shipmentNo} 的到达日已保存为 ${arrivalDate}` : `${shipmentNo} 已恢复系统推算`);
       } catch (error) {
+        setTransitEtaFeedback(control, `保存失败：${error.message}`, "error");
         showToast(`到达日期保存失败：${error.message}`);
+      } finally {
+        if (control?.isConnected) {
+          control.classList.remove("is-saving");
+          control.removeAttribute("aria-busy");
+          if (dateTrigger) dateTrigger.disabled = false;
+          if (action) action.disabled = false;
+        }
       }
     }
 
@@ -6256,6 +6505,7 @@
               if (!res.ok) throw new Error(`HTTP ${res.status}`);
               const product = (state.products.products || []).find((item) => item.parentSku === parentSku);
               if (product) product.cuttingYield = value;
+              syncProductCache();
               await fetchInventoryData();
               showToast("裁床数已保存，做货建议已重新计算");
             } catch (error) {
@@ -6303,6 +6553,7 @@
               if (!res.ok) throw new Error("HTTP " + res.status);
               const product = (state.products.products || []).find((item) => item.parentSku === parentSku);
               if (product) product.deliveryFee = value;
+              syncProductCache();
               if ($("#productDrawer").open && $("#productDrawerSku").textContent.startsWith(parentSku)) {
                 await openProductDrawer(parentSku);
               }
@@ -6355,7 +6606,8 @@
               });
               if (!res.ok) throw new Error("HTTP " + res.status);
               showToast(rate == null ? "已清除手工预估退款率" : "预估退款率已保存，正在重算利润…");
-              await loadProducts();
+              invalidateProductCache();
+              await loadProducts({ force: true });
               if ($("#productDrawer").open && $("#productDrawerSku").textContent.startsWith(parentSku)) {
                 await openProductDrawer(parentSku);
               }
@@ -6600,14 +6852,12 @@
       const initialGroup = groups[initialIndex] || {};
       const heroImage = initialGroup.images?.[0] || initialGroup.mainImageUrl || product.mainImageUrl;
       const attributes = Object.entries(product.attributes || {}).map(([label, value]) => `<div class="attribute-item"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`).join("");
-      const rawFields = Object.entries(product.rawFields || {})
-        .filter(([, value]) => rawFieldValue(value).trim())
-        .map(([key, value]) => `<div class="raw-field"><span>${escapeHtml(key)}</span><strong>${escapeHtml(rawFieldValue(value))}</strong></div>`)
-        .join("");
       const features = (product.keyFeatures || []).map((feature) => `<li>${escapeHtml(listingText(feature))}</li>`).join("");
       const sizes = [...new Set(groups.flatMap((group) => group.sizes || []).filter(Boolean))];
       const assumption = product.profitAssumption || {};
-      const profitSummary = (product.variants || []).find((variant) => variant.profit != null) || null;
+      // 变体明细的权威副本现在只在颜色组里（顶层 variants 已不再下发，避免同一份数据传两遍）。
+      const detailVariants = product.variants || (product.colorGroups || []).flatMap((group) => group.variants || []);
+      const profitSummary = detailVariants.find((variant) => variant.profit != null) || null;
       const colorButtons = groups.map((group, index) => {
         const image = group.swatchImageUrl || group.mainImageUrl || group.images?.[0];
         return `<button class="color-group-button ${index === initialIndex ? "active" : ""}" type="button" data-color-index="${index}" aria-pressed="${index === initialIndex}" aria-label="查看 ${escapeHtml(group.color || "未标注颜色")} 颜色组">
@@ -6673,7 +6923,7 @@
           <div class="profit-form-actions"><span class="profit-save-status" id="profitSaveStatus"></span><button class="primary-button" id="saveProfitAssumption" type="button">保存并重新测算</button></div>
         </section>
         <section class="product-detail-section"><h3>产品属性</h3><div class="attribute-grid">${attributes || `<div class="empty-state"><strong>暂无属性</strong></div>`}</div></section>
-        <section class="product-detail-section"><details class="raw-fields"><summary>查看上传表原始字段（${Object.keys(product.rawFields || {}).length}）</summary><div class="raw-field-grid">${rawFields}</div></details></section>`;
+        <section class="product-detail-section"><details class="raw-fields" id="productRawFieldsDetails"><summary>查看上传表原始字段</summary><div class="raw-field-grid" id="productRawFields"><div class="empty-state"><strong>展开后加载</strong>按需读取上传表原始字段。</div></div></details></section>`;
       let currentColorIndex = initialIndex;
       $$("#productColorGroups [data-color-index]").forEach((button) => button.addEventListener("click", () => {
         const index = Number(button.dataset.colorIndex);
@@ -6681,6 +6931,39 @@
         renderProductColorSelection(product, groups, currentColorIndex);
       }));
       renderProductColorSelection(product, groups, currentColorIndex);
+      // 上传表原始字段（59+ 键）改为折叠块展开时按需拉取，不再随详情整包下发
+      const rawFieldsDetails = $("#productRawFieldsDetails");
+      if (rawFieldsDetails) {
+        const renderRawFields = (fields) => {
+          const grid = $("#productRawFields");
+          const entries = Object.entries(fields || {}).filter(([, value]) => rawFieldValue(value).trim());
+          grid.innerHTML = entries.length
+            ? entries.map(([key, value]) => `<div class="raw-field"><span>${escapeHtml(key)}</span><strong>${escapeHtml(rawFieldValue(value))}</strong></div>`).join("")
+            : `<div class="empty-state"><strong>暂无原始字段</strong></div>`;
+          const summary = rawFieldsDetails.querySelector("summary");
+          if (summary) summary.textContent = `查看上传表原始字段（${Object.keys(fields || {}).length}）`;
+        };
+        rawFieldsDetails.addEventListener("toggle", async () => {
+          if (!rawFieldsDetails.open || rawFieldsDetails.dataset.loaded === "1") return;
+          rawFieldsDetails.dataset.loaded = "1";
+          const cachedFields = state.productRawFieldsCache.get(product.parentSku);
+          if (cachedFields) {
+            renderRawFields(cachedFields);
+            return;
+          }
+          $("#productRawFields").innerHTML = `<div class="empty-state"><strong>正在读取原始字段</strong>请稍候。</div>`;
+          try {
+            const response = await fetch(`/api/products/${encodeURIComponent(product.parentSku)}/raw-fields`, { cache: "no-store" });
+            const payload = await response.json();
+            if (!response.ok || !payload.success) throw new Error(payload.message || `HTTP ${response.status}`);
+            state.productRawFieldsCache.set(product.parentSku, payload.data || {});
+            renderRawFields(payload.data);
+          } catch (error) {
+            $("#productRawFields").innerHTML = `<div class="empty-state"><strong>原始字段读取失败</strong>${escapeHtml(error.message)}</div>`;
+            rawFieldsDetails.dataset.loaded = "0";
+          }
+        });
+      }
       const saveProductTagsButton = $("#saveProductTags");
       if (saveProductTagsButton) saveProductTagsButton.addEventListener("click", async () => {
         const status = $("#productTagSaveStatus");
@@ -6699,7 +6982,8 @@
           product.clearance = Boolean(payload.data?.clearance);
           product.allSeason = Boolean(payload.data?.allSeason);
           product.seasonType = payload.data?.seasonType || seasonType;
-          await Promise.all([loadProducts(), fetchInventoryData(), loadDemandForecast()]);
+          invalidateProductCache();
+          await Promise.all([loadProducts({ force: true }), fetchInventoryData(), loadDemandForecast()]);
           await openProductDrawer(product.parentSku);
           showToast(clearance ? "已标记为清货款，做货建议已停止" : "经营标签已保存，做货建议已刷新");
         } catch (error) {
@@ -6738,8 +7022,8 @@
           const payload = await response.json();
           if (!response.ok || !payload.success) throw new Error(payload.message || `HTTP ${response.status}`);
           status.textContent = "已保存，正在刷新…";
-          await openProductDrawer(product.parentSku);
-          loadProducts();
+          invalidateProductCache();
+          await Promise.all([openProductDrawer(product.parentSku), loadProducts({ force: true })]);
         } catch (error) {
           status.textContent = `保存失败：${error.message}`;
           saveButton.disabled = false;
@@ -6747,53 +7031,130 @@
       });
     }
 
+    /**
+     * 详情抽屉同样是「先秒开、再校验」：命中内存缓存直接渲染，
+     * 随后带 ETag 回源 —— 详情没变服务端回 304，连 328KB 的变体/图片清单都不用重算重传。
+     */
     async function openProductDrawer(parentSku) {
       const drawer = $("#productDrawer");
-      $("#productDrawerTitle").textContent = "正在读取产品详情";
-      $("#productDrawerSku").textContent = parentSku;
-      $("#productDrawerBody").innerHTML = `<div class="empty-state"><strong>正在解析 Listing 与图片</strong>请稍候。</div>`;
+      const cached = state.productDetailCache.get(parentSku);
+      if (cached) {
+        renderProductDetail(cached);
+      } else {
+        $("#productDrawerTitle").textContent = "正在读取产品详情";
+        $("#productDrawerSku").textContent = parentSku;
+        $("#productDrawerBody").innerHTML = `<div class="empty-state"><strong>正在解析 Listing 与图片</strong>请稍候。</div>`;
+      }
       if (!drawer.open) drawer.showModal();
       try {
-        const response = await fetch(`/api/products/${encodeURIComponent(parentSku)}`);
+        const headers = {};
+        const previousEtag = state.productDetailEtag.get(parentSku);
+        if (previousEtag) headers["If-None-Match"] = previousEtag;
+        const response = await fetch(`/api/products/${encodeURIComponent(parentSku)}`, { headers, cache: "no-store" });
+        if (response.status === 304) return;
+        const etag = response.headers.get("ETag") || "";
         const payload = await response.json();
         if (!response.ok || !payload.success) throw new Error(payload.message || `HTTP ${response.status}`);
+        state.productDetailCache.set(parentSku, payload.data);
+        state.productDetailEtag.set(parentSku, etag);
+        state.productRawFieldsCache.delete(parentSku);
         renderProductDetail(payload.data);
       } catch (error) {
-        $("#productDrawerBody").innerHTML = `<div class="empty-state"><strong>产品详情读取失败</strong>${escapeHtml(error.message)}</div>`;
+        if (cached) {
+          showToast(error.message || "产品详情刷新失败");
+        } else {
+          $("#productDrawerBody").innerHTML = `<div class="empty-state"><strong>产品详情读取失败</strong>${escapeHtml(error.message)}</div>`;
+        }
       }
     }
 
-    async function loadProducts() {
-      if (state.productsLoading) return;
-      state.productsLoading = true;
-      $("#productCatalogBody").innerHTML = emptyGrid("正在读取产品上传表", "请稍候。");
-      try {
-        const response = await fetch("/api/products/catalog");
-        const payload = await response.json();
-        if (!response.ok || !payload.success) throw new Error(payload.message || `HTTP ${response.status}`);
-        state.products = payload.data;
-        const meta = payload.data.meta;
-        $("#productParentCount").textContent = integer(meta.parentProductCount);
-        $("#productStatusHeadline").textContent = "图片与 Listing 已完成结构化";
-        $("#productStatusDetail").textContent = `${integer(meta.sourceFileCount)} 个上传文件，${integer(meta.variantCount)} 个 SKU 变体；Listing、图片与服装属性保留在 MySQL。`;
-        $("#productUpdatedAt").textContent = meta.latestUpdatedAt ? `更新 ${new Date(meta.latestUpdatedAt).toLocaleString("zh-CN")}` : "暂无更新时间";
-        renderProductMetrics(meta);
-        renderProductCatalog();
-        updatePageMeta();
-        if (state.view === "demand-forecast") renderDemandForecast();
-        if (state.view === "inventory" && state.inventory) renderInventoryByStyle(state.inventory.rows);
-        if (state.view === "sales" && state.sales) renderSales();
-        if (state.view === "recent") {
-          if (state.recent) renderRecent();
-          if (state.styleSales) renderStyleSales();
-          if (state.adProducts) renderAdProducts();
+    function applyCatalogPayload(data) {
+      state.products = data;
+      const meta = data.meta || {};
+      $("#productParentCount").textContent = integer(meta.parentProductCount);
+      $("#productStatusHeadline").textContent = "图片与 Listing 已完成结构化";
+      $("#productStatusDetail").textContent = `${integer(meta.sourceFileCount)} 个上传文件，${integer(meta.variantCount)} 个 SKU 变体；Listing、图片与服装属性保留在 MySQL。`;
+      $("#productUpdatedAt").textContent = meta.latestUpdatedAt ? `更新 ${new Date(meta.latestUpdatedAt).toLocaleString("zh-CN")}` : "暂无更新时间";
+      renderProductMetrics(meta);
+      renderProductCatalog();
+      updatePageMeta();
+      if (state.view === "demand-forecast") renderDemandForecast();
+      if (state.view === "inventory" && state.inventory) renderInventoryByStyle(state.inventory.rows);
+      if (state.view === "sales" && state.sales) renderSales();
+      if (state.view === "recent") {
+        if (state.recent) renderRecent();
+        if (state.styleSales) renderStyleSales();
+        if (state.adProducts) renderAdProducts();
+      }
+    }
+
+    /**
+     * 产品库入口。行为分三层：
+     * 1) 首屏秒开 —— sessionStorage 命中直接渲染，不等网络；
+     * 2) stale-while-revalidate —— 已有数据时后台带 ETag 校验，界面不阻塞；
+     * 3) 冷启动 —— 无任何缓存才走前台加载骨架。
+     * 传 { force: true } 表示服务端数据刚被本页改过，必须回源。
+     */
+    async function loadProducts(options = {}) {
+      const force = options.force === true;
+      if (!force && !state.products) {
+        const cached = readProductCache();
+        if (cached) {
+          state.productEtag = cached.etag || "";
+          applyCatalogPayload(cached.data);
         }
-      } catch (error) {
-        $("#productStatusHeadline").textContent = "产品资料读取失败";
-        $("#productStatusDetail").textContent = error.message;
-        $("#productCatalogBody").innerHTML = emptyGrid("产品资料读取失败", escapeHtml(error.message));
+      }
+      if (state.products && !force) {
+        await revalidateCatalog();
+        return state.products;
+      }
+      return fetchCatalog(force);
+    }
+
+    async function fetchCatalog(force) {
+      if (state.productsPromise) return state.productsPromise;
+      if (!state.products) $("#productCatalogBody").innerHTML = emptyGrid("正在读取产品上传表", "请稍候。");
+      state.productsPromise = (async () => {
+        try {
+          const headers = {};
+          if (!force && state.productEtag) headers["If-None-Match"] = state.productEtag;
+          const response = await fetch("/api/products/catalog", { headers, cache: "no-store" });
+          const etag = response.headers.get("ETag") || "";
+          if (response.status === 304) {
+            // 数据未变：沿用现有内容，只把缓存时间戳往后推，使其继续有效。
+            state.productEtag = etag || state.productEtag;
+            if (state.products) writeProductCache(state.products, state.productEtag);
+            return state.products;
+          }
+          const payload = await response.json();
+          if (!response.ok || !payload.success) throw new Error(payload.message || `HTTP ${response.status}`);
+          state.productEtag = etag;
+          writeProductCache(payload.data, etag);
+          applyCatalogPayload(payload.data);
+          return state.products;
+        } catch (error) {
+          if (state.products) {
+            showToast(error.message || "产品库刷新失败");
+          } else {
+            $("#productStatusHeadline").textContent = "产品资料读取失败";
+            $("#productStatusDetail").textContent = error.message;
+            $("#productCatalogBody").innerHTML = emptyGrid("产品资料读取失败", escapeHtml(error.message));
+          }
+          return state.products;
+        } finally {
+          state.productsPromise = null;
+        }
+      })();
+      return state.productsPromise;
+    }
+
+    async function revalidateCatalog() {
+      if (state.productsPromise || state.productsRevalidating) return;
+      state.productsRevalidating = true;
+      try {
+        await fetchCatalog(false);
       } finally {
-        state.productsLoading = false;
+        state.productsRevalidating = false;
       }
     }
 
@@ -10280,6 +10641,8 @@
         if (!response.ok || !payload.success) throw new Error(payload.message || `HTTP ${response.status}`);
         showToast(payload.data.message);
         await loadBatches();
+        // 导入会改变产品库全量数据；sessionStorage 缓存跨刷新存活，必须先清掉，否则重载后仍读旧快照
+        clearProductCache();
         setTimeout(() => location.reload(), 900);
       } catch (error) {
         showToast(`导入失败：${error.message}`);
@@ -11629,13 +11992,20 @@
     $("#transitShipmentList").addEventListener("click", (event) => {
       const clearBtn = event.target.closest("[data-clear-bucket]");
       if (clearBtn) {
+        closeTransitDatePicker(false);
         state.transitBucketFilter = "";
         renderTransitInventory(state.inventory?.transit);
         return;
       }
+      const etaTrigger = event.target.closest("[data-shipment-eta]");
+      if (etaTrigger) {
+        openTransitDatePicker(etaTrigger);
+        return;
+      }
       const etaClear = event.target.closest("[data-clear-shipment-eta]");
       if (etaClear) {
-        saveTransitShipmentArrival(etaClear.dataset.clearShipmentEta, null);
+        closeTransitDatePicker(false);
+        saveTransitShipmentArrival(etaClear.dataset.clearShipmentEta, null, etaClear);
         return;
       }
       // 「预计到达」单元格内的点击（日期控件）不触发行展开。
@@ -11651,12 +12021,16 @@
       state.transitBucketFilter = state.transitBucketFilter === key ? "" : key;
       renderTransitInventory(state.inventory?.transit);
     });
-    $("#transitShipmentList").addEventListener("change", (event) => {
-      const etaInput = event.target.closest("[data-shipment-eta]");
-      if (!etaInput) return;
-      saveTransitShipmentArrival(etaInput.dataset.shipmentEta, etaInput.value || null);
-    });
     $("#transitShipmentList").addEventListener("keydown", (event) => {
+      const etaControl = event.target.closest("[data-transit-eta-control]");
+      if (etaControl) {
+        if (event.key === "Escape") {
+          event.preventDefault();
+          closeTransitDatePicker(true);
+          setTransitEtaFeedback(etaControl, "");
+        }
+        return;
+      }
       if (event.key !== "Enter" && event.key !== " ") return;
       const row = event.target.closest("[data-shipment-row]");
       if (row) {
@@ -11671,6 +12045,59 @@
       state.transitBucketFilter = state.transitBucketFilter === key ? "" : key;
       renderTransitInventory(state.inventory?.transit);
     });
+    $("#transitDatePicker").addEventListener("click", (event) => {
+      const nav = event.target.closest("[data-transit-calendar-nav]");
+      if (nav) {
+        shiftTransitCalendarMonth(Number(nav.dataset.transitCalendarNav), false);
+        return;
+      }
+      const dateButton = event.target.closest("[data-transit-date]");
+      if (dateButton) {
+        chooseTransitCalendarDate(dateButton.dataset.transitDate);
+        return;
+      }
+      if (event.target.closest("[data-transit-calendar-today]")) {
+        chooseTransitCalendarDate(transitDateIso(new Date()));
+        return;
+      }
+      if (event.target.closest("[data-transit-calendar-close]")) closeTransitDatePicker(true);
+    });
+    $("#transitDatePicker").addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeTransitDatePicker(true);
+        return;
+      }
+      const day = event.target.closest("[data-transit-date]");
+      if (!day) return;
+      const current = parseTransitDate(day.dataset.transitDate);
+      if (!current) return;
+      let offset = 0;
+      if (event.key === "ArrowLeft") offset = -1;
+      else if (event.key === "ArrowRight") offset = 1;
+      else if (event.key === "ArrowUp") offset = -7;
+      else if (event.key === "ArrowDown") offset = 7;
+      else if (event.key === "Home") offset = -((current.getDay() + 6) % 7);
+      else if (event.key === "End") offset = 6 - ((current.getDay() + 6) % 7);
+      else if (event.key === "PageUp" || event.key === "PageDown") {
+        event.preventDefault();
+        shiftTransitCalendarMonth(event.key === "PageUp" ? -1 : 1);
+        return;
+      } else return;
+      event.preventDefault();
+      moveTransitCalendarFocus(new Date(current.getFullYear(), current.getMonth(), current.getDate() + offset));
+    });
+    document.addEventListener("pointerdown", (event) => {
+      if (!transitDatePickerState) return;
+      if (event.target.closest("#transitDatePicker") || event.target.closest("[data-shipment-eta]")) return;
+      closeTransitDatePicker(false);
+    });
+    window.addEventListener("resize", () => {
+      if (transitDatePickerState) positionTransitDatePicker();
+    });
+    $("#transitDrawer .transit-drawer-body").addEventListener("scroll", () => {
+      if (transitDatePickerState) closeTransitDatePicker(false);
+    }, true);
     $("#forecastWorkbenchSearch").addEventListener("input", (event) => {
       state.forecastWorkbenchSearch = event.target.value;
       renderDemandForecast();
@@ -11758,7 +12185,11 @@
       }
     });
     $("#closeProductDrawer").addEventListener("click", () => $("#productDrawer").close());
-    $("#closeTransitDrawer").addEventListener("click", () => $("#transitDrawer").close());
+    $("#closeTransitDrawer").addEventListener("click", () => {
+      closeTransitDatePicker(false);
+      $("#transitDrawer").close();
+    });
+    $("#transitDrawer").addEventListener("close", () => closeTransitDatePicker(false));
     $("#closeTransitSkuDrawer").addEventListener("click", () => $("#transitSkuDrawer").close());
     // 全站图片放大：事件委托，命中缩略图/主图即弹层查看（点击图片本身不关闭，点击其余区域关闭）
     document.addEventListener("click", (event) => {

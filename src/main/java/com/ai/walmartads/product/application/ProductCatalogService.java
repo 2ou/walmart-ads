@@ -6,6 +6,7 @@ import com.ai.walmartads.importing.repository.ProductRecordRepository;
 import com.ai.walmartads.inventory.application.ParentLifecycleService;
 import com.ai.walmartads.product.domain.ProfitAssumption;
 import com.ai.walmartads.workspace.WorkspaceContext;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
@@ -16,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.sql.Timestamp;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -38,6 +40,10 @@ public class ProductCatalogService {
             "4XL", "4X", "5XL", "5X", "6XL", "6X", "ONE SIZE", "OS"
     );
     private static final BigDecimal EXCHANGE_RATE = new BigDecimal("7");
+    /**
+     * 产品库快照兜底有效期。指纹已覆盖全部数据源，此处仅为防御未纳入指纹的变更路径。
+     */
+    private static final long CATALOG_CACHE_TTL_NANOS = Duration.ofMinutes(5).toNanos();
     /** 款级划线价的认同阈值：同一链接内该值须占有值变体的 80% 以上才认定为「统一划线价」。 */
     private static final BigDecimal STRIKETHROUGH_CONSENSUS_RATIO = new BigDecimal("0.80");
     private static final TypeReference<List<String>> STRING_LIST = new TypeReference<>() {
@@ -52,6 +58,14 @@ public class ProductCatalogService {
     private final RefundRateService refundRateService;
     private final ProductRecordRepository productRecordRepository;
     private final ParentLifecycleService lifecycleService;
+
+    /**
+     * 产品库列表快照。列表接口的整条链路（主查询 + 退款率 + 生命周期 + 28 款 summary + searchTerms 拼装
+     * + 序列化）每次都要从头重算，而这是一次「打开就要等」的交互。故按数据指纹缓存整份 payload：
+     * 指纹不变直接复用，指纹变化（导入、改裁床数/退款率/配送费、领星回写价格等）或超时即重算。
+     * volatile 保证可见性；并发首次请求最多多算一次，结果等价。
+     */
+    private volatile CatalogSnapshot catalogSnapshot;
 
     public ProductCatalogService(
             NamedParameterJdbcTemplate jdbc,
@@ -71,8 +85,88 @@ public class ProductCatalogService {
         this.lifecycleService = lifecycleService;
     }
 
+    /**
+     * 产品库列表 + 数据版本。版本（指纹）同时用于 HTTP ETag：
+     * 浏览器带 {@code If-None-Match} 且版本未变时可直接 304，省掉整包传输。
+     */
+    @Transactional(readOnly = true)
+    public CatalogResult loadWithVersion() {
+        String fingerprint = fingerprint();
+        long now = System.nanoTime();
+        CatalogSnapshot current = catalogSnapshot;
+        if (current != null
+                && current.fingerprint().equals(fingerprint)
+                && current.expiresAtNanos() > now) {
+            return new CatalogResult(fingerprint, current.payload());
+        }
+        CatalogPayload payload = computeCatalog();
+        catalogSnapshot = new CatalogSnapshot(fingerprint, payload, now + CATALOG_CACHE_TTL_NANOS);
+        return new CatalogResult(fingerprint, payload);
+    }
+
     @Transactional(readOnly = true)
     public CatalogPayload load() {
+        return loadWithVersion().payload();
+    }
+
+    /**
+     * 依赖数据的「廉价指纹」（实测约 15ms），覆盖产品库与详情用到的全部数据源：
+     * 产品记录（含生效版本数）、导入文件（含 active 生效数）、SKU 映射、订单与退货明细、
+     * 利润假设、款生命周期、裁床数手工设置。任一规模或生效状态/更新时间变化都会改变指纹。
+     */
+    private String fingerprint() {
+        return jdbc.queryForObject("""
+                select concat_ws('|',
+                           (select coalesce(max(id), 0) from wm_ads_product_record),
+                           (select count(*) from wm_ads_product_record where current_version = true),
+                           (select coalesce(max(id), 0) from wm_ads_import_file),
+                           (select coalesce(sum(case when active then 1 else 0 end), 0) from wm_ads_import_file),
+                           (select count(*) from wm_ads_sku_mapping),
+                           (select count(*) from wm_ads_sku_mapping where current_version = true),
+                           (select coalesce(max(id), 0) from wm_ads_order_record),
+                           (select count(*) from wm_ads_order_record),
+                           (select coalesce(max(id), 0) from wm_ads_return_order),
+                           (select count(*) from wm_ads_return_order),
+                           (select count(*) from wm_ads_profit_assumption),
+                           (select coalesce(date_format(max(updated_at), '%Y%m%d%H%i%s%f'), 'x') from wm_ads_profit_assumption),
+                           (select count(*) from wm_ads_parent_lifecycle),
+                           (select coalesce(date_format(max(updated_at), '%Y%m%d%H%i%s%f'), 'x') from wm_ads_parent_lifecycle),
+                           (select count(*) from wm_ads_product_manual_setting),
+                           (select coalesce(date_format(max(updated_at), '%Y%m%d%H%i%s%f'), 'x') from wm_ads_product_manual_setting)
+                       )
+                """, new MapSqlParameterSource(), String.class);
+    }
+
+    /** 供数据变更路径显式失效（非必需 —— 指纹机制已覆盖）。 */
+    public void invalidate() {
+        catalogSnapshot = null;
+    }
+
+    /** 单个父款详情的版本：全局指纹 + 父款号，父款被删/数据变更都会改变它。 */
+    @Transactional(readOnly = true)
+    public String detailVersion(String parentSku) {
+        String safeParentSku = parentSku == null ? "" : parentSku.trim();
+        return fingerprint() + "|" + safeParentSku;
+    }
+
+    /**
+     * 详情抽屉里「查看上传表原始字段」按需拉取（折叠块展开时才请求）。
+     * 该字段是完整上传 payload（59+ 键），此前每次都随详情一起下发却几乎没人展开，属纯浪费。
+     */
+    @Transactional(readOnly = true)
+    public Map<String, Object> rawFields(String parentSku) {
+        String safeParentSku = parentSku == null ? "" : parentSku.trim();
+        if (safeParentSku.isEmpty()) {
+            throw new IllegalArgumentException("父 SKU 不能为空。");
+        }
+        List<SourceProduct> rows = loadRows(safeParentSku, true);
+        if (rows.isEmpty()) {
+            throw new IllegalArgumentException("产品库中找不到父 SKU：" + safeParentSku);
+        }
+        return representative(rows).rawPayload();
+    }
+
+    private CatalogPayload computeCatalog() {
         // 列表页不需要完整 raw_payload（见 loadRows 注释），按需精简，避免每次打开都搬 4MB JSON。
         List<SourceProduct> rows = loadRows(null, false);
         Map<String, BigDecimal> historyRates = refundRateService.ratesByParent();
@@ -662,6 +756,22 @@ public class ProductCatalogService {
             searchTerms.add(row.itemId());
             searchTerms.add(row.upc());
         });
+        // 与卡片顶层字段（parentSku / title / brand / productType）完全重复的检索项不再下发：
+        // 前端 fuzzySearchMatches 已把这些字段作为独立入参，重复传一遍不改变任何检索结果，纯属体积浪费。
+        Set<String> topLevelTerms = new LinkedHashSet<>();
+        for (String candidate : List.of(
+                parentSku == null ? "" : parentSku,
+                representative.productName() == null ? "" : representative.productName(),
+                representative.brand() == null ? "" : representative.brand(),
+                representative.productType() == null ? "" : representative.productType()
+        )) {
+            if (present(candidate)) {
+                topLevelTerms.add(candidate.trim().toLowerCase(Locale.ROOT));
+            }
+        }
+        List<String> trimmedSearchTerms = distinctStrings(searchTerms).stream()
+                .filter(term -> !topLevelTerms.contains(term.trim().toLowerCase(Locale.ROOT)))
+                .toList();
         Integer groupCuttingYield = rows.stream()
                 .map(SourceProduct::cuttingYield)
                 .filter(value -> value != null)
@@ -687,7 +797,7 @@ public class ProductCatalogService {
                 representative.manualRefundRate(),
                 profitView.historicalRefundRate(),
                 profitView.refundRateSource(),
-                distinctStrings(searchTerms),
+                trimmedSearchTerms,
                 groupCuttingYield,
                 lifecycle.clearance(),
                 lifecycle.allSeason(),
@@ -984,6 +1094,13 @@ public class ProductCatalogService {
     public record CatalogPayload(CatalogMeta meta, List<ProductSummary> products) {
     }
 
+    /** 列表结果 + 其对应的数据版本（指纹），供控制器生成 ETag。 */
+    public record CatalogResult(String version, CatalogPayload payload) {
+    }
+
+    private record CatalogSnapshot(String fingerprint, CatalogPayload payload, long expiresAtNanos) {
+    }
+
     public record CatalogMeta(
             int parentProductCount,
             int variantCount,
@@ -1029,16 +1146,27 @@ public class ProductCatalogService {
             String shortDescription,
             List<String> keyFeatures,
             String mainImageUrl,
-            List<String> images,
+            /**
+             * 款级图片全量清单。前端详情的主图/图集统一取自 {@code colorGroups[].images}，
+             * 该字段无人消费 —— 出参忽略，省掉每次约 20KB。
+             */
+            @JsonIgnore List<String> images,
             int variantCount,
             int colorCount,
             int sizeCount,
             String sourceFileName,
             LocalDateTime updatedAt,
             Map<String, String> attributes,
-            Map<String, Object> rawFields,
+            /**
+             * 上传表原始字段，改为前端折叠块展开时走 {@code GET /api/products/{parentSku}/raw-fields} 按需拉取。
+             */
+            @JsonIgnore Map<String, Object> rawFields,
             List<ColorGroup> colorGroups,
-            List<Variant> variants,
+            /**
+             * 变体明细的唯一权威副本在 {@code colorGroups[].variants}（前端表格就是按颜色组渲染的）。
+             * 顶层再传一份完全相同的数据会让详情包体积翻倍（80 变体款实测 141KB），故出参忽略。
+             */
+            @JsonIgnore List<Variant> variants,
             ProfitAssumptionView profitAssumption,
             BigDecimal refundRate,
             String refundRateSource,
@@ -1100,7 +1228,8 @@ public class ProductCatalogService {
             String material,
             String imageUrl,
             String swatchImageUrl,
-            List<String> images,
+            /** 每个变体都重复携带同一组图集；图集只走 {@code colorGroups[].images}，此处忽略（80 变体款省约 71KB）。 */
+            @JsonIgnore List<String> images,
             boolean primaryVariant,
             LocalDateTime updatedAt,
             String itemId,

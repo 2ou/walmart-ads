@@ -3,7 +3,7 @@ package com.ai.walmartads.importing.application;
 import com.ai.walmartads.importing.domain.ImportFileType;
 
 /**
- * 前端「导入范围」可选来源，与 {@link SourceScanner} 的扫描链路一一对应。
+ * 前端「导入范围」可选来源。工作簿只通过页面上传进入系统；自动数据由各连接器维护。
  *
  * <p>已退役、不在此枚举中的来源：
  * <ul>
@@ -23,7 +23,7 @@ public enum ImportSource {
     SHIPMENT_LOGISTICS,
     DOMESTIC_INVENTORY;
 
-    /** 本来源对应的文件类型（与扫描链路一一对应）。 */
+    /** 本来源对应的文件类型。 */
     public ImportFileType fileType() {
         return switch (this) {
             case PRODUCT -> ImportFileType.PRODUCT;
@@ -35,16 +35,4 @@ public enum ImportSource {
         };
     }
 
-    public boolean matches(SourceFileCandidate candidate) {
-        return candidate.fileType() == fileType();
-    }
-
-    /**
-     * 是否为「整类型替换」来源：源目录为空时须把该类型已有数据整体置空。
-     *
-     * <p>口径单一真源在 {@link ImportFileType#fullReplace()}，此处只做转发。
-     */
-    public boolean fullReplace() {
-        return fileType().fullReplace();
-    }
 }

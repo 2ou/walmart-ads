@@ -344,10 +344,27 @@ public class InventoryDataService {
 
     /**
      * 国内仓最新快照的可用数量（按 SKU 汇总）。
-     * 复用 ReplenishmentPlanningService.domesticBySku 的查询口径：取 active 导入文件中 snapshot_at 最大的一批。
+     * 复用 ReplenishmentPlanningService.domesticBySku 的查询口径：新鲜插件快照优先，
+     * 插件过期且人工上传更新时才回退文件快照。
      */
     private Map<String, Double> domesticBySku() {
         Map<String, Double> result = new LinkedHashMap<>();
+        LocalDateTime automaticAt = jdbc.queryForObject(
+                "select max(synced_at) from wm_ads_lx_domestic_inventory", new MapSqlParameterSource(),
+                LocalDateTime.class);
+        LocalDateTime uploadAt = jdbc.queryForObject("""
+                select max(domestic.snapshot_at)
+                  from wm_ads_domestic_inventory_snapshot domestic
+                  join wm_ads_import_file file on file.id=domestic.import_file_id and file.active=true
+                """, new MapSqlParameterSource(), LocalDateTime.class);
+        if (LingxingSourcePolicy.preferAutomatic(automaticAt, uploadAt)) {
+            jdbc.queryForList("""
+                    select sku, available_units
+                      from wm_ads_lx_domestic_inventory
+                    """, new MapSqlParameterSource()).forEach(row ->
+                    result.put(text(row, "sku"), number(row, "available_units")));
+            return result;
+        }
         jdbc.queryForList("""
                 select domestic.sku, sum(domestic.available_units) as available_units
                   from wm_ads_domestic_inventory_snapshot domestic
@@ -402,8 +419,10 @@ public class InventoryDataService {
         return jdbc.queryForList("""
                 with rep as (
                   select snapshot_at,
-                         case when sum(case when source_type = 'INVENTORY' then 1 else 0 end) > 0
-                              then 'INVENTORY' else min(source_type) end as source_type
+                         case when sum(source_type = 'LINGXING') > 0 then 'LINGXING'
+                              when sum(source_type = 'LEGACY')   > 0 then 'LEGACY'
+                              when sum(source_type = 'WEEKLY')   > 0 then 'WEEKLY'
+                              else min(source_type) end as source_type
                     from wm_ads_inventory_unified
                    where parent_sku in (select p.parent_sku
                                           from wm_ads_product_record p

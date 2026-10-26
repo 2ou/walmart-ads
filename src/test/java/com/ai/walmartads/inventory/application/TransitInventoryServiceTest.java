@@ -8,6 +8,7 @@ import com.ai.walmartads.inventory.domain.TransitChannelLeadTime;
 import com.ai.walmartads.inventory.domain.TransitShipmentEta;
 import com.ai.walmartads.inventory.repository.TransitChannelLeadTimeRepository;
 import com.ai.walmartads.inventory.repository.TransitShipmentEtaRepository;
+import com.ai.walmartads.supplychain.LogisticsRegisterSource;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
@@ -15,6 +16,8 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
@@ -22,6 +25,14 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class TransitInventoryServiceTest {
+
+    /** 插件快照为空时走历史导入表兜底，用于保留既有用例的语义。 */
+    private static LogisticsRegisterSource emptySnapshotSource() {
+        LogisticsRegisterSource source = mock(LogisticsRegisterSource.class);
+        when(source.snapshot()).thenReturn(
+                new LogisticsRegisterSource.LogisticsSnapshot(Map.of(), Set.of(), 0));
+        return source;
+    }
 
     private static TransitInventoryService service(
             ShipmentRecordRepository shipmentRepository,
@@ -31,6 +42,7 @@ class TransitInventoryServiceTest {
         return new TransitInventoryService(
                 shipmentRepository,
                 logisticsRepository,
+                emptySnapshotSource(),
                 leadTimeRepository,
                 mock(TransitShipmentEtaRepository.class)
         );
@@ -284,7 +296,7 @@ class TransitInventoryServiceTest {
         when(etaRepository.findAll()).thenReturn(List.of());
 
         TransitInventoryService.TransitData result = new TransitInventoryService(
-                shipmentRepository, logisticsRepository, leadTimeRepository, etaRepository
+                shipmentRepository, logisticsRepository, emptySnapshotSource(), leadTimeRepository, etaRepository
         ).load();
 
         assertThat(result.shipments()).extracting(TransitInventoryService.TransitShipment::shipmentNo)
@@ -296,6 +308,56 @@ class TransitInventoryServiceTest {
             assertThat(view.closedAt()).isEqualTo(LocalDateTime.of(2026, 10, 9, 12, 26));
             assertThat(view.estimatedArrival()).isNull();
             assertThat(view.manualArrival()).isNull();
+        });
+    }
+
+    /**
+     * 物流信息登记改由供应链插件同步后，货代与渠道必须取自插件快照，而不是历史导入表。
+     */
+    @Test
+    void readsForwarderAndChannelFromSupplyChainSnapshotInsteadOfLegacyTable() {
+        ShipmentRecordRepository shipmentRepository = mock(ShipmentRecordRepository.class);
+        ShipmentLogisticsRepository logisticsRepository = mock(ShipmentLogisticsRepository.class);
+        TransitChannelLeadTimeRepository leadTimeRepository = mock(TransitChannelLeadTimeRepository.class);
+        ShipmentRecord shipment = mock(ShipmentRecord.class);
+        ShipmentLogisticsRecord legacy = mock(ShipmentLogisticsRecord.class);
+
+        when(shipment.getShipmentNo()).thenReturn("2988581WFB");
+        when(shipment.getLocalStatus()).thenReturn("已发货");
+        when(shipment.getShipmentCreatedAt()).thenReturn(LocalDateTime.of(2026, 10, 10, 9, 0));
+        when(shipment.getSku()).thenReturn("SKU-PLUGIN");
+        when(shipment.getParentSku()).thenReturn("PNK366066");
+        when(shipment.getReceiptDifference()).thenReturn(BigDecimal.valueOf(67));
+        when(shipmentRepository.findCurrentVersions()).thenReturn(List.of(shipment));
+
+        // 历史导入表里是过期的旧渠道，插件快照才是准的。
+        when(legacy.getShipmentNo()).thenReturn("2988581WFB");
+        when(legacy.getChannelName()).thenReturn("旧渠道-已停用");
+        when(legacy.getForwarder()).thenReturn("旧货代");
+        when(logisticsRepository.findCurrentVersions()).thenReturn(List.of(legacy));
+
+        LogisticsRegisterSource source = mock(LogisticsRegisterSource.class);
+        when(source.snapshot()).thenReturn(new LogisticsRegisterSource.LogisticsSnapshot(
+                Map.of("2988581WFB", new LogisticsRegisterSource.LogisticsRegisterInfo(
+                        "2988581WFB", "沃尔玛-海运-美森-限时达-UPS派", "海语",
+                        LocalDate.of(2026, 10, 14), null, "1")),
+                Set.of("沃尔玛-海运-美森-限时达-UPS派"),
+                1));
+        when(leadTimeRepository.findAll()).thenReturn(List.of(
+                new TransitChannelLeadTime("沃尔玛-海运-美森-限时达-UPS派", BigDecimal.valueOf(30), true)
+        ));
+
+        TransitInventoryService.TransitData result = new TransitInventoryService(
+                shipmentRepository, logisticsRepository, source, leadTimeRepository,
+                mock(TransitShipmentEtaRepository.class)
+        ).load();
+
+        assertThat(result.shipments()).singleElement().satisfies(view -> {
+            assertThat(view.forwarder()).isEqualTo("海语");
+            assertThat(view.channel()).isEqualTo("沃尔玛-海运-美森-限时达-UPS派");
+            assertThat(view.leadDays()).isEqualTo(30.0);
+            assertThat(view.leadTimeSource()).isEqualTo("MANUAL");
+            assertThat(view.estimatedArrival()).isEqualTo(LocalDate.of(2026, 11, 13));
         });
     }
 
@@ -324,7 +386,7 @@ class TransitInventoryServiceTest {
         ));
 
         TransitInventoryService.TransitData result = new TransitInventoryService(
-                shipmentRepository, logisticsRepository, leadTimeRepository, etaRepository
+                shipmentRepository, logisticsRepository, emptySnapshotSource(), leadTimeRepository, etaRepository
         ).load();
 
         assertThat(result.shipments()).singleElement().satisfies(view -> {

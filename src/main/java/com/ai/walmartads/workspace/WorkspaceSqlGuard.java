@@ -31,9 +31,12 @@ public class WorkspaceSqlGuard {
             "wm_ads_lx_inventory_snapshot", "wm_ads_inventory_unified", "wm_ads_lx_comment_raw",
             "wm_ads_lingxing_comment_sync_log", "wm_ads_forecast_setting", "wm_ads_ai_agent_run",
             "wm_ads_ai_conversation", "wm_ads_ai_conversation_message", "wm_ads_price_baseline",
-            "wm_ads_price_change", "wm_ads_supply_production_order", "wm_ads_supply_delivery_detail",
+            "wm_ads_price_change", "wm_ads_supply_order", "wm_ads_supply_production_order",
+            "wm_ads_supply_delivery_detail", "wm_ads_supply_logistics_register",
             "wm_ads_supply_chain_sync_log", "wm_ads_dashboard_ad_daily", "wm_ads_dashboard_ad_sku_daily",
-            "wm_ads_dashboard_ad_campaign_daily");
+            "wm_ads_dashboard_ad_campaign_daily", "wm_ads_wfs_import_batch", "wm_ads_wfs_batch_row",
+            "wm_ads_lx_domestic_inventory", "wm_ads_lx_domestic_inventory_sync_log",
+            "wm_ads_lx_wfs_shipment_sync_log");
 
     private static final String TABLE_ALTERNATION = TENANT_TABLES.stream()
             .sorted((left, right) -> Integer.compare(right.length(), left.length()))

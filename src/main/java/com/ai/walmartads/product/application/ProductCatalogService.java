@@ -9,6 +9,7 @@ import com.ai.walmartads.workspace.WorkspaceContext;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -115,26 +116,41 @@ public class ProductCatalogService {
      * 利润假设、款生命周期、裁床数手工设置。任一规模或生效状态/更新时间变化都会改变指纹。
      */
     private String fingerprint() {
-        return jdbc.queryForObject("""
-                select concat_ws('|',
-                           (select coalesce(max(id), 0) from wm_ads_product_record),
-                           (select count(*) from wm_ads_product_record where current_version = true),
-                           (select coalesce(max(id), 0) from wm_ads_import_file),
-                           (select coalesce(sum(case when active then 1 else 0 end), 0) from wm_ads_import_file),
-                           (select count(*) from wm_ads_sku_mapping),
-                           (select count(*) from wm_ads_sku_mapping where current_version = true),
-                           (select coalesce(max(id), 0) from wm_ads_order_record),
-                           (select count(*) from wm_ads_order_record),
-                           (select coalesce(max(id), 0) from wm_ads_return_order),
-                           (select count(*) from wm_ads_return_order),
-                           (select count(*) from wm_ads_profit_assumption),
-                           (select coalesce(date_format(max(updated_at), '%Y%m%d%H%i%s%f'), 'x') from wm_ads_profit_assumption),
-                           (select count(*) from wm_ads_parent_lifecycle),
-                           (select coalesce(date_format(max(updated_at), '%Y%m%d%H%i%s%f'), 'x') from wm_ads_parent_lifecycle),
-                           (select count(*) from wm_ads_product_manual_setting),
-                           (select coalesce(date_format(max(updated_at), '%Y%m%d%H%i%s%f'), 'x') from wm_ads_product_manual_setting)
-                       )
-                """, new MapSqlParameterSource(), String.class);
+        try {
+            return jdbc.queryForObject("""
+                    select concat_ws('|',
+                               (select coalesce(max(id), 0) from wm_ads_product_record),
+                               (select count(*) from wm_ads_product_record where current_version = true),
+                               (select coalesce(max(id), 0) from wm_ads_import_file),
+                               (select coalesce(sum(case when active then 1 else 0 end), 0) from wm_ads_import_file),
+                               (select count(*) from wm_ads_sku_mapping),
+                               (select count(*) from wm_ads_sku_mapping where current_version = true),
+                               (select coalesce(max(id), 0) from wm_ads_order_record),
+                               (select count(*) from wm_ads_order_record),
+                               (select coalesce(max(id), 0) from wm_ads_return_order),
+                               (select count(*) from wm_ads_return_order),
+                               (select count(*) from wm_ads_profit_assumption),
+                               (select coalesce(max(updated_at), timestamp '1970-01-01 00:00:00') from wm_ads_profit_assumption),
+                               (select count(*) from wm_ads_parent_lifecycle),
+                               (select coalesce(max(updated_at), timestamp '1970-01-01 00:00:00') from wm_ads_parent_lifecycle),
+                               (select count(*) from wm_ads_product_manual_setting),
+                               (select coalesce(max(updated_at), timestamp '1970-01-01 00:00:00') from wm_ads_product_manual_setting)
+                           )
+                    """, new MapSqlParameterSource(), String.class);
+        } catch (DataAccessException migrationNotReady) {
+            // 兼容轻量测试库及滚动升级期间尚未创建生命周期/裁床设置表的短窗口。
+            return jdbc.queryForObject("""
+                    select concat_ws('|',
+                               (select coalesce(max(id), 0) from wm_ads_product_record),
+                               (select count(*) from wm_ads_product_record where current_version = true),
+                               (select coalesce(max(id), 0) from wm_ads_import_file),
+                               (select count(*) from wm_ads_sku_mapping),
+                               (select coalesce(max(id), 0) from wm_ads_order_record),
+                               (select coalesce(max(id), 0) from wm_ads_return_order),
+                               (select count(*) from wm_ads_profit_assumption)
+                           )
+                    """, new MapSqlParameterSource(), String.class);
+        }
     }
 
     /** 供数据变更路径显式失效（非必需 —— 指纹机制已覆盖）。 */
@@ -602,7 +618,7 @@ public class ProductCatalogService {
                 : """
                   json_unquote(json_extract(product.raw_payload, '$.swatchImageUrl')) as swatch_image_url,
                           json_unquote(json_extract(product.raw_payload, '$.isPrimaryVariant')) as is_primary_variant,""";
-        return jdbc.queryForList("""
+        String sql = """
                 select product.id as id,
                        product.sku,
                        product.cutting_yield,
@@ -651,7 +667,21 @@ public class ProductCatalogService {
                  where product.current_version = true
                 """.formatted(rawPayloadColumns) + whereParent + """
                  order by product.parent_sku, product.sku
-                """, parameters).stream().map(this::sourceProduct).toList();
+                """;
+        try {
+            return jdbc.queryForList(sql, parameters).stream().map(this::sourceProduct).toList();
+        } catch (DataAccessException unsupportedJsonFunction) {
+            if (withRawPayload) {
+                throw unsupportedJsonFunction;
+            }
+            // H2 and a few compatible databases do not expose MySQL JSON_EXTRACT. The
+            // production MySQL path above remains slim; compatibility environments may
+            // fetch raw_payload and let sourceProduct parse the two required attributes.
+            return jdbc.queryForList(sql.replace(rawPayloadColumns, "product.raw_payload,"), parameters)
+                    .stream()
+                    .map(this::sourceProduct)
+                    .toList();
+        }
     }
 
     private SourceProduct sourceProduct(Map<String, Object> row) {

@@ -8,11 +8,15 @@ import org.springframework.data.repository.query.Param;
 
 import java.util.Collection;
 import java.util.List;
+import java.time.LocalDateTime;
 
 public interface ShipmentRecordRepository extends JpaRepository<ShipmentRecord, Long> {
 
     @Query("select r from ShipmentRecord r where r.currentVersion = true")
     List<ShipmentRecord> findCurrentVersions();
+
+    @Query("select max(r.syncedAt) from ShipmentRecord r where r.currentVersion = true and r.sourceType = :sourceType")
+    LocalDateTime findLatestCurrentSyncedAtBySourceType(@Param("sourceType") String sourceType);
 
     @Modifying
     @Query("update ShipmentRecord r set r.currentVersion = false where r.currentVersion = true")

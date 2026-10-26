@@ -1,5 +1,6 @@
 package com.ai.walmartads.walmartad;
 
+import com.ai.walmartads.analytics.application.CampaignStyleDiagnosisService;
 import com.ai.walmartads.config.LingXingProperties;
 import com.ai.walmartads.importing.parser.SkuResolver;
 import com.ai.walmartads.workspace.WorkspaceLingXingConfigService;
@@ -25,6 +26,7 @@ import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -39,6 +41,7 @@ public class WalmartAdSyncService {
     private final WalmartAdStore store;
     private final WalmartAdSkuResolver skuResolver;
     private final WorkspaceLingXingConfigService workspaceConfig;
+    private final CampaignStyleDiagnosisService diagnosisService;
     private final ReentrantLock syncLock = new ReentrantLock();
     private final AtomicBoolean backfillRunning = new AtomicBoolean(false);
 
@@ -47,13 +50,15 @@ public class WalmartAdSyncService {
             LingXingAdClient client,
             WalmartAdStore store,
             WalmartAdSkuResolver skuResolver,
-            WorkspaceLingXingConfigService workspaceConfig
+            WorkspaceLingXingConfigService workspaceConfig,
+            CampaignStyleDiagnosisService diagnosisService
     ) {
         this.properties = properties;
         this.client = client;
         this.store = store;
         this.skuResolver = skuResolver;
         this.workspaceConfig = workspaceConfig;
+        this.diagnosisService = diagnosisService;
     }
 
     /** Shares the already-enabled hourly LingXing schedule used by listings and orders. */
@@ -187,17 +192,47 @@ public class WalmartAdSyncService {
             }
             List<AdReportRow> reportRows = new ArrayList<>(reports.values());
             List<AdSliceRow> sliceRows = new ArrayList<>(slices.values());
+
+            // 同步存储层把关：领星对尚未结算的当日/昨日会返回「行在、指标全 0」的空壳结果
+            // （实测约 T+2 才结算）。若照单写入，广告诊断等页面会把这些 0 值日当成真实数据，
+            // 拉低 CTR / CPC / 转化率 / ROAS。这里按 report_date 剔除整天空壳，
+            // 使「库里有数据」等价于「领星已结算」，读取侧取最新有数据的日期即为可信末日。
+            Set<LocalDate> settledDates = settledDates(reportRows);
+            List<LocalDate> shellDates = reportRows.stream()
+                    .map(AdReportRow::reportDate)
+                    .filter(date -> !settledDates.contains(date))
+                    .distinct()
+                    .toList();
+            List<AdReportRow> settledReports = shellDates.isEmpty() ? reportRows
+                    : reportRows.stream().filter(row -> settledDates.contains(row.reportDate())).toList();
+            List<AdSliceRow> settledSlices = shellDates.isEmpty() ? sliceRows
+                    : sliceRows.stream().filter(row -> settledDates.contains(row.reportDate())).toList();
+            if (!shellDates.isEmpty()) {
+                log.info("LingXing ad synchronization skipped unsettled (all-zero) days={}", shellDates);
+            }
+
             List<Long> advertiserIds = workspaceConfig.current().advertiserIds();
             Map<WalmartAdSyncGuard.CoverageKey, Long> existingCoverage =
                     store.loadCoverage(start, end, advertiserIds);
-            WalmartAdSyncGuard.validate(existingCoverage, coverageOf(reportRows, sliceRows));
-            store.replaceWindow(start, end, advertiserIds, reportRows, sliceRows);
+            WalmartAdSyncGuard.validate(existingCoverage, coverageOf(settledReports, settledSlices));
+            store.replaceWindow(start, end, advertiserIds, settledReports, settledSlices);
             long duration = System.currentTimeMillis() - started;
-            store.completeLog(logId, completedTools, reportRows.size(), sliceRows.size(), duration);
+            store.completeLog(logId, completedTools, settledReports.size(), settledSlices.size(), duration);
+            if (!"BACKFILL".equalsIgnoreCase(triggeredBy)) {
+                WorkspacePrincipal principal = WorkspaceContext.requirePrincipal();
+                Thread.startVirtualThread(() -> WorkspaceContext.runAs(principal, () -> {
+                    try {
+                        diagnosisService.prewarmDefaultRange();
+                    } catch (Exception exception) {
+                        log.warn("Advertising diagnosis cache warmup after sync failed workspaceId={}: {}",
+                                principal.workspaceId(), exception.getMessage());
+                    }
+                }));
+            }
             log.info("LingXing ad synchronization completed trigger={}, window={}..{}, tools={}, reports={}, slices={}, durationMs={}",
-                    triggeredBy, start, end, completedTools, reportRows.size(), sliceRows.size(), duration);
+                    triggeredBy, start, end, completedTools, settledReports.size(), settledSlices.size(), duration);
             return new SyncSummary("SUCCESS", start, end, completedTools,
-                    reportRows.size(), sliceRows.size(), duration);
+                    settledReports.size(), settledSlices.size(), duration);
         } catch (Exception exception) {
             long duration = System.currentTimeMillis() - started;
             store.failLog(logId, completedTools, exception.getMessage(), duration);
@@ -205,6 +240,25 @@ public class WalmartAdSyncService {
                     ? runtime
                     : new IllegalStateException(exception.getMessage(), exception);
         }
+    }
+
+    /**
+     * 判定哪些业务日已由领星结算出真实数据。
+     *
+     * <p>判据：该日 AD_ITEM 事实的曝光 / 点击 / 广告费 / 广告订单 / 归因销售任一非零。
+     * 历史上存在真实零投放日（如早期仅单条活动、无消耗），因此只按「指标非零」判断，
+     * 不引入行数阈值 —— 行数会随在投广告项增长而变化（实测 1085 → 1108），不适合当固定基线。
+     */
+    private static Set<LocalDate> settledDates(List<AdReportRow> reports) {
+        Set<LocalDate> settled = new java.util.LinkedHashSet<>();
+        for (AdReportRow row : reports) {
+            if (row.impressions() > 0 || row.clicks() > 0
+                    || row.adSpend().signum() > 0 || row.attributedOrders().signum() > 0
+                    || row.attributedSales().signum() > 0) {
+                settled.add(row.reportDate());
+            }
+        }
+        return settled;
     }
 
     private static Map<WalmartAdSyncGuard.CoverageKey, Long> coverageOf(

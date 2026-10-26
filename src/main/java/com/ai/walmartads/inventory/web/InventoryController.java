@@ -2,6 +2,7 @@ package com.ai.walmartads.inventory.web;
 
 import com.ai.walmartads.inventory.application.ForecastSettingService;
 import com.ai.walmartads.inventory.application.InventoryDataService;
+import com.ai.walmartads.inventory.application.LingxingDomesticInventoryService;
 import com.ai.walmartads.shared.api.ApiResponse;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -17,11 +18,14 @@ public class InventoryController {
 
     private final InventoryDataService inventoryDataService;
     private final ForecastSettingService forecastSettingService;
+    private final LingxingDomesticInventoryService lingxingDomesticInventoryService;
 
     public InventoryController(InventoryDataService inventoryDataService,
-                               ForecastSettingService forecastSettingService) {
+                               ForecastSettingService forecastSettingService,
+                               LingxingDomesticInventoryService lingxingDomesticInventoryService) {
         this.inventoryDataService = inventoryDataService;
         this.forecastSettingService = forecastSettingService;
+        this.lingxingDomesticInventoryService = lingxingDomesticInventoryService;
     }
 
     @GetMapping("/data")
@@ -39,5 +43,10 @@ public class InventoryController {
     @GetMapping("/production-orders")
     public ApiResponse<List<InventoryDataService.ProductionOrderView>> productionOrders() {
         return ApiResponse.ok(inventoryDataService.productionOrders());
+    }
+
+    @GetMapping("/domestic-source")
+    public ApiResponse<LingxingDomesticInventoryService.SourceStatus> domesticSource() {
+        return ApiResponse.ok(lingxingDomesticInventoryService.status());
     }
 }

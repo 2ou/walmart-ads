@@ -8,8 +8,11 @@ import com.ai.walmartads.inventory.domain.TransitChannelLeadTime;
 import com.ai.walmartads.inventory.domain.TransitShipmentEta;
 import com.ai.walmartads.inventory.repository.TransitChannelLeadTimeRepository;
 import com.ai.walmartads.inventory.repository.TransitShipmentEtaRepository;
+import com.ai.walmartads.supplychain.LogisticsRegisterSource;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -30,11 +33,17 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
- * 将货件明细转换为路途库存，并用物流登记表关联渠道与货代。
+ * 将货件明细转换为路途库存，并用物流信息登记关联渠道与货代。
  * 货件的预计开船日固定为创建日期之后的下一个周三；渠道时效全部由用户人工维护。
+ *
+ * <p>物流信息登记自 2026-10-19 起由「穿针引线供应链」插件同步
+ * （{@code wm_ads_supply_logistics_register}），不再读取 Excel 导入表。
+ * 老表 {@code wm_ads_shipment_logistics} 仅在插件快照为空时作为兜底，避免首次部署瞬间全部变 UNMATCHED。
  */
 @Service
 public class TransitInventoryService {
+
+    private static final Logger log = LoggerFactory.getLogger(TransitInventoryService.class);
 
     /** 货件表源列名：四个数量列 + 更新时间（已完成批次的结案时间）。 */
     private static final String COLUMN_DECLARED = "申报量";
@@ -53,29 +62,35 @@ public class TransitInventoryService {
 
     private final ShipmentRecordRepository shipmentRepository;
     private final ShipmentLogisticsRepository logisticsRepository;
+    private final LogisticsRegisterSource logisticsRegisterSource;
     private final TransitChannelLeadTimeRepository channelLeadTimeRepository;
     private final TransitShipmentEtaRepository shipmentEtaRepository;
 
     public TransitInventoryService(
             ShipmentRecordRepository shipmentRepository,
             ShipmentLogisticsRepository logisticsRepository,
+            LogisticsRegisterSource logisticsRegisterSource,
             TransitChannelLeadTimeRepository channelLeadTimeRepository,
             TransitShipmentEtaRepository shipmentEtaRepository
     ) {
         this.shipmentRepository = shipmentRepository;
         this.logisticsRepository = logisticsRepository;
+        this.logisticsRegisterSource = logisticsRegisterSource;
         this.channelLeadTimeRepository = channelLeadTimeRepository;
         this.shipmentEtaRepository = shipmentEtaRepository;
     }
 
-    /** 导入物流信息登记表后，只登记新渠道，等待用户人工维护时效。 */
+    /** 供应链插件同步出新渠道后，登记到「渠道时效维护」等待人工填写时效。 */
     @Transactional
     public void syncChannelsForManualMaintenance() {
-        List<String> allChannels = logisticsRepository.findCurrentVersions().stream()
-                .map(ShipmentLogisticsRecord::getChannelName)
-                .filter(TransitInventoryService::present)
-                .distinct()
-                .toList();
+        Set<String> allChannels = new LinkedHashSet<>(logisticsRegisterSource.snapshot().channelNames());
+        if (allChannels.isEmpty()) {
+            // 插件快照尚未成功同步时退回历史导入表，保证老部署升级瞬间渠道清单不会突然清空。
+            logisticsRepository.findCurrentVersions().stream()
+                    .map(ShipmentLogisticsRecord::getChannelName)
+                    .filter(TransitInventoryService::present)
+                    .forEach(allChannels::add);
+        }
         Set<String> existing = channelLeadTimeRepository.findAll().stream()
                 .map(TransitChannelLeadTime::getChannelName)
                 .collect(Collectors.toSet());
@@ -85,6 +100,29 @@ public class TransitInventoryService {
                 channelLeadTimeRepository.save(new TransitChannelLeadTime(channel, null, false));
             }
         }
+    }
+
+    /**
+     * 货件号 → 货代 / 渠道。以供应链插件快照为准，快照为空时兜底历史导入表。
+     */
+    private Map<String, ShipmentLogisticsInfo> logisticsByShipment() {
+        LogisticsRegisterSource.LogisticsSnapshot snapshot = logisticsRegisterSource.snapshot();
+        Map<String, ShipmentLogisticsInfo> result = new LinkedHashMap<>();
+        if (!snapshot.isEmpty()) {
+            snapshot.byShipmentNo().forEach((shipmentNo, row) -> result.put(
+                    LogisticsRegisterSource.normalize(shipmentNo),
+                    new ShipmentLogisticsInfo(row.channelName(), row.forwarder())));
+            return result;
+        }
+        log.warn("供应链物流信息登记快照为空，路途库存回退到历史导入表匹配货代与渠道");
+        logisticsRepository.findCurrentVersions().forEach(record -> result.putIfAbsent(
+                LogisticsRegisterSource.normalize(record.getShipmentNo()),
+                new ShipmentLogisticsInfo(record.getChannelName(), record.getForwarder())));
+        return result;
+    }
+
+    /** 单个货件的货代与渠道（均为物流信息登记里的原值，缺失即 null）。 */
+    private record ShipmentLogisticsInfo(String channelName, String forwarder) {
     }
 
     /**
@@ -115,9 +153,7 @@ public class TransitInventoryService {
     @Transactional(readOnly = true)
     public TransitData load() {
         Set<String> kept = keptShipmentNos();
-        Map<String, ShipmentLogisticsRecord> logisticsByShipment = new LinkedHashMap<>();
-        logisticsRepository.findCurrentVersions().forEach(record ->
-                logisticsByShipment.putIfAbsent(record.getShipmentNo(), record));
+        Map<String, ShipmentLogisticsInfo> logisticsByShipment = logisticsByShipment();
         Map<String, TransitChannelLeadTime> leadTimeByChannel = channelLeadTimeRepository.findAll().stream()
                 .collect(Collectors.toMap(TransitChannelLeadTime::getChannelName, value -> value));
         Map<String, LocalDate> manualArrivalByShipment = new LinkedHashMap<>();
@@ -197,8 +233,9 @@ public class TransitInventoryService {
             if (!kept.contains(shipment.shipmentNo)) {
                 return;
             }
-            ShipmentLogisticsRecord logistics = logisticsByShipment.get(shipment.shipmentNo);
-            String channel = logistics == null ? null : logistics.getChannelName();
+            ShipmentLogisticsInfo logistics = logisticsByShipment.get(
+                    LogisticsRegisterSource.normalize(shipment.shipmentNo));
+            String channel = logistics == null ? null : logistics.channelName();
             TransitChannelLeadTime leadTime = channel == null ? null : leadTimeByChannel.get(channel);
             Double leadDays = leadTime == null || !leadTime.isManual() || leadTime.getLeadDays() == null
                     ? null : leadTime.getLeadDays().doubleValue();
@@ -212,7 +249,7 @@ public class TransitInventoryService {
                     shipment.localStatus,
                     shipment.createdAt,
                     null,
-                    logistics == null ? null : logistics.getForwarder(),
+                    logistics == null ? null : logistics.forwarder(),
                     channel,
                     round(shipment.units),
                     round(shipment.declaredUnits),
@@ -268,9 +305,7 @@ public class TransitInventoryService {
             return List.of();
         }
         Set<String> kept = keptShipmentNos();
-        Map<String, ShipmentLogisticsRecord> logisticsByShipment = new LinkedHashMap<>();
-        logisticsRepository.findCurrentVersions().forEach(record ->
-                logisticsByShipment.putIfAbsent(record.getShipmentNo(), record));
+        Map<String, ShipmentLogisticsInfo> logisticsByShipment = logisticsByShipment();
         Map<String, TransitChannelLeadTime> leadTimeByChannel = channelLeadTimeRepository.findAll().stream()
                 .collect(Collectors.toMap(TransitChannelLeadTime::getChannelName, value -> value));
         List<TransitSkuSupply> result = new ArrayList<>();
@@ -278,8 +313,9 @@ public class TransitInventoryService {
             if (!kept.contains(record.getShipmentNo())) {
                 continue;
             }
-            ShipmentLogisticsRecord logistics = logisticsByShipment.get(record.getShipmentNo());
-            String channel = logistics == null ? null : logistics.getChannelName();
+            ShipmentLogisticsInfo logistics = logisticsByShipment.get(
+                    LogisticsRegisterSource.normalize(record.getShipmentNo()));
+            String channel = logistics == null ? null : logistics.channelName();
             TransitChannelLeadTime leadTime = channel == null ? null : leadTimeByChannel.get(channel);
             Double leadDays = leadTime == null || !leadTime.isManual() || leadTime.getLeadDays() == null
                     ? null : leadTime.getLeadDays().doubleValue();

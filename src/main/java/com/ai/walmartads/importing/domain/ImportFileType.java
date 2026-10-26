@@ -6,7 +6,7 @@ public enum ImportFileType {
     AD_AUTO,
     AD_MANUAL,
     INVENTORY,
-    /** 沃尔玛PNK周报（WFS库存快照）。扫描链路已于 2026-09-23 删除；枚举值保留仅为读回历史 import_file 行。 */
+    /** 沃尔玛PNK周报（WFS库存快照）。文件入口已于 2026-09-23 删除；枚举值保留仅为读回历史 import_file 行。 */
     WEEKLY_INVENTORY,
     PRODUCT,
     HISTORY,
@@ -23,10 +23,9 @@ public enum ImportFileType {
     LINGXING_ORDER;
 
     /**
-     * 该类型是否为「整类型替换」口径：源目录只放一份文件，每次扫描以最新导入为准。
+     * 该类型是否为「整类型替换」口径：每次页面上传的新版本替换上一版当前数据。
      *
-     * <p>这类类型在源目录为空时，重新扫描导入会把已有数据<b>整体置空</b>（源即真理），
-     * 因为「源里没有」本身就是一次完整的信息。反之：
+     * <p>反之：
      * <ul>
      *   <li>{@link #DOMESTIC_INVENTORY} 是快照时间序列，清掉会毁掉库存趋势；</li>
      *   <li>{@link #PRODUCT} 按 SKU 覆盖、产品库不该因删一个上传文件而消失；</li>

@@ -79,6 +79,19 @@ public class WorkspaceLingXingConfigService {
                 true, 0L));
     }
 
+    /** 项目内置连接器覆盖全部已启用店铺；供应链来源再读取 principal 上的独立开关。 */
+    public List<WorkspacePrincipal> connectorWorkspaces() {
+        return jdbc.query("""
+                select id, username, status, store_id, store_name, store_abbreviation, supply_chain_enabled
+                  from wm_ads_workspace
+                 where status='ACTIVE' and store_id is not null
+                 order by id
+                """, (rs, rowNum) -> new WorkspacePrincipal(
+                rs.getLong("id"), rs.getString("username"), rs.getString("status"),
+                rs.getString("store_id"), rs.getString("store_name"), rs.getString("store_abbreviation"),
+                rs.getBoolean("supply_chain_enabled"), 0L));
+    }
+
     public void markSyncStarted(long workspaceId, String category) {
         jdbc.update("""
                 update wm_ads_workspace_sync_setting

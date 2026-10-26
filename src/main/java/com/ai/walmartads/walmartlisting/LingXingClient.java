@@ -14,7 +14,10 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
 
 /**
  * 领星 MCP 网关客户端：无状态 JSON-RPC，业务工具必须经 {@code tools/call → action(toolId)} 包一层。
@@ -29,6 +32,19 @@ public class LingXingClient {
     private static final Logger log = LoggerFactory.getLogger(LingXingClient.class);
     private static final String LISTING_TOOL_ID = "platform_listing_walmart_list";
 
+    /**
+     * 单次工具调用的最大尝试次数与退避间隔（毫秒）。
+     *
+     * <p>领星开放网关会把「限流 / 上游超时 / 网关抖动」表现为 HTTP 200 + 纯文本
+     * （例如以 {@code call} 开头的提示），而不是 5xx。这类响应走到 Jackson 就是
+     * {@code Unrecognized token 'call'}，且当天每小时都失败 —— 属于瞬态，值得重试。
+     * 业务失败（{@code 领星 MCP 业务失败}）不重试，重试也不会变。
+     */
+    private static final int MAX_ATTEMPTS = 3;
+    private static final long[] RETRY_BACKOFF_MS = {800L, 2000L};
+    /** 异常信息里保留的原始响应片段长度，便于事后定位网关到底回了什么。 */
+    private static final int PREVIEW_CHARS = 160;
+
     /** 沃尔玛广告报告工具强制必填 advertiserIds，且 SP 系各工具类型不一致：
      *  page_type 是 string 数组，keyword/campaign 是 integer 数组，传错会 422。 */
     private static final List<String> AD_CAMPAIGN_TYPES = List.of(
@@ -40,6 +56,7 @@ public class LingXingClient {
     private final String baseUrl;
     private final int pageSize;
     private final List<Long> advertiserIds;
+    private final Set<String> refreshedToolSchemas = ConcurrentHashMap.newKeySet();
 
     public LingXingClient(
             String baseUrl,
@@ -209,7 +226,82 @@ public class LingXingClient {
         } catch (JsonProcessingException exception) {
             throw new IllegalStateException("领星 MCP 请求体序列化失败：" + exception.getMessage(), exception);
         }
-        return extractData(post(body, toolId), toolId);
+        return callWithRetry(toolId, () -> extractData(post(body, toolId), toolId));
+    }
+
+    /**
+     * 带退避重试的工具调用：瞬态故障（非 JSON 响应 / 网络异常 / 5xx）重试，业务失败直接抛。
+     *
+     * <p>重试前清掉 Schema 缓存，让 {@link #refreshToolSchema(String)} 重新确认网关可用。
+     */
+    private JsonNode callWithRetry(String toolId, Supplier<JsonNode> action) {
+        IllegalStateException last = null;
+        for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+            try {
+                refreshToolSchema(toolId);
+                return action.get();
+            } catch (IllegalStateException exception) {
+                last = exception;
+                if (attempt >= MAX_ATTEMPTS || !isRetryable(exception)) {
+                    log.error("领星 MCP 调用最终失败 toolId={}，第 {} 次尝试：{}", toolId, attempt, exception.getMessage());
+                    throw exception;
+                }
+                refreshedToolSchemas.remove(toolId);
+                long backoff = RETRY_BACKOFF_MS[Math.min(attempt - 1, RETRY_BACKOFF_MS.length - 1)];
+                log.warn("领星 MCP 调用失败 toolId={}，第 {} 次，{}ms 后重试：{}",
+                        toolId, attempt, backoff, exception.getMessage());
+                sleep(backoff);
+            }
+        }
+        throw last;
+    }
+
+    /** 业务失败（参数不合法 / 无权限 / 无数据）重试无意义，其余一律按瞬态处理。 */
+    private static boolean isRetryable(IllegalStateException exception) {
+        String message = exception.getMessage();
+        return message == null || !message.contains("业务失败");
+    }
+
+    private static void sleep(long millis) {
+        try {
+            Thread.sleep(millis);
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("领星 MCP 重试被中断", interrupted);
+        }
+    }
+
+    private void refreshToolSchema(String toolId) {
+        if (!refreshedToolSchemas.add(toolId)) {
+            return;
+        }
+        Map<String, Object> envelope = new LinkedHashMap<>();
+        envelope.put("jsonrpc", "2.0");
+        envelope.put("id", 1);
+        envelope.put("method", "tools/call");
+        envelope.put("params", Map.of(
+                "name", "search",
+                "arguments", Map.of("toolId", toolId)
+        ));
+        try {
+            String response = post(objectMapper.writeValueAsString(envelope), "search:" + toolId);
+            JsonNode root = objectMapper.readTree(response);
+            JsonNode content = root.path("result").path("content");
+            String text = content.isArray() && !content.isEmpty()
+                    ? content.get(0).path("text").asText()
+                    : null;
+            JsonNode result = text == null || text.isBlank() ? null : objectMapper.readTree(text);
+            if (result == null || !result.path("success").asBoolean(false)) {
+                throw new IllegalStateException("领星 MCP 工具 Schema 刷新失败 toolId=" + toolId);
+            }
+        } catch (Exception exception) {
+            refreshedToolSchemas.remove(toolId);
+            if (exception instanceof IllegalStateException stateException) {
+                throw stateException;
+            }
+            throw new IllegalStateException(
+                    "领星 MCP 工具 Schema 刷新失败 toolId=" + toolId + "：" + exception.getMessage(), exception);
+        }
     }
 
     private String post(String body, String toolId) {
@@ -240,9 +332,14 @@ public class LingXingClient {
         String json = response.trim();
         int firstBrace = json.indexOf('{');
         int lastBrace = json.lastIndexOf('}');
-        if (firstBrace >= 0 && lastBrace > firstBrace) {
-            json = json.substring(firstBrace, lastBrace + 1);
+        if (firstBrace < 0 || lastBrace <= firstBrace) {
+            // 网关把限流/上游错误回成纯文本（HTTP 仍为 200），这里必须先识别出来，
+            // 否则 Jackson 只会抛 "Unrecognized token 'xxx'"，看不出网关到底说了什么。
+            throw new IllegalStateException(
+                    "领星 MCP 返回非 JSON toolId=" + toolId + "，原始响应前 " + PREVIEW_CHARS + " 字符："
+                            + preview(json));
         }
+        json = json.substring(firstBrace, lastBrace + 1);
         try {
             JsonNode root = objectMapper.readTree(json);
             JsonNode content = root.path("result").path("content");
@@ -265,6 +362,14 @@ public class LingXingClient {
         } catch (Exception exception) {
             throw new IllegalStateException("领星 MCP 返回解析失败：" + exception.getMessage(), exception);
         }
+    }
+
+    private static String preview(String text) {
+        if (text == null) {
+            return "<null>";
+        }
+        String flat = text.replaceAll("\\s+", " ").trim();
+        return flat.length() <= PREVIEW_CHARS ? flat : flat.substring(0, PREVIEW_CHARS) + "...";
     }
 
     private static boolean isBlank(Object value) {

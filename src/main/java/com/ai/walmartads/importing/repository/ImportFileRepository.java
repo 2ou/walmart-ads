@@ -41,33 +41,6 @@ public interface ImportFileRepository extends JpaRepository<ImportFile, Long> {
             String sha256
     );
 
-    /**
-     * 该类型是否已存在「生效中且内容完全一致」的版本（整类型替换类的判重口径）。
-     *
-     * <p>整类型替换类（生产订单 / 货件 / 物流登记）在源目录为空时会整体置空：明细被物理删除、
-     * 版本被停用。若判重仍只看 {@link #existsBySha256(String)}，把同一个文件放回源目录再扫描
-     * 会被判成「内容已导入」直接跳过，数据永远回不来 —— 所以这几类必须按 active 判重。
-     */
-    boolean existsByFileTypeAndSha256AndActiveTrue(ImportFileType fileType, String sha256);
-
-    /** 取某类型的全部文件 id（含已停用的历史版本），用于整类型置空时物理回收其明细行。 */
-    @Query("""
-            select file.id
-              from ImportFile file
-             where file.fileType = :fileType
-            """)
-    List<Long> findIdsByFileType(@Param("fileType") ImportFileType fileType);
-
-    /** 停用某类型的全部版本（幂等），用于源目录为空时的整类型置空。 */
-    @Modifying
-    @Transactional
-    @Query("""
-            update ImportFile file
-               set file.active = false
-             where file.fileType = :fileType
-            """)
-    int deactivateAllFileTypeVersions(@Param("fileType") ImportFileType fileType);
-
     /** 取同报表月除 keepId 外所有历史版本的 id（含已停用的），用于整月快照替换时清理其明细行。 */
     @Query("""
             select file.id
@@ -123,6 +96,35 @@ public interface ImportFileRepository extends JpaRepository<ImportFile, Long> {
                and file.reportDate between :startDate and :endDate
             """)
     List<Long> findIdsByFileTypeAndReportDateBetween(
+            @Param("fileType") ImportFileType fileType,
+            @Param("startDate") LocalDate startDate,
+            @Param("endDate") LocalDate endDate
+    );
+
+    /**
+     * 取某类型当前生效数据里最新的报表日期（无数据时返回 null）。
+     *
+     * <p>用于「按数据口径」判定同步缺口：领星订单同步每天一个文件，
+     * 这里返回的就是库里真正落到哪一天。只看 {@code sync_log.window_end} 会漏 ——
+     * 中间任一次零星成功都会把锚点抬高，更早的窟窿就永久不可见。
+     */
+    @Query("""
+            select max(file.reportDate)
+              from ImportFile file
+             where file.fileType = :fileType
+               and file.active = true
+            """)
+    LocalDate findMaxActiveReportDate(@Param("fileType") ImportFileType fileType);
+
+    /** 取某类型在区间内「生效数据实际覆盖」的全部报表日期，用于扫描中间空洞。 */
+    @Query("""
+            select file.reportDate
+              from ImportFile file
+             where file.fileType = :fileType
+               and file.active = true
+               and file.reportDate between :startDate and :endDate
+            """)
+    List<LocalDate> findActiveReportDates(
             @Param("fileType") ImportFileType fileType,
             @Param("startDate") LocalDate startDate,
             @Param("endDate") LocalDate endDate

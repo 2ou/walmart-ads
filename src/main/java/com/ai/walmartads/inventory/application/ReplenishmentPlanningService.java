@@ -254,6 +254,22 @@ public class ReplenishmentPlanningService {
 
     private Map<String, Double> domesticBySku() {
         Map<String, Double> result = new LinkedHashMap<>();
+        LocalDateTime automaticAt = jdbc.queryForObject(
+                "select max(synced_at) from wm_ads_lx_domestic_inventory", new MapSqlParameterSource(),
+                LocalDateTime.class);
+        LocalDateTime uploadAt = jdbc.queryForObject("""
+                select max(domestic.snapshot_at)
+                  from wm_ads_domestic_inventory_snapshot domestic
+                  join wm_ads_import_file file on file.id=domestic.import_file_id and file.active=true
+                """, new MapSqlParameterSource(), LocalDateTime.class);
+        if (LingxingSourcePolicy.preferAutomatic(automaticAt, uploadAt)) {
+            jdbc.queryForList("""
+                    select sku, available_units
+                      from wm_ads_lx_domestic_inventory
+                    """, new MapSqlParameterSource()).forEach(row ->
+                    result.put(text(row.get("sku")), number(row.get("available_units"))));
+            return result;
+        }
         jdbc.queryForList("""
                 select domestic.sku, sum(domestic.available_units) as available_units
                   from wm_ads_domestic_inventory_snapshot domestic

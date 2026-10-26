@@ -37,16 +37,8 @@ spring:
 
 walmart:
   ads:
-    data-root: ${WALMART_ADS_DATA_ROOT:D:/PNK/17DATA}
-    archive-root: ${WALMART_ADS_ARCHIVE_ROOT:D:/PNK/17DATA/archive}
-    # 已退役（2026-09-28）：早期销售历史已退出文件扫描链路，SourceScanner 不再读取此路径。
-    # 配置保留仅作历史留档；historical-end-date-exclusive 仍被 HistoricalWorkbookParser 使用。
-    historical-workbook: ${WALMART_ADS_HISTORICAL_WORKBOOK:D:/PNK/12每日销售数量统计/PNK 每日销售数据统计.xlsx}
+    # 历史工作簿入口已退役；截止日仍用于读取数据库中既有历史导入版本。
     historical-end-date-exclusive: ${WALMART_ADS_HISTORICAL_END_DATE_EXCLUSIVE:2026-07-21}
-    # 已退役（2026-09-28）：SKU 映射已改由领星 MCP 在线商品每小时自动同步
-    # （SkuMappingSyncService，源 platform_listing_walmart_list），SourceScanner 不再读取此路径。
-    # 配置保留仅作历史留档，同时避免删字段破坏 WalmartAdsProperties（record）的构造签名。
-    sku-mapping-workbook: ${WALMART_ADS_SKU_MAPPING_WORKBOOK:D:/PNK/02后台文件/01 WFS发货计划/WFS上传模板.xlsx}
     forecast-service-url: ${WALMART_ADS_FORECAST_SERVICE_URL:http://127.0.0.1:8091}
     # AI / KIE 配置：也可用外部 config/application.yml（已 gitignore）覆盖，重启生效。
     ai:
@@ -68,10 +60,10 @@ walmart:
       retention-days: ${WALMART_ADS_PRICE_RETENTION:180}
       display-window-days: ${WALMART_ADS_PRICE_DISPLAY_WINDOW:30}
       cron: ${WALMART_ADS_PRICE_CRON:0 0 * * * *}
-    # 穿针引线供应链：每天北京时间 08:00 同步“生产中订单 + 生产发货单”。
-    # 凭据只从部署环境注入，不使用浏览器 Cookie，也不写入代码仓库。
+    # 穿针引线供应链：由项目内置数据连接器在每天北京时间 08:00 同步。
+    # token/账号密码仅作部署环境兼容兜底；正常运行使用数据库中的加密浏览器会话凭证。
     supply-chain:
-      enabled: ${SUPPLY_CHAIN_SYNC_ENABLED:false}
+      enabled: ${SUPPLY_CHAIN_SYNC_ENABLED:true}
       base-url: ${SUPPLY_CHAIN_BASE_URL:https://czyxgyl.shangyiku.top/prod-api}
       token: ${SUPPLY_CHAIN_TOKEN:}
       username: ${SUPPLY_CHAIN_USERNAME:}
@@ -81,6 +73,17 @@ walmart:
       page-size: ${SUPPLY_CHAIN_PAGE_SIZE:200}
       connect-timeout-seconds: ${SUPPLY_CHAIN_CONNECT_TIMEOUT_SECONDS:10}
       read-timeout-seconds: ${SUPPLY_CHAIN_READ_TIMEOUT_SECONDS:60}
+    # 项目内置数据连接器：复用系统 Chrome，按店铺隔离会话；每天 08:00 同步，错过后启动补跑。
+    data-connector:
+      enabled: ${WALMART_ADS_CONNECTOR_ENABLED:true}
+      chrome-path: ${WALMART_ADS_CHROME_PATH:}
+      data-dir: ${WALMART_ADS_CONNECTOR_DATA_DIR:D:/WorkBuddyData/walmart-ads/connector}
+      cron: ${WALMART_ADS_CONNECTOR_CRON:0 0 8 * * *}
+      zone: ${WALMART_ADS_CONNECTOR_ZONE:Asia/Shanghai}
+      navigation-timeout-seconds: ${WALMART_ADS_CONNECTOR_NAVIGATION_TIMEOUT:60}
+      capture-timeout-seconds: ${WALMART_ADS_CONNECTOR_CAPTURE_TIMEOUT:75}
+      login-timeout-minutes: ${WALMART_ADS_CONNECTOR_LOGIN_TIMEOUT:10}
+      log-retention-days: ${WALMART_ADS_CONNECTOR_LOG_RETENTION:30}
 
 logging:
   level:

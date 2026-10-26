@@ -9,6 +9,9 @@ src/main/resources/application-local.yml
 
 # --- local agent memory (never commit) ---
 .workbuddy/
+.workbuddy-ai/
+.media/
+output/
 
 # --- local secrets override (external application.yml, keep key out of git) ---
 /config/

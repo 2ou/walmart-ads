@@ -22,9 +22,18 @@ public class ShipmentRecord extends com.ai.walmartads.workspace.WorkspaceOwnedEn
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "import_file_id", nullable = false)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "import_file_id")
     private ImportFile importFile;
+
+    @Column(name = "source_type", nullable = false, length = 32)
+    private String sourceType;
+
+    @Column(name = "source_url", length = 500)
+    private String sourceUrl;
+
+    @Column(name = "synced_at")
+    private LocalDateTime syncedAt;
 
     @Column(name = "current_version", nullable = false)
     private boolean currentVersion;
@@ -67,6 +76,8 @@ public class ShipmentRecord extends com.ai.walmartads.workspace.WorkspaceOwnedEn
             String rawPayload
     ) {
         this.importFile = importFile;
+        this.sourceType = "FILE_UPLOAD";
+        this.syncedAt = LocalDateTime.now();
         this.currentVersion = true;
         this.shipmentNo = shipmentNo;
         this.localStatus = localStatus;
@@ -94,4 +105,6 @@ public class ShipmentRecord extends com.ai.walmartads.workspace.WorkspaceOwnedEn
      * 因此从这份快照现取原值，避免新增库字段并重导历史数据。
      */
     public String getRawPayload() { return rawPayload; }
+    public String getSourceType() { return sourceType; }
+    public LocalDateTime getSyncedAt() { return syncedAt; }
 }

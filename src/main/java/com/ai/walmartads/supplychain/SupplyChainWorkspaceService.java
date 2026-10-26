@@ -1,5 +1,6 @@
 package com.ai.walmartads.supplychain;
 
+import com.ai.walmartads.workspace.WorkspaceContext;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -31,22 +32,57 @@ public class SupplyChainWorkspaceService {
 
     @Transactional(readOnly = true)
     public WorkspacePayload load(Map<String, Object> syncStatus) {
+        long workspaceId = WorkspaceContext.requireId();
         boolean live = store.hasSuccessfulSnapshot();
-        List<ProductionRow> production = live ? loadProduction() : List.of();
-        List<DeliveryRow> deliveries = live ? loadDeliveries() : List.of();
-        return new WorkspacePayload(syncStatus, summarize(production, deliveries), production, deliveries);
+        List<OrderRow> orders = live ? loadOrders(workspaceId) : List.of();
+        List<ProductionRow> production = live ? loadProduction(workspaceId) : List.of();
+        List<DeliveryRow> deliveries = live ? loadDeliveries(workspaceId) : List.of();
+        List<LogisticsRow> logistics = live ? loadLogistics(workspaceId) : List.of();
+        return new WorkspacePayload(syncStatus, summarize(orders, production, deliveries, logistics),
+                orders, production, deliveries, logistics);
     }
 
-    private List<ProductionRow> loadProduction() {
+    private List<OrderRow> loadOrders(long workspaceId) {
+        return jdbc.query("""
+                select order_no, order_status, style_no, order_type, factory_name,
+                       warehouse_name, store_name, order_qty, cutting_qty, ship_qty,
+                       warehouse_receive_qty, qc_pass_qty, unfinished_qty, placed_at,
+                       assigned_at, factory_return_date, completed_at, snapshot_at
+                  from wm_ads_supply_order
+                 where workspace_id=:workspaceId and active = 1
+                 order by placed_at desc, order_no
+                """, new MapSqlParameterSource("workspaceId", workspaceId), (rs, rowNum) -> new OrderRow(
+                rs.getString("order_no"),
+                rs.getString("order_status"),
+                rs.getString("style_no"),
+                rs.getString("order_type"),
+                rs.getString("factory_name"),
+                rs.getString("warehouse_name"),
+                rs.getString("store_name"),
+                value(rs.getBigDecimal("order_qty")),
+                value(rs.getBigDecimal("cutting_qty")),
+                value(rs.getBigDecimal("ship_qty")),
+                value(rs.getBigDecimal("warehouse_receive_qty")),
+                value(rs.getBigDecimal("qc_pass_qty")),
+                value(rs.getBigDecimal("unfinished_qty")),
+                localDateTime(rs.getTimestamp("placed_at")),
+                localDateTime(rs.getTimestamp("assigned_at")),
+                rs.getString("factory_return_date"),
+                localDateTime(rs.getTimestamp("completed_at")),
+                localDateTime(rs.getTimestamp("snapshot_at"))
+        ));
+    }
+
+    private List<ProductionRow> loadProduction(long workspaceId) {
         return jdbc.query("""
                 select order_no, style_no, sku, order_date, model, open_qty, cutting_qty,
                        production_qty, ship_qty, warehouse_receive_qty, qc_pass_qty,
                        rework_qty, unfinished_qty, factory_return_date, store_name,
                        order_type, factory_name, warehouse_name, snapshot_at
                   from wm_ads_supply_production_order
-                 where active = 1
+                 where workspace_id=:workspaceId and active = 1
                  order by factory_return_date, order_no, sku
-                """, new MapSqlParameterSource(), (rs, rowNum) -> new ProductionRow(
+                """, new MapSqlParameterSource("workspaceId", workspaceId), (rs, rowNum) -> new ProductionRow(
                 rs.getString("order_no"),
                 rs.getString("style_no"),
                 rs.getString("sku"),
@@ -70,7 +106,7 @@ public class SupplyChainWorkspaceService {
         ));
     }
 
-    private List<DeliveryRow> loadDeliveries() {
+    private List<DeliveryRow> loadDeliveries(long workspaceId) {
         return jdbc.query("""
                 select delivery_no, order_no, style_no, sku, cutting_no, model,
                        order_qty, ship_qty, warehouse_receive_qty, qc_receive_qty,
@@ -78,9 +114,9 @@ public class SupplyChainWorkspaceService {
                        logistics_complete, assigned_at, source_created_at,
                        factory_name, warehouse_name, snapshot_at
                   from wm_ads_supply_delivery_detail
-                 where active = 1
+                 where workspace_id=:workspaceId and active = 1
                  order by source_created_at desc, delivery_no, sku
-                """, new MapSqlParameterSource(), (rs, rowNum) -> new DeliveryRow(
+                """, new MapSqlParameterSource("workspaceId", workspaceId), (rs, rowNum) -> new DeliveryRow(
                 rs.getString("delivery_no"),
                 rs.getString("order_no"),
                 rs.getString("style_no"),
@@ -104,7 +140,59 @@ public class SupplyChainWorkspaceService {
         ));
     }
 
-    private static Summary summarize(List<ProductionRow> production, List<DeliveryRow> deliveries) {
+    private List<LogisticsRow> loadLogistics(long workspaceId) {
+        return jdbc.query("""
+                select fba_number, account_number, delivery_warehouse_name,
+                       freight_forwarding_name, destination, channel_name,
+                       receiving_warehouse, amazon_warehouse, batch_number,
+                       take_goods_no, logistics_no, cases_qty, item_qty,
+                       shipping_weight, charged_weight, final_offer, logistics_amount,
+                       ship_date, assigned_at, transportation_date, signing_date,
+                       shipment_status, flow_status, request_status, exception_note,
+                       snapshot_at
+                  from wm_ads_supply_logistics_register
+                 where workspace_id=:workspaceId and active = 1
+                   -- 只展示有物流信息的单：剔除「运营登记(flow_status=1)」这类刚建单、
+                   -- 货代/渠道/启运/签收全空的记录；货件状态仅保留待确认(1)/已完成(2)。
+                   and (flow_status is null or flow_status != '1')
+                   and (shipment_status is null or shipment_status in ('1', '2'))
+                 order by transportation_date desc, ship_date desc, fba_number
+                """, new MapSqlParameterSource("workspaceId", workspaceId), (rs, rowNum) -> new LogisticsRow(
+                rs.getString("fba_number"),
+                rs.getString("account_number"),
+                rs.getString("delivery_warehouse_name"),
+                rs.getString("freight_forwarding_name"),
+                rs.getString("destination"),
+                rs.getString("channel_name"),
+                rs.getString("receiving_warehouse"),
+                rs.getString("amazon_warehouse"),
+                rs.getString("batch_number"),
+                rs.getString("take_goods_no"),
+                rs.getString("logistics_no"),
+                value(rs.getBigDecimal("cases_qty")),
+                value(rs.getBigDecimal("item_qty")),
+                value(rs.getBigDecimal("shipping_weight")),
+                value(rs.getBigDecimal("charged_weight")),
+                value(rs.getBigDecimal("final_offer")),
+                value(rs.getBigDecimal("logistics_amount")),
+                rs.getObject("ship_date", LocalDate.class),
+                localDateTime(rs.getTimestamp("assigned_at")),
+                rs.getObject("transportation_date", LocalDate.class),
+                rs.getObject("signing_date", LocalDate.class),
+                rs.getString("shipment_status"),
+                rs.getString("flow_status"),
+                rs.getString("request_status"),
+                rs.getString("exception_note"),
+                localDateTime(rs.getTimestamp("snapshot_at"))
+        ));
+    }
+
+    private static Summary summarize(
+            List<OrderRow> orderRows,
+            List<ProductionRow> production,
+            List<DeliveryRow> deliveries,
+            List<LogisticsRow> logistics
+    ) {
         Set<String> orders = new LinkedHashSet<>();
         Set<String> skus = new LinkedHashSet<>();
         Set<String> deliveryNos = new LinkedHashSet<>();
@@ -112,8 +200,10 @@ public class SupplyChainWorkspaceService {
         BigDecimal wipQty = ZERO;
         BigDecimal shippedQty = ZERO;
         BigDecimal receivedQty = ZERO;
+        BigDecimal qcReceivedQty = ZERO;
         BigDecimal qcPassQty = ZERO;
         BigDecimal reworkQty = ZERO;
+        BigDecimal inTransitQty = ZERO;
         for (ProductionRow row : production) {
             add(orders, row.orderNo());
             add(skus, row.sku());
@@ -124,12 +214,17 @@ public class SupplyChainWorkspaceService {
             add(deliveryNos, row.deliveryNo());
             shippedQty = shippedQty.add(row.shipQty());
             receivedQty = receivedQty.add(row.warehouseReceiveQty());
+            qcReceivedQty = qcReceivedQty.add(row.qcReceiveQty());
             qcPassQty = qcPassQty.add(row.qcPassQty());
             reworkQty = reworkQty.add(row.reworkQty());
+            // 按行取不足部分再求和：某行超收不能冲抵另一行的未到仓。
+            inTransitQty = inTransitQty.add(row.shipQty().subtract(row.qcReceiveQty()).max(ZERO));
         }
-        return new Summary(orders.size(), skus.size(), productionQty, wipQty,
-                deliveryNos.size(), deliveries.size(), shippedQty, receivedQty,
-                shippedQty.subtract(receivedQty).max(ZERO), qcPassQty, reworkQty);
+        // 在途口径 = 已发货 - 质检收货：上游 whHarvestNumber（仓库收货）长期为 0，
+        // 若以它为准会把全部发货量算成在途，到仓情况只有 qiHarvestNumber 可信。
+        return new Summary(orderRows.size(), orders.size(), skus.size(), productionQty, wipQty,
+                deliveryNos.size(), deliveries.size(), shippedQty, receivedQty, qcReceivedQty,
+                inTransitQty, qcPassQty, reworkQty, logistics.size());
     }
 
     private static void add(Set<String> values, String value) {
@@ -162,12 +257,15 @@ public class SupplyChainWorkspaceService {
     public record WorkspacePayload(
             Map<String, Object> sync,
             Summary summary,
+            List<OrderRow> orders,
             List<ProductionRow> productionOrders,
-            List<DeliveryRow> deliveryDetails
+            List<DeliveryRow> deliveryDetails,
+            List<LogisticsRow> logisticsRegisters
     ) {
     }
 
     public record Summary(
+            int orderCount,
             int productionOrderCount,
             int productionSkuCount,
             BigDecimal productionQty,
@@ -176,9 +274,33 @@ public class SupplyChainWorkspaceService {
             int deliverySkuCount,
             BigDecimal shippedQty,
             BigDecimal warehouseReceivedQty,
+            BigDecimal qcReceivedQty,
             BigDecimal inTransitQty,
             BigDecimal qcPassedQty,
-            BigDecimal reworkQty
+            BigDecimal reworkQty,
+            int logisticsCount
+    ) {
+    }
+
+    public record OrderRow(
+            String orderNo,
+            String orderStatus,
+            String styleNo,
+            String orderType,
+            String factoryName,
+            String warehouseName,
+            String storeName,
+            BigDecimal orderQty,
+            BigDecimal cuttingQty,
+            BigDecimal shipQty,
+            BigDecimal warehouseReceiveQty,
+            BigDecimal qcPassQty,
+            BigDecimal unfinishedQty,
+            LocalDateTime placedAt,
+            LocalDateTime assignedAt,
+            String factoryReturnDate,
+            LocalDateTime completedAt,
+            LocalDateTime snapshotAt
     ) {
     }
 
@@ -226,6 +348,36 @@ public class SupplyChainWorkspaceService {
             LocalDateTime createdAt,
             String factoryName,
             String warehouseName,
+            LocalDateTime snapshotAt
+    ) {
+    }
+
+    public record LogisticsRow(
+            String fbaNumber,
+            String accountNumber,
+            String deliveryWarehouseName,
+            String freightForwardingName,
+            String destination,
+            String channelName,
+            String receivingWarehouse,
+            String amazonWarehouse,
+            String batchNumber,
+            String takeGoodsNo,
+            String logisticsNo,
+            BigDecimal casesQty,
+            BigDecimal itemQty,
+            BigDecimal shippingWeight,
+            BigDecimal chargedWeight,
+            BigDecimal finalOffer,
+            BigDecimal logisticsAmount,
+            LocalDate shipDate,
+            LocalDateTime assignedAt,
+            LocalDate transportationDate,
+            LocalDate signingDate,
+            String shipmentStatus,
+            String flowStatus,
+            String requestStatus,
+            String exception,
             LocalDateTime snapshotAt
     ) {
     }

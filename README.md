@@ -129,7 +129,7 @@ $env:KIE_BASE_URL = 'https://api.kie.ai'
 - `GET /api/products/catalog`：父款目录与覆盖率汇总
 - `GET /api/products/{parentSku}`：Listing、产品组主体、颜色图片组和尺码 SKU 详情
 
-产品资料只在扫描导入时更新，历史上传版本仍保留在 MySQL；产品库默认读取每个 SKU 的当前有效版本。解析和完整度计算均为本地规则，不调用 AI。
+产品资料通过数据导入页面上传更新，历史上传版本仍保留在 MySQL；产品库默认读取每个 SKU 的当前有效版本。解析和完整度计算均为本地规则，不调用 AI。
 
 ## 隐私
 
@@ -137,17 +137,8 @@ $env:KIE_BASE_URL = 'https://api.kie.ai'
 
 ## 历史统计表
 
-导入数据时，系统会解析历史工作簿 `D:\PNK\12每日销售数量统计\PNK 每日销售数据统计.xlsx`：
-
-- `当天销量` 按订单行导入，保留订单日期、SKU、父 SKU、数量、单价和履约字段；
-- `当天广告数据` 按商品广告行导入，并统一标记为自动广告的 `ITEM_PERFORMANCE`；
-- 默认只导入 `2026-07-21` 之前的数据，避免与 `date\2026-7-21` 及之后的标准日报重复；
-- 工作簿内容指纹相同会跳过；工作簿更新后重新导入时，旧版本保留但不再参与当前汇总。
-
-路径和截止日期可分别通过 `WALMART_ADS_HISTORICAL_WORKBOOK` 与 `WALMART_ADS_HISTORICAL_END_DATE_EXCLUSIVE` 调整。
+本地历史工作簿入口已经退役，既有历史导入版本继续保留在数据库中。`2026-07-21` 及之后的销量与订单由领星自动同步维护，避免与早期历史数据重复；历史截止日期仍可通过 `WALMART_ADS_HISTORICAL_END_DATE_EXCLUSIVE` 调整。
 
 ## SKU、Item ID 与 UPC 映射
 
-导入数据时，系统会解析 `D:\PNK\02后台文件\01 WFS发货计划\WFS上传模板.xlsx` 的 `Sheet1`，把 SKU、父 SKU、Item ID、GTIN、UPC 和 Item Name 保存到独立映射表。相同内容通过文件指纹跳过；模板更新后会保留旧版本，并把新版本标记为当前映射。
-
-映射导入后会自动补齐现有广告记录中可匹配的 SKU/父 SKU，以及订单记录中缺失的 UPC。后续广告 CSV 没有 SKU、只有 Item ID 时，也会优先从当前 WFS 映射解析。可通过 `WALMART_ADS_SKU_MAPPING_WORKBOOK` 调整模板路径。
+SKU、父 SKU、Item ID、GTIN、UPC 和 Item Name 映射由领星在线商品每小时自动同步到独立映射表，不再读取本地 WFS 模板。同步后会自动补齐现有广告记录中可匹配的 SKU/父 SKU，以及订单记录中缺失的 UPC。

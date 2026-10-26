@@ -251,63 +251,6 @@ public class FileImportProcessor {
         return Set.copyOf(tools.keySet());
     }
 
-    /**
-     * 把某个「整类型替换」类型的当前数据整体置空 —— 源目录为空时的落地动作。
-     *
-     * <p>与 {@code saveProductionOrders} / {@code saveShipments} / {@code saveShipmentLogistics}
-     * 里的「整类型作废」互补：那三条只在真拿到文件时触发，源目录空了它们一次都不会跑，
-     * 于是上一次导入的明细会永远以 {@code current_version = true} 挂着，做货量 / 在途量
-     * 一直按陈旧值计算。本方法补上「没有文件 = 这次的结果就是空」这一半。
-     *
-     * <p>做法与 {@code fe16533} 一致：<b>物理删除</b>明细行，而不只是翻停用标记 ——
-     * 读取端只认 {@code current_version}，删行后所有读取端零改动立刻正确；
-     * 同时把该类型全部 {@code import_file} 停用，让判重口径（按 active）认得「现在没有生效版本」。
-     *
-     * <p>可恢复：原始文件仍留在 {@code archive/} 批次目录里，放回源目录重新扫描即可重新导入生效。
-     *
-     * @return 被物理删除的明细行数
-     */
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public int clearFullReplaceType(ImportFileType type) {
-        if (!type.fullReplace()) {
-            throw new IllegalArgumentException("该类型不是整类型替换口径，不支持源空置空：" + type);
-        }
-        List<Long> fileIds = fileRepository.findIdsByFileType(type);
-        int deleted = fileIds.isEmpty() ? 0 : switch (type) {
-            case PRODUCTION_ORDER -> productionOrderRepository.deleteByImportFileIdIn(fileIds);
-            case SHIPMENT -> shipmentRepository.deleteByImportFileIdIn(fileIds);
-            case SHIPMENT_LOGISTICS -> shipmentLogisticsRepository.deleteByImportFileIdIn(fileIds);
-            default -> 0;
-        };
-        fileRepository.deactivateAllFileTypeVersions(type);
-        if (type == ImportFileType.SHIPMENT_LOGISTICS) {
-            // 物流行整体消失后，渠道主数据可能失去来源，与导入路径保持同一收尾动作。
-            transitInventoryService.syncChannelsForManualMaintenance();
-        }
-        log.warn(
-                "{} 源目录为空：整类型置空，物理删除 {} 条明细并停用该类型全部导入版本",
-                type,
-                deleted
-        );
-        try {
-            replenishmentPlanCache.refreshAfterSuccessfulImport(type);
-        } catch (RuntimeException exception) {
-            log.warn("Replenishment forecast refresh failed after clearing {}: {}", type, exception.getMessage());
-        }
-        return deleted;
-    }
-
-    /** 某「整类型替换」类型当前生效的明细行数（置空预检用）。 */
-    @Transactional(readOnly = true)
-    public long countCurrentRows(ImportFileType type) {
-        return switch (type) {
-            case PRODUCTION_ORDER -> productionOrderRepository.findCurrentVersions().size();
-            case SHIPMENT -> shipmentRepository.findCurrentVersions().size();
-            case SHIPMENT_LOGISTICS -> shipmentLogisticsRepository.findCurrentVersions().size();
-            default -> 0L;
-        };
-    }
-
     public String toolVersion(ImportFileType type) {
         return toolVersions.getOrDefault(type, "unregistered");
     }
@@ -589,11 +532,11 @@ public class FileImportProcessor {
     }
 
     private DocumentImportTool.ImportOutcome saveShipmentLogistics(ParsedRows<ShipmentLogisticsRecord> parsed, ImportFile file) {
-        deleteSupersededRowsByType(file, "物流跟踪", shipmentLogisticsRepository::deleteByImportFileIdIn);
-        shipmentLogisticsRepository.deactivateAllCurrentVersions();
-        shipmentLogisticsRepository.saveAll(parsed.rows());
-        transitInventoryService.syncChannelsForManualMaintenance();
-        return new DocumentImportTool.ImportOutcome(parsed.sourceRowCount(), parsed.rows().size());
+        // 物流信息登记改由项目内置连接器同步（wm_ads_supply_logistics_register），
+        // 老表 wm_ads_shipment_logistics 只作历史归档，继续导入只会写出一份没人读的死数据。
+        throw new IllegalStateException(
+                "物流信息登记已改由项目内置连接器自动同步，不再读取表格；"
+                        + "货代与渠道请以「供应链生产订单 › 物流信息登记」页签为准");
     }
 
 }

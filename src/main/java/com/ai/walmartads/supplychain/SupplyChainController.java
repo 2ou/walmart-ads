@@ -1,6 +1,8 @@
 package com.ai.walmartads.supplychain;
 
 import com.ai.walmartads.shared.api.ApiResponse;
+import com.ai.walmartads.connector.DataConnectorOrchestrator;
+import com.ai.walmartads.workspace.WorkspaceContext;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -14,13 +16,16 @@ public class SupplyChainController {
 
     private final SupplyChainSyncService syncService;
     private final SupplyChainWorkspaceService workspaceService;
+    private final DataConnectorOrchestrator connectors;
 
     public SupplyChainController(
             SupplyChainSyncService syncService,
-            SupplyChainWorkspaceService workspaceService
+            SupplyChainWorkspaceService workspaceService,
+            DataConnectorOrchestrator connectors
     ) {
         this.syncService = syncService;
         this.workspaceService = workspaceService;
+        this.connectors = connectors;
     }
 
     @GetMapping("/sync/status")
@@ -29,8 +34,9 @@ public class SupplyChainController {
     }
 
     @PostMapping("/sync")
-    public ApiResponse<SupplyChainSyncService.SyncSummary> sync() {
-        return ApiResponse.ok(syncService.syncNow("MANUAL"));
+    public ApiResponse<DataConnectorOrchestrator.StartResult> sync() {
+        return ApiResponse.ok(connectors.startManual(
+                WorkspaceContext.requirePrincipal(), null, "SUPPLY_CHAIN"));
     }
 
     @GetMapping("/workspace")

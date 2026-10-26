@@ -340,11 +340,11 @@
     renderMonthSelect();
     if (!meta.selectedMonth) {
       $("#returnStatusHeadline").textContent = "还没有退款数据";
-      $("#returnStatusDetail").textContent = "在数据导入页面执行一次扫描，系统会读取 source/Return_Orders 下的月度报表。";
+      $("#returnStatusDetail").textContent = "可在数据导入页面扫描 source/Return_Orders，或直接上传月度退款报表。";
       $("#returnDateRange").textContent = "";
       renderAccountSummary();
       $("#returnMetricGrid").innerHTML = "";
-      $("#returnTrendChart").innerHTML = `<div class="empty-state"><strong>等待退款报表</strong>扫描导入后，这里会显示月度退款率与款色码下钻。</div>`;
+      $("#returnTrendChart").innerHTML = `<div class="empty-state"><strong>等待退款报表</strong>上传后，这里会显示月度退款率与款色码下钻。</div>`;
       renderTrendSeriesControl();
       $("#returnReasonList").innerHTML = "";
       $("#returnColorList").innerHTML = "";

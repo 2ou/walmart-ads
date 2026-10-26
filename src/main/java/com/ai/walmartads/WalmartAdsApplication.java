@@ -3,6 +3,7 @@ package com.ai.walmartads;
 import com.ai.walmartads.config.KieAiProperties;
 import com.ai.walmartads.config.LingXingProperties;
 import com.ai.walmartads.config.SupplyChainProperties;
+import com.ai.walmartads.config.DataConnectorProperties;
 import com.ai.walmartads.config.WalmartAdsProperties;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
@@ -15,7 +16,8 @@ import org.springframework.scheduling.annotation.EnableScheduling;
         WalmartAdsProperties.class,
         KieAiProperties.class,
         LingXingProperties.class,
-        SupplyChainProperties.class
+        SupplyChainProperties.class,
+        DataConnectorProperties.class
 })
 public class WalmartAdsApplication {
 

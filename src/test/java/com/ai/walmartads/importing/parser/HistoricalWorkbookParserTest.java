@@ -38,9 +38,7 @@ class HistoricalWorkbookParserTest {
         }
         HistoricalWorkbookParser parser = new HistoricalWorkbookParser(
                 new JsonPayloadWriter(new ObjectMapper()),
-                new WalmartAdsProperties(
-                        temp, temp.resolve("archive"), path,
-                        LocalDate.of(2026, 7, 21), null)
+                new WalmartAdsProperties(LocalDate.of(2026, 7, 21))
         );
         ImportFile importFile = new ImportFile(
                 new ImportBatch(temp.toString()), ImportFileType.HISTORY, null,

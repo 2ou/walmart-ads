@@ -38,7 +38,11 @@ public class CampaignStyleDiagnosisService {
             new DecisionThresholds(5.0, 1.5, 20, 10.0);
     /** 高花费线：花费 ≥ $100 视为大额花费，升为 P0。 */
     private static final double HIGH_SPEND = 100.0;
-    private static final long CACHE_TTL_NANOS = java.time.Duration.ofMinutes(5).toNanos();
+    // Advertising facts are refreshed hourly. The compact dashboard summary timestamp is part of
+    // the cache key, so a completed sync invalidates the cached diagnosis immediately without
+    // forcing every page request to rescan the JSON-bearing raw fact table.
+    private static final long CACHE_TTL_NANOS = java.time.Duration.ofHours(2).toNanos();
+    private static final long HISTORY_CACHE_TTL_NANOS = java.time.Duration.ofMinutes(5).toNanos();
     private static final int CACHE_MAX_ENTRIES = 32;
 
     private final NamedParameterJdbcTemplate jdbc;
@@ -55,15 +59,20 @@ public class CampaignStyleDiagnosisService {
     }
 
     public DiagnosisResponse diagnose(LocalDate requestedStart, LocalDate requestedEnd) {
-        LocalDate latestPerformanceDate = latestPerformanceDate();
-        LocalDate endDate = requestedEnd == null ? latestPerformanceDate : requestedEnd;
+        AdDataState dataState = loadAdDataState();
+        LocalDate latestPerformanceDate = dataState.latestDate();
+        // 广告诊断默认窗口右端点 = 最后一个「已结算」日（指标非零）。同步层已剔除领星未结算的
+        // 空壳日，因此这里取最大非零日即为可信末日：领星一结算出值末日自动前进一天，
+        // 无需硬编码 T+N。同时封顶在真实最新数据日之内，防止窗口右端越过已有数据。
+        LocalDate defaultEnd = dataState.settledDate();
+        LocalDate endDate = requestedEnd == null ? defaultEnd : requestedEnd;
         LocalDate startDate = requestedStart == null ? endDate.minusDays(6) : requestedStart;
         if (startDate.isAfter(endDate)) {
             throw new IllegalArgumentException("开始日期不能晚于结束日期");
         }
 
         DecisionThresholds thresholds = loadDecisionThresholds();
-        LocalDateTime snapshotAt = snapshotUpdatedAt();
+        LocalDateTime snapshotAt = dataState.refreshedAt();
         CacheKey cacheKey = new CacheKey(
                 WorkspaceContext.requireId(), startDate, endDate, snapshotAt, thresholds);
         CacheEntry cached = cache.get(cacheKey);
@@ -126,6 +135,13 @@ public class CampaignStyleDiagnosisService {
 
     public DiagnosisResponse diagnoseSummary(LocalDate requestedStart, LocalDate requestedEnd) {
         return diagnose(requestedStart, requestedEnd).withoutItemDetails();
+    }
+
+    /** Builds the same 30-day snapshot the diagnosis page opens with. */
+    public void prewarmDefaultRange() {
+        AdDataState dataState = loadAdDataState();
+        LocalDate endDate = dataState.settledDate();
+        diagnoseSummary(endDate.minusDays(29), endDate);
     }
 
     public StyleDiagnosis styleDiagnosis(
@@ -230,7 +246,7 @@ public class CampaignStyleDiagnosisService {
         if (historyCache.size() >= CACHE_MAX_ENTRIES) {
             historyCache.clear();
         }
-        historyCache.put(historyCacheKey, new HistoryCacheEntry(response, now + CACHE_TTL_NANOS));
+        historyCache.put(historyCacheKey, new HistoryCacheEntry(response, now + HISTORY_CACHE_TTL_NANOS));
         return response;
     }
 
@@ -477,6 +493,7 @@ public class CampaignStyleDiagnosisService {
                        campaign.daily_budget,
                        campaign.bidding_strategy,
                        item.ad_group_id,
+                       item.ad_group_name,
                        item.ad_group_status,
                        item.item_id,
                        item.ad_item_id,
@@ -524,6 +541,7 @@ public class CampaignStyleDiagnosisService {
                         number(row, "daily_budget"),
                         text(row, "bidding_strategy"),
                         text(row, "ad_group_id"),
+                        text(row, "ad_group_name"),
                         text(row, "ad_group_status"),
                         text(row, "item_id"),
                         text(row, "ad_item_id"),
@@ -602,7 +620,39 @@ public class CampaignStyleDiagnosisService {
         return parents;
     }
 
-    private LocalDate latestPerformanceDate() {
+    /**
+     * Reads the diagnosis version and trustworthy date bounds from the compact per-day summary.
+     * The raw advertising table currently contains hundreds of thousands of JSON-bearing rows;
+     * evaluating the old non-zero MAX query there made even a cache hit take several seconds.
+     */
+    private AdDataState loadAdDataState() {
+        List<Map<String, Object>> rows = jdbc.queryForList("""
+                select max(report_date) as latest_date,
+                       max(case when impressions <> 0
+                                     or clicks <> 0
+                                     or ad_spend <> 0
+                                     or attributed_orders <> 0
+                                     or attributed_sales <> 0
+                                then report_date end) as settled_date,
+                       max(refreshed_at) as refreshed_at
+                  from wm_ads_dashboard_ad_daily
+                """, new MapSqlParameterSource());
+        if (!rows.isEmpty()) {
+            Map<String, Object> row = rows.getFirst();
+            LocalDate latest = date(row.get("latest_date"));
+            LocalDate settled = date(row.get("settled_date"));
+            LocalDateTime refreshedAt = dateTime(row.get("refreshed_at"));
+            if (latest != null) {
+                return new AdDataState(latest, settled == null ? latest : settled, refreshedAt);
+            }
+        }
+
+        // Compatibility fallback for a newly-created workspace before its first summary refresh.
+        LocalDate latest = latestPerformanceDateFromRaw();
+        return new AdDataState(latest, latestSettledPerformanceDateFromRaw(latest), snapshotUpdatedAtFromRaw());
+    }
+
+    private LocalDate latestPerformanceDateFromRaw() {
         List<Map<String, Object>> rows = jdbc.queryForList("""
                 select max(ads.report_date) as latest_date
                   from wm_ads_lx_ad_report_raw ads
@@ -612,7 +662,29 @@ public class CampaignStyleDiagnosisService {
         return result == null ? LocalDate.now() : result;
     }
 
-    private LocalDateTime snapshotUpdatedAt() {
+    /**
+     * 默认窗口的可信末日 = 最后一个「已结算」日（AD_ITEM 聚合指标任一非零）。
+     *
+     * <p>领星广告报表约 T+2 才结算，未结算日会返回「行在、指标全 0」的空壳结果；
+     * 同步层已剔除这些空壳日，这里再用非零判据兜底，确保默认窗口不会把0 值日
+     * 当成完整日拉低 CTR / CPC / 转化率 / ROAS。若全部历史都无数据则退回最新有行日。
+     */
+    private LocalDate latestSettledPerformanceDateFromRaw(LocalDate fallback) {
+        List<Map<String, Object>> rows = jdbc.queryForList("""
+                select max(ads.report_date) as settled_date
+                  from wm_ads_lx_ad_report_raw ads
+                 where ads.report_level = 'AD_ITEM'
+                   and (ads.impressions <> 0
+                        or ads.clicks <> 0
+                        or ads.ad_spend <> 0
+                        or ads.attributed_orders <> 0
+                        or ads.attributed_sales <> 0)
+                """, new MapSqlParameterSource());
+        LocalDate settled = rows.isEmpty() ? null : date(rows.getFirst().get("settled_date"));
+        return settled == null ? fallback : settled;
+    }
+
+    private LocalDateTime snapshotUpdatedAtFromRaw() {
         List<Map<String, Object>> rows = jdbc.queryForList("""
                 select max(synced_at) as snapshot_at
                   from wm_ads_lx_ad_report_raw
@@ -621,22 +693,14 @@ public class CampaignStyleDiagnosisService {
         if (rows.isEmpty()) {
             return null;
         }
-        Object value = rows.getFirst().get("snapshot_at");
-        if (value instanceof LocalDateTime time) {
-            return time;
-        }
-        if (value instanceof java.sql.Timestamp timestamp) {
-            return timestamp.toLocalDateTime();
-        }
-        return null;
+        return dateTime(rows.getFirst().get("snapshot_at"));
     }
 
     private List<LocalDate> loadCoveredDates(LocalDate startDate, LocalDate endDate) {
         return jdbc.queryForList("""
                 select distinct report_date
-                  from wm_ads_lx_ad_report_raw
-                 where report_level = 'AD_ITEM'
-                   and report_date between :startDate and :endDate
+                  from wm_ads_dashboard_ad_daily
+                 where report_date between :startDate and :endDate
                  order by report_date
                 """, new MapSqlParameterSource()
                 .addValue("startDate", startDate)
@@ -743,6 +807,16 @@ public class CampaignStyleDiagnosisService {
             return sqlDate.toLocalDate();
         }
         return value == null ? null : LocalDate.parse(String.valueOf(value));
+    }
+
+    private static LocalDateTime dateTime(Object value) {
+        if (value instanceof LocalDateTime time) {
+            return time;
+        }
+        if (value instanceof java.sql.Timestamp timestamp) {
+            return timestamp.toLocalDateTime();
+        }
+        return value == null ? null : LocalDateTime.parse(String.valueOf(value).replace(' ', 'T'));
     }
 
     public record DiagnosisResponse(
@@ -1036,6 +1110,7 @@ public class CampaignStyleDiagnosisService {
             String itemId,
             String adItemId,
             String adGroupId,
+            String adGroupName,
             String adGroupStatus,
             String itemName,
             String reviewStatus,
@@ -1061,6 +1136,7 @@ public class CampaignStyleDiagnosisService {
             double dailyBudget,
             String biddingStrategy,
             String adGroupId,
+            String adGroupName,
             String sourceAdGroupStatus,
             String itemId,
             String adItemId,
@@ -1101,6 +1177,13 @@ public class CampaignStyleDiagnosisService {
             LocalDate endDate,
             LocalDateTime snapshotAt,
             DecisionThresholds thresholds
+    ) {
+    }
+
+    private record AdDataState(
+            LocalDate latestDate,
+            LocalDate settledDate,
+            LocalDateTime refreshedAt
     ) {
     }
 
@@ -1197,6 +1280,7 @@ public class CampaignStyleDiagnosisService {
                     config.itemId(),
                     config.adItemId(),
                     config.adGroupId(),
+                    config.adGroupName(),
                     adGroupStatus,
                     config.itemName(),
                     config.reviewStatus(),

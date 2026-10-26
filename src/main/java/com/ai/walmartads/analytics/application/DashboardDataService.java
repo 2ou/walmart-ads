@@ -67,6 +67,15 @@ public class DashboardDataService {
                 .filter(Objects::nonNull)
                 .max(LocalDate::compareTo)
                 .orElse(null);
+        // 最新「已结算」广告日：最后一个指标非零的日子。同步层已剔除未结算空壳日，
+        // 因此这里取 max 即为可信末日；读取侧（广告诊断等）据此决定窗口右边界，
+        // 做到领星一结算出值末日就自动前进一天，无需硬编码 T+N。
+        LocalDate adSettledDate = adDaily.stream()
+                .filter(row -> hasAdPerformance(row))
+                .map(row -> date(row, "report_date"))
+                .filter(Objects::nonNull)
+                .max(LocalDate::compareTo)
+                .orElse(adLatestDate);
 
         TreeMap<LocalDate, MutableDaily> daily = new TreeMap<>();
         orderDaily.forEach(row -> {
@@ -108,6 +117,7 @@ public class DashboardDataService {
                 "订单客户姓名、电话和完整地址未写入数据库。",
                 orderLatestDate,
                 adLatestDate,
+                adSettledDate,
                 comparableLatestDate(orderLatestDate, adLatestDate, UsBusinessDate.visibleSalesDate())
         );
         Defaults defaults = new Defaults(7, 5.0, 1.5, 20, 10.0, 10);
@@ -150,7 +160,7 @@ public class DashboardDataService {
         LocalDate orderLatestDate = latestOrderDate();
         Meta meta = new Meta(latestDate, firstDate, 0,
                 new SourceRows(0, 0, 0, 0), "Bootstrap metadata only; no customer PII is exposed.",
-                orderLatestDate, latestDate,
+                orderLatestDate, latestDate, latestDate,
                 comparableLatestDate(orderLatestDate, latestDate, UsBusinessDate.visibleSalesDate()));
         Defaults defaults = new Defaults(7, 5.0, 1.5, 20, 10.0, 10);
         return new DashboardPayload(meta, defaults, List.of(), List.of(), List.of());
@@ -387,9 +397,23 @@ public class DashboardDataService {
             LocalDate orderLatestDate,
             /** 广告报表最新业务日，仅供广告诊断等广告单源页面使用。 */
             LocalDate adLatestDate,
+            /**
+             * 广告报表最新「已结算」业务日：最后一个指标非零的日子。
+             * 领星约 T+2 才结算，同步层已剔除未结算空壳日，故该值即广告诊断窗口的可信末日。
+             */
+            LocalDate adSettledDate,
             /** 订单、广告和美西当前日共同具备的最后可比业务日。 */
             LocalDate analysisLatestDate
     ) {
+    }
+
+    /** 该行广告日事实是否存在真实表现（任一指标非零），用于区分已结算日与未结算空壳日。 */
+    private static boolean hasAdPerformance(Map<String, Object> row) {
+        return decimal(row, "impressions").signum() > 0
+                || decimal(row, "clicks").signum() > 0
+                || decimal(row, "spend").signum() > 0
+                || decimal(row, "ad_orders").signum() > 0
+                || decimal(row, "ad_sales").signum() > 0;
     }
 
     public record SourceRows(long daily, long skuDaily, long products, long inventory) {

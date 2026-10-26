@@ -102,6 +102,13 @@ public class LingXingOrderSyncService {
     private static final int PAGE_SIZE = 200;
     /** 领星下单时间窗口硬上限 */
     private static final int MAX_WINDOW_DAYS = 90;
+    /**
+     * 自动补窗时向前扫描空洞的天数。
+     *
+     * <p>取 45 天：足够覆盖"服务停机两三周"这种真实场景，又不至于每天真去拉 90 天。
+     * 超出这个范围的老缺口只能手动 {@code /api/lingxing-order/sync/window} 补。
+     */
+    private static final int GAP_SCAN_DAYS = 45;
 
     private final LingXingProperties properties;
     private final ImportBatchRepository batchRepository;
@@ -143,19 +150,56 @@ public class LingXingOrderSyncService {
         LocalDate end = UsBusinessDate.usToday();
         int windowDays = properties.resolvedOrderWindowDays();
         LocalDate start = end.minusDays(windowDays - 1L);
-        LocalDate lastSuccessEnd = logRepository.findLatestSuccessWindowEnd();
-        if (lastSuccessEnd != null && lastSuccessEnd.isBefore(start)) {
+        LocalDate anchor = resolveGapAnchor();
+        if (anchor != null && anchor.isBefore(start)) {
             // 重叠 1 天起拉：边界日的数据在两次同步间仍可能发生滚动变化。
-            LocalDate catchUp = lastSuccessEnd.minusDays(1);
+            LocalDate catchUp = anchor.minusDays(1);
             LocalDate floor = end.minusDays(MAX_WINDOW_DAYS - 1L);
             if (catchUp.isBefore(floor)) {
+                log.warn("缺口早于领星 90 天硬上限：最早缺失日 {}，本次只能补到 {}，更早部分需手动回填",
+                        anchor, floor);
                 catchUp = floor;
             }
-            log.info("检测到数据缺口：上次成功窗口止于 {}，本次窗口自 {} 扩展至 {}（补窗）",
-                    lastSuccessEnd, catchUp, end);
+            log.warn("检测到订单数据缺口：最早缺失日 {}，距 {} 共 {} 天；本次窗口自 {} 扩展至 {}（补窗）",
+                    anchor, end, ChronoUnit.DAYS.between(anchor, end), catchUp, end);
             start = catchUp;
         }
         return syncWindow(triggeredBy, start, end);
+    }
+
+    /**
+     * 缺口锚点：在「库里最新数据日」之前的 {@link #GAP_SCAN_DAYS} 天里，找**最早的空洞日**。
+     *
+     * <p>为什么不能只看 {@code max(sync_log.window_end)}：只要中间有任意一次零星成功，
+     * max(window_end) 就被抬到最近，更早的窟窿永久不可见（10-09~10-11 就是这么丢的）。
+     * 为什么也不能只看 {@code max(report_date)}：那只能发现「尾部缺口」，
+     * 发现不了夹在两段正常数据中间的洞。
+     *
+     * <p>因此这里逐日扫：命中空洞就返回那一日，上层据此把窗口起点拉回缺口前一天。
+     * 扫描不到空洞则退回「最新数据日 / 上次成功窗口末」中较早者（兼顾写库异常）。
+     */
+    private LocalDate resolveGapAnchor() {
+        LocalDate end = UsBusinessDate.usToday();
+        LocalDate latestData = fileRepository.findMaxActiveReportDate(ImportFileType.LINGXING_ORDER);
+        LocalDate lastSuccessEnd = logRepository.findLatestSuccessWindowEnd();
+        if (latestData == null) {
+            return lastSuccessEnd;
+        }
+        LocalDate scanFrom = latestData.minusDays(GAP_SCAN_DAYS);
+        LocalDate scanTo = end.minusDays(1);
+        if (scanFrom.isBefore(scanTo)) {
+            Set<LocalDate> covered = new HashSet<>(fileRepository.findActiveReportDates(
+                    ImportFileType.LINGXING_ORDER, scanFrom, scanTo));
+            for (LocalDate day = scanFrom; !day.isAfter(scanTo); day = day.plusDays(1)) {
+                if (!covered.contains(day)) {
+                    return day;
+                }
+            }
+        }
+        if (lastSuccessEnd != null && lastSuccessEnd.isBefore(latestData)) {
+            return lastSuccessEnd;
+        }
+        return latestData;
     }
 
     /**
@@ -167,7 +211,7 @@ public class LingXingOrderSyncService {
             throw new IllegalStateException("领星 MCP 未配置，无法同步销量/订单数据");
         }
         LingXingClient client = new LingXingClient(config.baseUrl(), config.apiKey(), config.pageSize(),
-                10, 60, objectMapper, List.of());
+                10, 120, objectMapper, List.of());
         LocalDate end = requestedEnd == null ? UsBusinessDate.usToday() : requestedEnd;
         LocalDate start = requestedStart == null
                 ? end.minusDays(properties.resolvedOrderWindowDays() - 1L)
@@ -309,7 +353,7 @@ public class LingXingOrderSyncService {
         params.put("dataType", String.valueOf(DATA_TYPE_SKU));
         params.put("start", start.toString());
         params.put("end", end.toString());
-        params.put("dateUnit", String.valueOf(DATE_UNIT_DAY));
+        params.put("dateUnit", DATE_UNIT_DAY);
         params.put("resultType", resultType);
         params.put("currencyCode", "");
         params.put("pageNum", pageNum);

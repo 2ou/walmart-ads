@@ -8,7 +8,7 @@
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%232f90ff'/%3E%3Cpath d='M14 18h9l4 25 5-17h7l5 17 4-25h9L50 49H39l-4-13-4 13H20z' fill='%23edf4ff'/%3E%3C/svg%3E">
   <title>沃尔玛工作台</title>
 
-  <link rel="stylesheet" href="app.css?v=20261026-project-connectors">
+  <link rel="stylesheet" href="app.css?v=20261028-data-center-sync">
 </head>
 <body>
   <a href="#main" class="skip-link">跳到主要内容</a>
@@ -21,8 +21,9 @@
           <div class="brand-name">沃尔玛工作台</div>
         </div>
       </div>
-      <div class="nav-label">经营分析</div>
-      <nav class="nav-list">
+      <div class="sidebar-scroll" aria-label="工作台菜单">
+        <div class="nav-label">经营分析</div>
+        <nav class="nav-list">
         <button class="nav-button active" type="button" data-view="dashboard">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="4" rx="1.5"/><rect x="14" y="11" width="7" height="10" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/></svg>
           <span>经营驾驶舱</span>
@@ -120,26 +121,23 @@
             </button>
           </div>
         </nav>
-      </nav>
-      <div class="nav-label">自动化准备</div>
-      <nav class="nav-list">
-        <button class="nav-button nav-connector-button" type="button" data-view="connectors">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M8 7V4m8 3V4M6 10h12v5a6 6 0 0 1-12 0v-5Z"/><path d="M12 21v-4m-4-7h8"/></svg>
-          <span>数据连接</span><span class="nav-connector-badge" id="connectorNavBadge" hidden></span>
+        </nav>
+        <div class="nav-label">自动化准备</div>
+        <nav class="nav-list">
+        <button class="nav-button nav-connector-button" type="button" data-view="data-center">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><ellipse cx="12" cy="5" rx="7" ry="3"/><path d="M5 5v7c0 1.7 3.1 3 7 3s7-1.3 7-3V5"/><path d="M5 12v7c0 1.7 3.1 3 7 3s7-1.3 7-3v-7"/></svg>
+          <span>数据中心</span><span class="nav-connector-badge" id="connectorNavBadge" hidden></span>
         </button>
         <button class="nav-button" type="button" data-view="agent">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="5" y="7" width="14" height="12" rx="3"/><path d="M9 12h.01M15 12h.01M9 16h6M12 3v4M8 3h8"/></svg>
           <span>广告分析 Agent</span>
         </button>
-        <button class="nav-button" type="button" data-view="imports">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3v12m0 0 4-4m-4 4-4-4"/><path d="M5 19h14"/><path d="M5 5h4M15 5h4"/></svg>
-          <span>数据导入</span>
-        </button>
-        <button class="nav-button" id="workspaceSettingsNav" type="button">
+        <button class="nav-button" id="workspaceSettingsNav" type="button" data-view="workspace">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 5h16v14H4z"/><path d="M8 9h8M8 13h5"/><circle cx="17" cy="16" r="3"/></svg>
-          <span>店铺与同步</span>
+          <span>店铺管理</span>
         </button>
-      </nav>
+        </nav>
+      </div>
       <div class="sidebar-bottom">
         <div class="source-card">
           <div class="source-state"><span class="source-dot"></span>本地数据已载入</div>
@@ -209,12 +207,12 @@
             <span class="reminder-bell-label">价格监控</span>
             <span class="price-bell-count" id="priceCount" hidden>0</span>
           </button>
-          <button class="reminder-bell connector-alert-trigger" id="connectorAlert" type="button" aria-label="打开数据连接状态">
+          <button class="reminder-bell connector-alert-trigger" id="connectorAlert" type="button" aria-label="打开数据中心同步状态">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M8 7V4m8 3V4M6 10h12v5a6 6 0 0 1-12 0v-5Z"/><path d="M12 21v-4"/></svg>
-            <span class="reminder-bell-label">数据连接</span>
+            <span class="reminder-bell-label">数据中心</span>
             <span class="price-bell-count" id="connectorAlertCount" hidden></span>
           </button>
-          <button class="workspace-chip" id="workspaceChip" type="button" aria-label="打开店铺与同步设置">
+          <button class="workspace-chip" id="workspaceChip" type="button" aria-label="前往店铺管理">
             <span class="workspace-chip-dot" aria-hidden="true"></span><strong id="workspaceChipName">—</strong>
           </button>
         </div>
@@ -598,6 +596,7 @@
         </section>
 
         <section class="view" id="view-inventory" aria-labelledby="pageTitle">
+          <div id="inventoryOverviewScreen">
           <div class="section-intro">
             <div><h2>把可售、做货和路途库存放进同一套补货口径</h2><p>路途库存以货件“申收差异”为准，并关联物流登记表中的渠道、货代与到达时效。</p></div>
             <div class="section-summary"><strong id="inventorySkuCount">0</strong>个库存 SKU</div>
@@ -629,7 +628,7 @@
           </section>
           <section class="panel table-panel" aria-labelledby="inventoryByStyleTitle">
             <div class="panel-header">
-              <div><h2 class="panel-title" id="inventoryByStyleTitle">按款号汇总（总维度）</h2><p class="panel-subtitle">每个款号（Parent SKU）下全部 SKU 合计；点击款号展开该款 SKU 明细</p><p class="panel-source-note">补货 / 做货列数值来自「需求分析 60 天计划」（未覆盖款号回落本地快捷算法 InventoryForecastCalculator）</p></div>
+              <div><h2 class="panel-title" id="inventoryByStyleTitle">按款号汇总（总维度）</h2><p class="panel-subtitle">每个款号（Parent SKU）下全部 SKU 合计；点击款号进入库存数据仪表盘</p><p class="panel-source-note">补货 / 做货列数值来自「需求分析 60 天计划」（未覆盖款号回落本地快捷算法 InventoryForecastCalculator）</p></div>
               <div class="table-tools"><label class="sr-only" for="inventorySearch">模糊搜索款号、SKU、商品或 Item ID</label><input class="search-input" id="inventorySearch" type="search" placeholder="搜索款号 / SKU / 商品，如 6066" autocomplete="off"><span id="inventorySearchCount" class="search-count" aria-live="polite"></span></div>
             </div>
             <div class="panel-header">
@@ -666,6 +665,38 @@
               </table>
             </div>
           </section>
+          </div>
+          <section class="inventory-style-dashboard-screen" id="inventoryStyleDashboardScreen" aria-labelledby="inventoryStyleDashboardTitle" hidden>
+            <header class="product-dashboard-header inventory-style-dashboard-header">
+              <div class="product-dashboard-heading">
+                <button class="product-dashboard-back" id="inventoryStyleDashboardBack" type="button" aria-label="返回库存总览">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+                  <span>库存总览</span>
+                </button>
+                <div class="product-dashboard-title-wrap">
+                  <div class="product-dashboard-eyebrow"><span>库存款号仪表盘</span><strong id="inventoryStyleDashboardSku">正在读取</strong></div>
+                  <h2 id="inventoryStyleDashboardTitle" tabindex="-1">正在汇总款号库存</h2>
+                  <p id="inventoryStyleDashboardMeta">正在关联 WFS、国内仓、做货、路途和需求预测</p>
+                </div>
+              </div>
+              <div class="product-dashboard-actions">
+                <button class="secondary-button" id="inventoryStyleDashboardRefresh" type="button">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M20 7v5h-5"/><path d="M4 17v-5h5"/><path d="M18.5 9A7 7 0 0 0 6 6.5L4 9M5.5 15A7 7 0 0 0 18 17.5l2-2.5"/></svg>
+                  <span>刷新库存</span>
+                </button>
+                <button class="primary-button" id="inventoryStyleDashboardForecast" type="button">打开需求预测</button>
+              </div>
+            </header>
+            <nav class="product-dashboard-nav inventory-style-dashboard-nav" aria-label="库存款号仪表盘章节">
+              <a href="#inventoryStyleDashboardOverview">风险总览</a>
+              <a href="#inventoryStyleDashboardStructure">库存结构</a>
+              <a href="#inventoryStyleDashboardRisk">SKU 风险</a>
+              <a href="#inventoryStyleDashboardVariants">SKU 明细</a>
+            </nav>
+            <div class="product-dashboard-body inventory-style-dashboard-body" id="inventoryStyleDashboardBody" aria-live="polite">
+              <div class="empty-state inventory-style-dashboard-loading"><strong>正在生成库存驾驶舱</strong>正在关联该款全部 SKU 的库存、销量和补货数据。</div>
+            </div>
+          </section>
           <!-- 需求预测面板已拆为独立子视图 #view-demand-forecast -->
         </section>
 
@@ -698,7 +729,7 @@
             </div>
             <div class="sc-bridge-actions">
               <div class="sc-auto-targets">
-                <span>运行方式</span><strong>系统 Chrome · 加密会话</strong>
+                <span>运行方式</span><strong>当前 Chrome · 店铺隔离</strong>
               </div>
               <button class="secondary-button" id="supplyChainManageConnectorButton" type="button">管理连接</button>
             </div>
@@ -890,6 +921,7 @@
         </section>
 
         <section class="view" id="view-products" aria-labelledby="pageTitle">
+          <div id="productCatalogScreen">
           <div class="section-intro">
             <div><h2>按产品组核对主体、颜色、图片与尺码</h2><p>父 SKU 作为产品组主体；先按颜色归集对应图片，再按尺码展示 SKU。</p></div>
             <div class="section-summary"><strong id="productParentCount">0</strong>个产品组</div>
@@ -907,6 +939,38 @@
             </div>
             <div class="product-card-grid" id="productCatalogBody" aria-live="polite"></div>
             <div class="table-footer"><span id="productTableCount">0 条结果</span><div class="pagination"><button id="productPrevPage" type="button">上一页</button><span id="productPageText" class="mono">1 / 1</span><button id="productNextPage" type="button">下一页</button></div></div>
+          </section>
+          </div>
+          <section class="product-dashboard-screen" id="productDashboardScreen" aria-labelledby="productDashboardTitle" hidden>
+            <header class="product-dashboard-header">
+              <div class="product-dashboard-heading">
+                <button class="product-dashboard-back" id="productDashboardBack" type="button" aria-label="返回产品库">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+                  <span>产品库</span>
+                </button>
+                <div class="product-dashboard-title-wrap">
+                  <div class="product-dashboard-eyebrow"><span>款号数据仪表盘</span><strong id="productDashboardSku">正在读取</strong></div>
+                  <h2 id="productDashboardTitle" tabindex="-1">正在读取款号数据</h2>
+                  <p id="productDashboardMeta">正在汇总库存、销量、广告和变体表现</p>
+                </div>
+              </div>
+              <div class="product-dashboard-actions">
+                <button class="secondary-button" id="productDashboardRefresh" type="button">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M20 6v5h-5"/><path d="M4 18v-5h5"/><path d="M6.1 9a7 7 0 0 1 11.5-2.4L20 9M4 15l2.4 2.4A7 7 0 0 0 18 15"/></svg>
+                  刷新数据
+                </button>
+                <button class="primary-button" id="productDashboardOperation" type="button">记一条操作</button>
+              </div>
+            </header>
+            <nav class="product-dashboard-nav" aria-label="款号仪表盘章节">
+              <a href="#productDashboardOverview">经营总览</a>
+              <a href="#productDashboardStructure">款式结构</a>
+              <a href="#productDashboardSettings">经营设置</a>
+              <a href="#productDashboardVariants">SKU 明细</a>
+            </nav>
+            <div class="product-dashboard-body" id="productDashboardBody" aria-live="polite">
+              <div class="empty-state"><strong>正在读取款号数据</strong>请稍候。</div>
+            </div>
           </section>
         </section>
 
@@ -1308,85 +1372,135 @@
           </section>
         </section>
 
-        <section class="view" id="view-connectors" aria-labelledby="pageTitle">
-          <div class="connector-hero">
+        <section class="view" id="view-data-center" aria-labelledby="pageTitle">
+          <div class="connector-hero data-center-hero">
             <div>
-              <span class="connector-eyebrow">PROJECT MANAGED CONNECTIONS</span>
-              <h2>数据连接</h2>
-              <p>同步引擎跟随工作台启动和停止。系统 Chrome 仅用于获取只读数据，每个店铺的登录会话加密隔离保存。</p>
+              <span class="connector-eyebrow">WORKSPACE DATA CENTER</span>
+              <h2>数据中心</h2>
+              <p>统一管理自动同步与文件补录。业务页面始终读取当前店铺的本地数据库，不会在每次打开页面时直接请求领星或供应链。</p>
             </div>
             <div class="connector-hero-actions">
-              <span class="connector-schedule"><small>自动同步</small><strong>每日 08:00</strong></span>
-              <button class="secondary-button" id="refreshConnectorsButton" type="button">刷新状态</button>
+              <span class="connector-schedule"><small>自动同步</small><strong>领星每小时 · 供应链 08:00</strong></span>
+              <button class="secondary-button" id="refreshConnectorsButton" type="button">刷新全部状态</button>
             </div>
           </div>
-          <div class="connector-browser-note" id="connectorBrowserNote" data-tone="loading">
-            <span class="connector-browser-dot" aria-hidden="true"></span>
-            <div><strong>正在检查系统 Chrome</strong><small>请稍候。</small></div>
-          </div>
-          <div class="connector-workspaces" id="connectorWorkspaceList">
-            <div class="empty-grid-state"><strong>正在读取数据连接</strong><span>正在检查店铺登录和同步状态。</span></div>
-          </div>
-        </section>
 
-        <section class="view" id="view-imports" aria-labelledby="pageTitle">
-          <div class="section-intro">
-            <div><h2>文件上传</h2><p>领星与供应链由项目内置连接器自动维护；产品资料和月度退款通过页面上传，其他文件上传作为数据兜底。</p></div>
-            <div class="import-action-cluster">
-              <div class="import-scope" data-import-control>
-                <button class="secondary-button import-scope-trigger" type="button" aria-expanded="false" aria-controls="pageImportScope">
-                  <span class="import-scope-label">导入范围</span>
-                  <span class="import-scope-count" data-import-count>1/5</span>
-                  <span class="import-scope-chevron" aria-hidden="true">⌄</span>
-                </button>
-                <div class="import-scope-popover" id="pageImportScope" hidden>
-                  <div class="import-scope-header"><strong>选择上传类型</strong><span>类型单选 · 同类文件可多选</span></div>
-                  <div class="import-source-groups" data-import-options></div>
-                  <div class="import-scope-footer">
-                    <span class="import-scope-note">每次选择一种文件类型；同类型可以一次上传多个工作簿。</span>
-                    <div class="import-scope-actions"><button class="import-text-button" type="button" data-import-action="all">默认类型</button><button class="import-text-button" type="button" data-import-action="clear">清空</button></div>
+          <nav class="data-center-tabs" role="tablist" aria-label="数据中心功能" aria-orientation="horizontal">
+            <button class="data-center-tab active" id="dataCenterOverviewTab" type="button" role="tab" aria-selected="true" aria-controls="dataCenterOverviewPanel" tabindex="0" data-data-center-tab="overview">数据概览</button>
+            <button class="data-center-tab" id="dataCenterSyncTab" type="button" role="tab" aria-selected="false" aria-controls="dataCenterSyncPanel" tabindex="-1" data-data-center-tab="sync">自动同步</button>
+            <button class="data-center-tab" id="dataCenterUploadTab" type="button" role="tab" aria-selected="false" aria-controls="dataCenterUploadPanel" tabindex="-1" data-data-center-tab="uploads">文件补录</button>
+            <button class="data-center-tab" id="dataCenterHistoryTab" type="button" role="tab" aria-selected="false" aria-controls="dataCenterHistoryPanel" tabindex="-1" data-data-center-tab="history">执行记录</button>
+          </nav>
+
+          <div class="data-center-panel" id="dataCenterOverviewPanel" role="tabpanel" aria-labelledby="dataCenterOverviewTab" data-data-center-panel="overview">
+            <div class="data-center-summary-grid" id="dataCenterSummary" aria-live="polite">
+              <div class="data-center-summary-card"><span>正在汇总</span><strong>—</strong><small>读取店铺数据源状态</small></div>
+            </div>
+            <section class="panel data-center-source-panel" aria-labelledby="dataCenterSourceTitle">
+              <div class="panel-header"><div><h2 class="panel-title" id="dataCenterSourceTitle">当前店铺数据源</h2><p class="panel-subtitle">自动同步为主的数据会标明最近成功时间；文件维护与兜底入口集中在“文件补录”。</p></div></div>
+              <div class="data-center-source-grid" id="dataCenterSourceGrid" aria-live="polite">
+                <div class="empty-grid-state"><strong>正在读取数据源</strong><span>请稍候。</span></div>
+              </div>
+            </section>
+          </div>
+
+          <div class="data-center-panel" id="dataCenterSyncPanel" role="tabpanel" aria-labelledby="dataCenterSyncTab" data-data-center-panel="sync" hidden>
+            <section class="panel data-center-sync-plan-panel" aria-labelledby="dataCenterSyncPlanTitle">
+              <div class="panel-header">
+                <div><h2 class="panel-title" id="dataCenterSyncPlanTitle">领星业务同步计划</h2><p class="panel-subtitle">商品、销量、广告、库存和评价按店铺错峰运行；可启停类别，不开放原始 Cron。</p></div>
+                <button class="secondary-button" id="refreshWorkspaceSyncPlan" type="button">刷新计划</button>
+              </div>
+              <div class="data-center-mcp-runtime" id="dataCenterMcpRuntime" data-tone="loading" aria-live="polite">
+                <span class="data-center-runtime-dot" aria-hidden="true"></span><div><strong>正在读取 MCP 请求通道</strong><small>所有领星同步任务共用同一个安全队列。</small></div>
+              </div>
+              <div class="data-center-sync-plan-grid" id="dataCenterSyncPlanCards" aria-live="polite">
+                <div class="empty-grid-state"><strong>正在读取同步计划</strong><span>请稍候。</span></div>
+              </div>
+              <div class="data-center-init-card" id="dataCenterInitialization">
+                <div><span>店铺初始化</span><strong id="dataCenterInitHeadline">等待读取</strong><small id="dataCenterInitMessage">新店铺先同步商品与当前库存，再在后台补齐历史数据。</small></div>
+                <div class="data-center-init-track" aria-hidden="true"><span id="dataCenterInitTrack"></span></div>
+              </div>
+            </section>
+            <div class="data-center-section-heading"><div><h2>采集连接器</h2><p>管理领星网页数据、WFS 货件与供应链生产物流的浏览器登录和采集状态。</p></div></div>
+            <div class="connector-browser-note" id="connectorBrowserNote" data-tone="loading" aria-live="polite">
+              <span class="connector-browser-dot" aria-hidden="true"></span>
+              <div class="connector-browser-copy"><strong>正在检查自动采集环境</strong><small>请稍候。</small></div>
+              <span class="connector-runtime-tag">检查中</span>
+            </div>
+            <div class="connector-workspaces" id="connectorWorkspaceList">
+              <div class="empty-grid-state"><strong>正在读取自动同步</strong><span>正在检查店铺登录和同步状态。</span></div>
+            </div>
+          </div>
+
+          <div class="data-center-panel" id="dataCenterUploadPanel" role="tabpanel" aria-labelledby="dataCenterUploadTab" data-data-center-panel="uploads" hidden>
+            <div class="section-intro data-center-upload-intro">
+              <div><h2>文件补录</h2><p>产品资料和月度退款通过页面上传维护；生产订单、WFS 货件和国内仓库存仅在自动同步不可用时作为兜底。</p></div>
+              <div class="import-action-cluster">
+                <div class="import-scope" data-import-control>
+                  <button class="secondary-button import-scope-trigger" type="button" aria-expanded="false" aria-controls="pageImportScope">
+                    <span class="import-scope-label">补录类型</span>
+                    <span class="import-scope-count" data-import-count>1/5</span>
+                    <span class="import-scope-chevron" aria-hidden="true">⌄</span>
+                  </button>
+                  <div class="import-scope-popover" id="pageImportScope" hidden>
+                    <div class="import-scope-header"><strong>选择补录类型</strong><span>类型单选 · 同类文件可多选</span></div>
+                    <div class="import-source-groups" data-import-options></div>
+                    <div class="import-scope-footer">
+                      <span class="import-scope-note">每次选择一种文件类型；同类型可以一次上传多个工作簿。</span>
+                      <div class="import-scope-actions"><button class="import-text-button" type="button" data-import-action="all">默认类型</button><button class="import-text-button" type="button" data-import-action="clear">清空</button></div>
+                    </div>
                   </div>
                 </div>
-              </div>
-              <div class="import-help">
-                <button class="import-help-button" type="button" aria-label="查看数据导入说明" aria-describedby="pageImportHelp">i</button>
-                <div class="import-help-tooltip" id="pageImportHelp" role="tooltip">
-                  <strong>自动同步与文件上传</strong>
-                  <p>页面上传只在请求内解析，不创建本地文件；相同内容自动跳过。</p>
-                  <ul class="import-help-paths">
-                    <li><span>产品资料</span><code>选择对应的 *-upload.xlsx 上传</code></li>
-                    <li><span>月度退款</span><code>上传 Customer returns-YYYYMM.xlsx</code></li>
-                    <li><span>生产订单</span><code>项目内置连接器为主；仅页面上传兜底</code></li>
-                    <li><span>WFS 货件</span><code>领星自动同步为主；仅页面上传兜底</code></li>
-                    <li><span>国内仓库存</span><code>领星自动同步为主；仅页面上传兜底</code></li>
-                  </ul>
-                  <div class="import-help-rule">工作台不再读取电脑本地目录。自动数据由连接器同步，文件数据必须由当前店铺在本页显式上传。</div>
+                <div class="import-help">
+                  <button class="import-help-button" type="button" aria-label="查看文件补录说明" aria-describedby="pageImportHelp">i</button>
+                  <div class="import-help-tooltip" id="pageImportHelp" role="tooltip">
+                    <strong>自动同步与文件补录</strong>
+                    <p>页面上传只在请求内解析，不创建本地文件；产品资料会先展示完整差异，确认后才写入。</p>
+                    <ul class="import-help-paths">
+                      <li><span>产品资料</span><code>一次上传一个完整清单；新增 / 修改 / 停用预览后确认</code></li>
+                      <li><span>月度退款</span><code>上传 Customer returns-YYYYMM.xlsx</code></li>
+                      <li><span>生产订单</span><code>项目内置连接器为主；仅页面上传兜底</code></li>
+                      <li><span>WFS 货件</span><code>领星自动同步为主；仅页面上传兜底</code></li>
+                      <li><span>国内仓库存</span><code>领星自动同步为主；仅页面上传兜底</code></li>
+                    </ul>
+                    <div class="import-help-rule">工作台不再读取电脑本地目录。自动数据由连接器同步，文件数据必须由当前店铺在本页显式上传。</div>
+                  </div>
                 </div>
+                <input id="workspaceImportFile" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" multiple hidden>
+                <button class="primary-button" id="uploadImportPageButton" type="button">选择文件上传（可多选）</button>
               </div>
-              <input id="workspaceImportFile" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" multiple hidden>
-              <button class="secondary-button" id="uploadImportPageButton" type="button">选择文件上传（可多选）</button>
+            </div>
+            <div class="data-center-fallbacks">
+              <div class="domestic-sync-bar" id="domesticSyncBar" data-tone="loading" aria-live="polite">
+                <span class="domestic-sync-dot" aria-hidden="true"></span>
+                <div class="domestic-sync-copy"><strong id="domesticSyncTitle">正在读取国内仓库存数据源…</strong><small id="domesticSyncDetail">自动同步为主，上传文件为兜底。</small></div>
+                <button class="secondary-button" id="openLingxingInventoryButton" type="button">打开领星库存明细</button>
+              </div>
+              <div class="domestic-sync-bar" id="wfsShipmentSyncBar" data-tone="loading" aria-live="polite">
+                <span class="domestic-sync-dot" aria-hidden="true"></span>
+                <div class="domestic-sync-copy"><strong id="wfsShipmentSyncTitle">正在读取 WFS 货件数据源…</strong><small id="wfsShipmentSyncDetail">领星自动同步为主，上传文件为兜底。</small></div>
+                <button class="secondary-button" id="openLingxingWfsButton" type="button">打开领星 WFS 货件</button>
+              </div>
             </div>
           </div>
-          <div class="domestic-sync-bar" id="domesticSyncBar" data-tone="loading" aria-live="polite">
-            <span class="domestic-sync-dot" aria-hidden="true"></span>
-            <div class="domestic-sync-copy">
-              <strong id="domesticSyncTitle">正在读取国内仓库存数据源…</strong>
-              <small id="domesticSyncDetail">自动同步为主，上传文件为兜底。</small>
-            </div>
-            <button class="secondary-button" id="openLingxingInventoryButton" type="button">打开领星库存明细</button>
+
+          <div class="data-center-panel" id="dataCenterHistoryPanel" role="tabpanel" aria-labelledby="dataCenterHistoryTab" data-data-center-panel="history" hidden>
+            <section class="panel data-center-history-panel" aria-labelledby="workspaceSyncHistoryTitle">
+              <div class="panel-header"><div><h2 class="panel-title" id="workspaceSyncHistoryTitle">领星业务同步记录</h2><p class="panel-subtitle">商品、销量、广告、库存、评价和历史回填最近 30 次执行结果。</p></div></div>
+              <div class="data-center-workspace-run-list" id="dataCenterWorkspaceSyncRuns" aria-live="polite"><div class="empty-grid-state"><strong>正在读取同步记录</strong><span>请稍候。</span></div></div>
+            </section>
+            <section class="panel data-center-history-panel" aria-labelledby="connectorHistoryTitle">
+              <div class="panel-header"><div><h2 class="panel-title" id="connectorHistoryTitle">采集连接器记录</h2><p class="panel-subtitle">领星网页数据与供应链采集结果；详细日志保留 30 天。</p></div></div>
+              <div class="connector-audit-list data-center-audit-list" id="connectorRunHistoryList" aria-live="polite"><div class="connector-audit-row"><span>正在读取执行记录</span></div></div>
+            </section>
+            <section class="panel table-panel" aria-labelledby="batchTitle">
+              <div class="panel-header"><div><h2 class="panel-title" id="batchTitle">文件补录记录</h2><p class="panel-subtitle">数据库保存文件哈希、补录结果和结构化数据，不在本地创建上传副本。</p></div><button class="secondary-button" id="refreshBatchesButton" type="button">刷新记录</button></div>
+              <div class="table-scroll"><table><thead><tr><th>批次</th><th>开始时间</th><th>状态</th><th class="num">发现</th><th class="num">导入</th><th class="num">跳过</th><th class="num">失败</th></tr></thead><tbody id="batchBody"></tbody></table></div>
+            </section>
           </div>
-          <div class="domestic-sync-bar" id="wfsShipmentSyncBar" data-tone="loading" aria-live="polite">
-            <span class="domestic-sync-dot" aria-hidden="true"></span>
-            <div class="domestic-sync-copy">
-              <strong id="wfsShipmentSyncTitle">正在读取 WFS 货件数据源…</strong>
-              <small id="wfsShipmentSyncDetail">领星自动同步为主，上传文件为兜底。</small>
-            </div>
-            <button class="secondary-button" id="openLingxingWfsButton" type="button">打开领星 WFS 货件</button>
-          </div>
-          <section class="panel table-panel" aria-labelledby="batchTitle">
-            <div class="panel-header"><div><h2 class="panel-title" id="batchTitle">最近导入批次</h2><p class="panel-subtitle">上传文件只在请求内解析；数据库保存文件哈希、导入结果和结构化数据</p></div><button class="secondary-button" id="refreshBatchesButton" type="button">刷新</button></div>
-            <div class="table-scroll"><table><thead><tr><th>批次</th><th>开始时间</th><th>状态</th><th class="num">发现</th><th class="num">导入</th><th class="num">跳过</th><th class="num">失败</th></tr></thead><tbody id="batchBody"></tbody></table></div>
-          </section>
+        </section>
+        <section class="view workspace-page-view" id="view-workspace" aria-labelledby="pageTitle">
+          <iframe class="workspace-page-frame" id="workspacePageFrame" title="店铺管理" data-src="/workspace.html?embedded=1" src="about:blank"></iframe>
         </section>
         <section class="view" id="view-profit-estimate" aria-labelledby="pageTitle">
           <div class="section-intro">
@@ -1484,6 +1598,33 @@
         <div class="dialog-actions"><button class="secondary-button" value="cancel">取消</button><button class="primary-button danger" id="wfsDeleteConfirm" value="default">确认删除</button></div>
       </form>
     </dialog>
+
+    <dialog class="product-import-drawer" id="productImportPreviewDrawer" aria-labelledby="productImportPreviewTitle">
+      <div class="product-import-layout">
+        <header class="product-import-header">
+          <div><span class="product-import-eyebrow">PRODUCT CATALOG DIFF</span><h2 id="productImportPreviewTitle">产品库导入预览</h2><p id="productImportPreviewSubtitle">核对新增、修改与停用明细后再确认写入</p></div>
+          <button class="dialog-close" id="closeProductImportPreview" type="button" aria-label="关闭产品导入预览">×</button>
+        </header>
+        <div class="product-import-content">
+          <section class="product-import-summary" id="productImportSummary" aria-label="导入影响汇总"></section>
+          <div class="product-import-warning" id="productImportWarning" hidden></div>
+          <div class="product-import-toolbar">
+            <div class="product-import-tabs" id="productImportTabs" role="tablist" aria-label="产品差异类型">
+              <button class="active" type="button" data-product-import-tab="add">新增 <span>0</span></button>
+              <button type="button" data-product-import-tab="update">修改 <span>0</span></button>
+              <button type="button" data-product-import-tab="retire">停用 <span>0</span></button>
+              <button type="button" data-product-import-tab="conflict">冲突 <span>0</span></button>
+            </div>
+            <label class="product-import-search"><span class="sr-only">搜索款号或 SKU</span><input id="productImportSearch" type="search" placeholder="搜索款号 / SKU / 商品 / 颜色 / 尺码" autocomplete="off"></label>
+          </div>
+          <div class="product-import-list" id="productImportList" aria-live="polite"></div>
+        </div>
+        <footer class="product-import-footer">
+          <div><strong id="productImportFooterTitle">等待确认</strong><span id="productImportFooterDetail">确认前不会修改产品库</span></div>
+          <div class="product-import-footer-actions"><button class="secondary-button" id="cancelProductImport" type="button">取消</button><button class="primary-button" id="confirmProductImport" type="button">确认导入</button></div>
+        </footer>
+      </div>
+    </dialog>
   </div>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
   <dialog class="inventory-dialog" id="exportConfirmDialog" aria-labelledby="exportConfirmTitle">
@@ -1571,15 +1712,6 @@
           <tbody id="forecastDetailBody"></tbody>
         </table>
       </div>
-    </div>
-  </dialog>
-  <dialog class="product-drawer" id="productDrawer" aria-labelledby="productDrawerTitle">
-    <div class="product-drawer-header">
-      <div><h2 id="productDrawerTitle">产品详情</h2><p id="productDrawerSku">正在读取</p></div>
-      <button class="dialog-close" id="closeProductDrawer" type="button" aria-label="关闭产品详情">×</button>
-    </div>
-    <div class="product-drawer-body" id="productDrawerBody">
-      <div class="empty-state"><strong>正在读取产品详情</strong>请稍候。</div>
     </div>
   </dialog>
   <dialog class="domestic-drawer" id="domesticStockDrawer" aria-labelledby="domesticStockDrawerTitle">
@@ -2013,7 +2145,21 @@
   <script type="module">
     // 店铺标识独立于驾驶舱大数据请求加载，避免页头长时间停留在占位状态。
     loadWorkspaceIdentity();
-    const requestedViewAtStartup = location.hash.replace("#", "");
+    const requestedRouteAtStartup = location.hash.replace("#", "");
+    const requestedProductSkuAtStartup = requestedRouteAtStartup.startsWith("products/")
+      ? decodeURIComponent(requestedRouteAtStartup.slice("products/".length))
+      : "";
+    const requestedInventorySkuAtStartup = requestedRouteAtStartup.startsWith("inventory/")
+      ? decodeURIComponent(requestedRouteAtStartup.slice("inventory/".length))
+      : "";
+    const requestedDataCenterTabAtStartup = requestedRouteAtStartup === "imports"
+      ? "uploads"
+      : requestedRouteAtStartup === "connectors" ? "sync" : "overview";
+    const requestedViewAtStartup = requestedProductSkuAtStartup
+      ? "products"
+      : requestedInventorySkuAtStartup
+        ? "inventory"
+        : ["connectors", "imports"].includes(requestedRouteAtStartup) ? "data-center" : requestedRouteAtStartup;
     // 首屏只取时间边界；完整驾驶舱数据进入相关页面后再异步加载。
     const dashboardResponse = await fetch("/api/dashboard/bootstrap");
     if (!dashboardResponse.ok) throw new Error(`加载数据失败：HTTP ${dashboardResponse.status}`);
@@ -2170,6 +2316,7 @@
       orderFlowBounds: { firstDate: "", latestDate: "" },
       inventory: null,
       inventoryLoading: false,
+      inventoryPromise: null,
       inventoryTargetDays: savedTargetDays ?? 60,
       inventoryTrendRange: "all",
       inventoryTrendSeries: new Set(["available"]),
@@ -2177,10 +2324,10 @@
       inventorySearch: "",
       inventoryPage: 0,
       inventoryPageSize: 50,
-      inventoryByStyleExpanded: new Set(),
-      inventorySearchSavedExpanded: null,
       inventoryByStyleSort: { key: "parentSku", dir: "asc" },
       inventoryByStyleDetailSort: { key: "availableUnits", dir: "desc" },
+      inventoryStyleDashboardSku: null,
+      inventoryStyleDashboardTrigger: null,
       supplyChain: null,
       supplyChainLoading: false,
       supplyChainTab: "production",
@@ -2200,6 +2347,8 @@
       productDetailCache: new Map(),
       productDetailEtag: new Map(),
       productRawFieldsCache: new Map(),
+      productDashboardSku: null,
+      productDashboardTrigger: null,
       productSearch: "",
       productTagFilter: "all",
       productStrikethroughFilter: "all",
@@ -2219,8 +2368,18 @@
       connectors: null,
       connectorsLoading: false,
       connectorRefreshTimer: null,
+      workspaceSyncSettings: [],
+      workspaceSyncRuns: [],
+      workspaceSyncLoading: false,
+      dataCenterTab: requestedDataCenterTabAtStartup,
+      domesticSource: null,
+      wfsShipmentSource: null,
+      importBatches: [],
       importSources: new Set(importSources.filter((source) => source.defaultChecked !== false).map((source) => source.key)),
       importRunning: false,
+      productImportPreview: null,
+      productImportTab: "add",
+      productImportSearch: "",
       recent: null,
       recentRequestId: 0,
       reputation: null,
@@ -2252,7 +2411,7 @@
       adProductsLatestDay: null,
     };
 
-    const titles = { dashboard: "经营驾驶舱", sales: "销量分析", diagnosis: "广告诊断", sku: "SKU 机会矩阵", inventory: "库存管理", products: "产品库", operations: "运营记录", reputation: "口碑评价", recent: "每日销售数量统计", agent: "广告分析 Agent", connectors: "数据连接", imports: "数据导入", "profit-estimate": "毛利估算", "demand-forecast": "需求预测", "supply-chain": "供应链生产订单", "lingxing": "领星数据", "box-convert": "流水线装箱转换", "wfs-settlement": "WFS · Settlement", "wfs-storage": "WFS · Storage" };
+    const titles = { dashboard: "经营驾驶舱", sales: "销量分析", diagnosis: "广告诊断", sku: "SKU 机会矩阵", inventory: "库存管理", products: "产品库", operations: "运营记录", reputation: "口碑评价", recent: "每日销售数量统计", agent: "广告分析 Agent", "data-center": "数据中心", workspace: "店铺管理", "profit-estimate": "毛利估算", "demand-forecast": "需求预测", "supply-chain": "供应链生产订单", "lingxing": "领星数据", "box-convert": "流水线装箱转换", "wfs-settlement": "WFS · Settlement", "wfs-storage": "WFS · Storage" };
     // 顶部周期（最新日/自定义/7天/14天/30天）只对这三个视图真实生效，其余视图隐藏，避免出现无意义的死按钮
     const PERIOD_SWITCH_VIEWS = new Set(["dashboard", "sales", "sku", "recent"]);
     const decisionCopy = {
@@ -2332,9 +2491,6 @@
       // 若已有其它模态弹层（如产品详情抽屉）打开，先临时关闭，关闭图片后再恢复
       const openModal = document.querySelector("dialog[open]");
       if (openModal && openModal.id !== "imageLightbox") {
-        if (openModal.id === "productDrawer") {
-          lightboxReturnDrawer = { parentSku: $("#productDrawerSku").textContent };
-        }
         openModal.close();
       }
       if (typeof dialog.showModal === "function") dialog.showModal();
@@ -5536,7 +5692,7 @@
           renderSalesTable();
           showToast(`已下钻到款号 ${parentSku} 的 SKU 变体`);
         } else {
-          openProductDrawer(parentSku);
+          openProductDashboard(parentSku);
         }
       }));
     }
@@ -6561,15 +6717,10 @@
       const productParents = new Set((state.products?.products || []).map((p) => p.parentSku).filter(Boolean));
       // 国内仓现有可用（快照）取自 inventory.domesticStock 三级钻取；仅含 >0 的 SKU，查不到即 0
       const domesticByParent = new Map();
-      const domesticBySku = new Map();
       for (const style of state.inventory?.domesticStock?.styles || []) {
         domesticByParent.set(style.parentSku, style.domesticUnits);
-        for (const skc of style.skcs || []) {
-          for (const sku of skc.skus || []) domesticBySku.set(sku.sku, sku.domesticUnits);
-        }
       }
       const domesticOfStyle = (parent) => domesticByParent.get(parent) ?? 0;
-      const domesticOfSku = (sku) => domesticBySku.get(sku) ?? 0;
       const sourceRows = productParents.size === 0 ? rows : rows.filter((r) => productParents.has(r.parentSku));
       const sum = (skus, field) => skus.reduce((acc, r) => acc + number(r[field]), 0);
       const groups = new Map();
@@ -6598,7 +6749,6 @@
         }
         body.innerHTML = emptyRow(13, emptyTitle, emptyHint);
         updateByStyleSortIndicators();
-        updateByStyleDetailSortIndicators();
         updateInventorySearchCount(0);
         return;
       }
@@ -6628,7 +6778,6 @@
       if (!visible.length) {
         body.innerHTML = emptyRow(13, "没有匹配的款号", "当前筛选条件下没有款号，换个风险类型或清除搜索试试。");
         updateByStyleSortIndicators();
-        updateByStyleDetailSortIndicators();
         updateInventorySearchCount(0);
         return;
       }
@@ -6651,38 +6800,8 @@
         const image = rep.imageUrl
           ? thumbTag("inventory-thumb", rep.imageUrl, parentSku || rep.sku)
           : `<span class="inventory-thumb" aria-hidden="true"></span>`;
-        const expanded = state.inventoryByStyleExpanded.has(parentSku);
-        // 子表应用搜索/风险筛选；总维度聚合始终用全量 SKU
-        const detailSkus = inventoryFilteredRows(skus);
-        const dsk = state.inventoryByStyleDetailSort.key, ddir = state.inventoryByStyleDetailSort.dir;
-        detailSkus.sort((a, b) => {
-          if (dsk === "risk") return ddir === "asc" ? riskOrder.indexOf(a.risk) - riskOrder.indexOf(b.risk) : riskOrder.indexOf(b.risk) - riskOrder.indexOf(a.risk);
-          if (dsk === "sku") { const av = String(a.sku || ""), bv = String(b.sku || ""); return ddir === "asc" ? av.localeCompare(bv) : bv.localeCompare(av); }
-          if (dsk === "domesticUnits") { const av = domesticOfSku(a.sku), bv = domesticOfSku(b.sku); return ddir === "asc" ? av - bv : bv - av; }
-          const av = number(a[dsk]), bv = number(b[dsk]);
-          return ddir === "asc" ? av - bv : bv - av;
-        });
-        const detailRows = detailSkus.map((r) => {
-          const rRisk = inventoryRiskCopy[r.risk] || inventoryRiskCopy.HEALTHY;
-          const rImage = r.imageUrl
-            ? thumbTag("inventory-thumb", r.imageUrl, r.parentSku || r.sku)
-            : `<span class="inventory-thumb" aria-hidden="true"></span>`;
-          return `<tr>
-            <td><div class="inventory-product">${rImage}<div><span class="inventory-sku" title="${escapeHtml(r.sku)}">${escapeHtml(r.sku)}</span><span class="inventory-item-name" title="${escapeHtml(r.itemName || "")}">${escapeHtml(r.itemName || r.itemId || "")}</span></div></div></td>
-            <td><span class="status-badge ${rRisk.badge}" title="预测置信度：${confidenceCopy[r.confidence] || r.confidence}">${rRisk.label}</span></td>
-            <td class="num">${integer(r.recentUnits)}</td>
-            <td class="num" title="近期日均（订单口径）${r.recentDailyUnits}">${number(r.forecastDailyUnits).toFixed(2)}</td>
-            <td class="num">${integer(r.availableUnits)}</td>
-            <td class="num" title="国内仓现有可用件数（快照）；0=国内仓无货">${integer(domesticOfSku(r.sku))}</td>
-            <td class="num">${integer(r.productionUnits)}</td>
-            <td class="num">${integer(r.transitUnits)}</td>
-            <td class="num" title="${escapeHtml([r.formula, r.productionNote].filter(Boolean).join("\n"))}">${integer(r.forecastSuggestedUnits)}</td>
-            <td class="num" title="同一布色按完整裁床数决策；SKU 按5件档位分配，且不突破90天库存上限">${integer(r.productionSuggestedUnits)}</td>
-            <td class="num">${daysText(r.projectedDaysSupply)}</td>
-          </tr>`;
-        }).join("") || emptyRow(11, "该款没有匹配的 SKU", "清除搜索或切换风险筛选。");
         return `<tr class="bystyle-row" data-parent="${escapeHtml(parentSku)}">
-          <td><div class="inventory-product bystyle-toggle" data-parent="${escapeHtml(parentSku)}"><span class="bystyle-caret ${expanded ? "open" : ""}">▸</span>${image}<div><span class="inventory-sku" title="${escapeHtml(parentSku)}">${escapeHtml(parentSku)}</span><span class="inventory-item-name" title="${escapeHtml(rep.itemName || "")}">${escapeHtml(rep.itemName || rep.itemId || "")} · 建议国内仓发货 ${integer(domesticShipment)}</span></div></div></td>
+          <td><button class="inventory-product inventory-style-open" type="button" data-inventory-style="${escapeHtml(parentSku)}" aria-label="打开 ${escapeHtml(parentSku)} 库存数据仪表盘">${image}<div><span class="inventory-sku" title="${escapeHtml(parentSku)}">${escapeHtml(parentSku)}</span><span class="inventory-item-name" title="${escapeHtml(rep.itemName || "")}">${escapeHtml(rep.itemName || rep.itemId || "")} · ${integer(skus.length)} 个 SKU · 建议国内仓发货 ${integer(domesticShipment)}</span></div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></button></td>
           <td><span class="status-badge ${risk.badge}" title="系统按款号总库存与预测日均计算">${risk.label}</span>${outOfStockSkuCount ? `<span class="sub-id">${integer(outOfStockSkuCount)}/${integer(skus.length)} SKU 无可售</span>` : ""}</td>
           <td class="num">${integer(totalStock)}</td>
           <td class="num">${integer(totalAvailable)}</td>
@@ -6694,76 +6813,263 @@
           <td class="num">${integer(productionSuggest)}</td>
           <td class="num">${integer(production)}</td>
           <td class="num" title="累计款号退款率（退款率分析口径：退款导入时间窗内 已退款件数 ÷ 订单销量；无退款记录=0%，无退款数据=—）">${cumulativeRefundRate != null ? (cumulativeRefundRate * 100).toFixed(1) + "%" : "—"}</td>
-          <td><button class="table-link bystyle-toggle-btn" type="button" data-parent="${escapeHtml(parentSku)}">${expanded ? "收起" : "展开"}</button></td>
-        </tr>
-        <tr class="bystyle-detail-row ${expanded ? "" : "collapsed"}" data-detail-parent="${escapeHtml(parentSku)}">
-          <td colspan="13"><div class="bystyle-detail-inner">
-            <table class="inventory-table bystyle-detail-table">
-              <thead><tr>
-                <th class="bystyle-detail-sortable" data-sort="sku">SKU<span class="bystyle-detail-sort-ind"></span></th>
-                <th class="bystyle-detail-sortable" data-sort="risk">风险<span class="bystyle-detail-sort-ind"></span></th>
-                <th class="num bystyle-detail-sortable" data-sort="recentUnits">近期销量<span class="bystyle-detail-sort-ind"></span></th>
-                <th class="num bystyle-detail-sortable" data-sort="forecastDailyUnits">预测日均<span class="bystyle-detail-sort-ind"></span></th>
-                <th class="num bystyle-detail-sortable" data-sort="availableUnits">可售<span class="bystyle-detail-sort-ind"></span></th>
-                <th class="num bystyle-detail-sortable" data-sort="domesticUnits" title="国内仓现有可用件数（快照）；0=国内仓无货">国内仓<span class="bystyle-detail-sort-ind"></span></th>
-                <th class="num bystyle-detail-sortable" data-sort="productionUnits" title="数值由「需求分析 60 天计划」回写覆盖（裁床取整后做货量）；未覆盖 SKU 回落本地快捷算法">做货<span class="bystyle-detail-sort-ind"></span></th>
-                <th class="num bystyle-detail-sortable" data-sort="transitUnits">路途<span class="bystyle-detail-sort-ind"></span></th>
-                <th class="num bystyle-detail-sortable" data-sort="forecastSuggestedUnits" title="数值由「需求分析 60 天计划」回写覆盖；未覆盖 SKU 回落本地快捷算法">预测建议补货<span class="bystyle-detail-sort-ind"></span></th>
-                <th class="num bystyle-detail-sortable" data-sort="productionSuggestedUnits" title="数值由「需求分析 60 天计划」回写覆盖（裁床取整后）；未覆盖 SKU 回落本地快捷算法">裁床建议做货<span class="bystyle-detail-sort-ind"></span></th>
-                <th class="num bystyle-detail-sortable" data-sort="projectedDaysSupply">预测可售天数<span class="bystyle-detail-sort-ind"></span></th>
-              </tr></thead>
-              <tbody>${detailRows}</tbody>
-            </table>
-          </div></td>
+          <td><button class="table-link inventory-style-open-button" type="button" data-inventory-style="${escapeHtml(parentSku)}">打开仪表盘</button></td>
         </tr>`;
       }).join("");
       body.innerHTML = html;
-      updateInventorySearchCount(groups.size);
+      updateInventorySearchCount(visible.length);
       updateByStyleSortIndicators();
-      updateByStyleDetailSortIndicators();
-      body.querySelectorAll(".bystyle-detail-sortable").forEach((th) => {
-        th.addEventListener("click", () => {
-          const key = th.dataset.sort;
-          const cur = state.inventoryByStyleDetailSort;
-          if (cur.key === key) cur.dir = cur.dir === "asc" ? "desc" : "asc";
-          else { cur.key = key; cur.dir = (key === "risk" || key === "sku") ? "asc" : "desc"; }
-          if (state.inventory) renderInventoryByStyle(state.inventory.rows);
-        });
-      });
-      body.querySelectorAll(".bystyle-toggle, .bystyle-toggle-btn").forEach((el) => {
-        el.addEventListener("click", () => {
-          const parent = el.dataset.parent || el.closest("[data-parent]").dataset.parent;
-          const isOpen = state.inventoryByStyleExpanded.has(parent);
-          if (isOpen) state.inventoryByStyleExpanded.delete(parent);
-          else state.inventoryByStyleExpanded.add(parent);
-          const detailRow = body.querySelector(`[data-detail-parent="${parent}"]`);
-          const row = body.querySelector(`[data-parent="${parent}"]`);
-          const caret = row ? row.querySelector(".bystyle-caret") : null;
-          const btn = row ? row.querySelector(".bystyle-toggle-btn") : null;
-          if (detailRow) detailRow.classList.toggle("collapsed");
-          if (caret) caret.classList.toggle("open");
-          if (btn) btn.textContent = isOpen ? "展开" : "收起";
-        });
-      });
       body.querySelectorAll("[data-jump-workbench]").forEach((el) => {
         el.addEventListener("click", (e) => {
           e.stopPropagation();
-          const parent = el.dataset.jumpWorkbench;
-          if (!parent) return;
-          state.forecastWorkbenchFilter = "all";
-          state.forecastWorkbenchExpanded.add(parent);
-          switchView("demand-forecast");
-          renderDemandForecast();
-          requestAnimationFrame(() => {
-            const row = [...document.querySelectorAll("#forecastWorkbenchBody .forecast-style-row")]
-              .find((r) => r.dataset.style === parent);
-            if (row) {
-              row.scrollIntoView({ behavior: "smooth", block: "center" });
-              row.classList.add("flash-highlight");
-              setTimeout(() => row.classList.remove("flash-highlight"), 1600);
-            }
-          });
+          openDemandForecastForParent(el.dataset.jumpWorkbench);
         });
+      });
+    }
+
+    function inventoryStyleSnapshot(parentSku) {
+      const inventory = state.inventory;
+      if (!inventory) return null;
+      const skus = (inventory.rows || []).filter((row) => row.parentSku === parentSku);
+      if (!skus.length) return null;
+      const domesticStyle = (inventory.domesticStock?.styles || []).find((style) => style.parentSku === parentSku);
+      const domesticBySku = new Map();
+      for (const skc of domesticStyle?.skcs || []) {
+        for (const sku of skc.skus || []) domesticBySku.set(sku.sku, number(sku.domesticUnits));
+      }
+      const sum = (field) => skus.reduce((total, row) => total + number(row[field]), 0);
+      const totalAvailable = sum("availableUnits");
+      const totalTransit = sum("transitUnits");
+      const production = sum("productionUnits");
+      const totalStock = totalAvailable + totalTransit + production;
+      const totalRecent = sum("recentUnits");
+      const totalForecastDaily = sum("forecastDailyUnits");
+      const fcSuggest = sum("forecastSuggestedUnits");
+      const productionSuggest = sum("productionSuggestedUnits");
+      const domesticShipment = sum("domesticShipmentUnits");
+      const domesticUnits = number(domesticStyle?.domesticUnits);
+      const allNew = skus.every((row) => row.risk === "NOT_LAUNCHED");
+      const systemRisk = allNew ? "NOT_LAUNCHED" : inventoryStyleSystemRisk(totalAvailable, totalStock, totalForecastDaily, fcSuggest);
+      const projected = totalForecastDaily > 0 ? totalStock / totalForecastDaily : null;
+      const outOfStockSkuCount = allNew ? 0 : skus.filter((row) => number(row.availableUnits) <= 0).length;
+      return {
+        parentSku,
+        skus,
+        representative: skus[0],
+        domesticBySku,
+        totalAvailable,
+        totalTransit,
+        production,
+        totalStock,
+        totalRecent,
+        totalForecastDaily,
+        fcSuggest,
+        productionSuggest,
+        domesticShipment,
+        domesticUnits,
+        systemRisk,
+        projected,
+        outOfStockSkuCount,
+        cumulativeRefundRate: skus.find((row) => row.cumulativeRefundRate != null)?.cumulativeRefundRate ?? null,
+      };
+    }
+
+    function inventoryStyleMetric(label, value, note, tone = "") {
+      return `<article class="inventory-style-kpi ${tone}"><span>${label}</span><strong>${value}</strong><small>${note}</small></article>`;
+    }
+
+    function inventoryStyleRiskInsight(snapshot) {
+      const insights = {
+        OUT_OF_STOCK: ["critical", "WFS 可售已归零", "优先检查国内仓可发量和最近到货批次，避免继续损失销量。"],
+        URGENT: ["critical", "预计 7 天内触及风险", "当前库存覆盖很短，应优先安排可立即执行的补货与做货。"],
+        LOW: ["warn", "预计 14 天内进入风险", "建议本周确认补货数量、路途到货和生产排期。"],
+        WATCH: ["warn", "库存进入观察区间", "覆盖不足 30 天，持续检查销量加速与货件到达时间。"],
+        REPLENISH: ["warn", "系统已给出补货建议", "需求预测识别到补货缺口，可进入需求预测确认数量。"],
+        OVERSTOCK: ["overstock", "库存覆盖偏高", "减少新增做货，优先消化现有 WFS、路途与做货库存。"],
+        NO_DEMAND: ["muted", "当前缺少有效需求", "近期没有可用动销信号，先确认 Listing 状态和商品生命周期。"],
+        NOT_LAUNCHED: ["new", "新品尚未形成销量", "暂不按缺货判断，建议先确认上架、首批库存和广告启动计划。"],
+        HEALTHY: ["healthy", "库存处于健康区间", "当前覆盖与目标相对匹配，按既定节奏跟踪销量和到货即可。"],
+      };
+      return insights[snapshot.systemRisk] || insights.HEALTHY;
+    }
+
+    function inventoryStyleStructure(snapshot) {
+      const parts = [
+        { label: "WFS 可售", value: snapshot.totalAvailable, className: "available" },
+        { label: "做货中", value: snapshot.production, className: "production" },
+        { label: "路途中", value: snapshot.totalTransit, className: "transit" },
+      ];
+      const total = Math.max(snapshot.totalStock, 0);
+      const segments = total > 0
+        ? parts.map((part) => `<span class="${part.className}" style="width:${Math.max(0, part.value) / total * 100}%" title="${part.label} ${integer(part.value)} 件"></span>`).join("")
+        : `<span class="empty" style="width:100%"></span>`;
+      return `<div class="inventory-style-stock-structure" id="inventoryStyleDashboardStructure">
+        <div class="inventory-style-stock-head"><div><h3>库存结构</h3><p>总库存口径为 WFS 可售 + 做货 + 路途，国内仓单独列示。</p></div><strong>${integer(total)} 件</strong></div>
+        <div class="inventory-style-stock-bar" role="img" aria-label="WFS 可售 ${integer(snapshot.totalAvailable)} 件，做货 ${integer(snapshot.production)} 件，路途 ${integer(snapshot.totalTransit)} 件">${segments}</div>
+        <dl class="inventory-style-stock-legend">${parts.map((part) => `<div><dt><i class="${part.className}" aria-hidden="true"></i>${part.label}</dt><dd>${integer(part.value)} 件</dd><small>${total > 0 ? (part.value / total * 100).toFixed(1) : "0.0"}%</small></div>`).join("")}</dl>
+        <div class="inventory-style-domestic-note"><span>国内仓可用</span><strong>${integer(snapshot.domesticUnits)} 件</strong><small>不并入上述总库存与风险判定；系统建议发货 ${integer(snapshot.domesticShipment)} 件。</small></div>
+      </div>`;
+    }
+
+    function inventoryStyleRiskDistribution(snapshot) {
+      const riskOrder = ["OUT_OF_STOCK", "URGENT", "LOW", "WATCH", "REPLENISH", "OVERSTOCK", "NO_DEMAND", "NOT_LAUNCHED", "HEALTHY"];
+      const counts = new Map(riskOrder.map((risk) => [risk, snapshot.skus.filter((row) => row.risk === risk).length]));
+      const max = Math.max(...counts.values(), 1);
+      return `<section class="inventory-style-risk-panel" id="inventoryStyleDashboardRisk" aria-labelledby="inventoryStyleRiskTitle">
+        <div class="product-dashboard-panel-head"><div><h3 id="inventoryStyleRiskTitle">SKU 风险分布</h3><p>每个 SKU 按自身可售、需求和预测覆盖计算，颜色同时配有文字标签。</p></div><span>${integer(snapshot.skus.length)} 个 SKU</span></div>
+        <div class="inventory-style-risk-bars">${riskOrder.filter((risk) => counts.get(risk) > 0).map((risk) => {
+          const copy = inventoryRiskCopy[risk] || inventoryRiskCopy.HEALTHY;
+          const count = counts.get(risk);
+          return `<div class="inventory-style-risk-row ${copy.group}"><span>${copy.label}</span><div><i style="width:${count / max * 100}%"></i></div><strong>${integer(count)}</strong></div>`;
+        }).join("") || `<div class="empty-state"><strong>暂无 SKU 风险数据</strong>刷新库存后重试。</div>`}</div>
+      </section>`;
+    }
+
+    function inventoryStyleSkuTable(snapshot) {
+      const riskOrder = ["OUT_OF_STOCK", "URGENT", "LOW", "WATCH", "REPLENISH", "OVERSTOCK", "NO_DEMAND", "NOT_LAUNCHED", "HEALTHY"];
+      const rows = snapshot.skus.slice();
+      const { key, dir } = state.inventoryByStyleDetailSort;
+      rows.sort((a, b) => {
+        let av, bv;
+        if (key === "risk") { av = riskOrder.indexOf(a.risk); bv = riskOrder.indexOf(b.risk); }
+        else if (key === "sku") { av = String(a.sku || ""); bv = String(b.sku || ""); return dir === "asc" ? av.localeCompare(bv) : bv.localeCompare(av); }
+        else if (key === "domesticUnits") { av = snapshot.domesticBySku.get(a.sku) || 0; bv = snapshot.domesticBySku.get(b.sku) || 0; }
+        else { av = number(a[key]); bv = number(b[key]); }
+        return dir === "asc" ? av - bv : bv - av;
+      });
+      const sortable = (label, sortKey, extra = "") => `<button class="inventory-dashboard-sort ${key === sortKey ? "active" : ""}" type="button" data-inventory-dashboard-sort="${sortKey}" aria-label="按${label}${key === sortKey ? (dir === "asc" ? "降序" : "升序") : "排序"}" ${extra}>${label}<span aria-hidden="true">${key === sortKey ? (dir === "asc" ? "▲" : "▼") : ""}</span></button>`;
+      const body = rows.map((row) => {
+        const risk = inventoryRiskCopy[row.risk] || inventoryRiskCopy.HEALTHY;
+        const image = row.imageUrl ? thumbTag("inventory-thumb", row.imageUrl, row.parentSku || row.sku) : `<span class="inventory-thumb" aria-hidden="true"></span>`;
+        return `<tr>
+          <td><div class="inventory-product">${image}<div><span class="inventory-sku" title="${escapeHtml(row.sku)}">${escapeHtml(row.sku)}</span><span class="inventory-item-name" title="${escapeHtml(row.itemName || "")}">${escapeHtml(row.itemName || row.itemId || "")}</span></div></div></td>
+          <td><span class="status-badge ${risk.badge}">${risk.label}</span><span class="sub-id">${confidenceCopy[row.confidence] || row.confidence || "—"}</span></td>
+          <td class="num">${integer(row.recentUnits)}</td>
+          <td class="num">${number(row.forecastDailyUnits).toFixed(2)}</td>
+          <td class="num">${integer(row.availableUnits)}</td>
+          <td class="num">${integer(snapshot.domesticBySku.get(row.sku) || 0)}</td>
+          <td class="num">${integer(row.productionUnits)}</td>
+          <td class="num">${integer(row.transitUnits)}</td>
+          <td class="num" title="${escapeHtml([row.formula, row.productionNote].filter(Boolean).join("\n"))}">${integer(row.forecastSuggestedUnits)}</td>
+          <td class="num">${integer(row.productionSuggestedUnits)}</td>
+          <td class="num">${daysText(row.projectedDaysSupply)}</td>
+        </tr>`;
+      }).join("");
+      return `<section class="product-detail-section inventory-style-variants" id="inventoryStyleDashboardVariants">
+        <div class="section-title-row"><div><h3>SKU 库存与补货明细</h3><p>按变体核对风险、三段库存与需求预测建议。</p></div><span>${integer(rows.length)} 个 SKU</span></div>
+        <div class="table-scroll"><table class="inventory-table inventory-style-dashboard-table"><thead><tr>
+          <th>${sortable("SKU / 商品", "sku")}</th><th>${sortable("风险", "risk")}</th>
+          <th class="num">${sortable("近期销量", "recentUnits")}</th><th class="num">${sortable("预测日均", "forecastDailyUnits")}</th>
+          <th class="num">${sortable("WFS 可售", "availableUnits")}</th><th class="num">${sortable("国内仓", "domesticUnits")}</th>
+          <th class="num">${sortable("做货", "productionUnits")}</th><th class="num">${sortable("路途", "transitUnits")}</th>
+          <th class="num">${sortable("建议补货", "forecastSuggestedUnits")}</th><th class="num">${sortable("建议做货", "productionSuggestedUnits")}</th>
+          <th class="num">${sortable("覆盖天数", "projectedDaysSupply")}</th>
+        </tr></thead><tbody>${body}</tbody></table></div>
+      </section>`;
+    }
+
+    function renderInventoryStyleDashboard(parentSku) {
+      const snapshot = inventoryStyleSnapshot(parentSku);
+      const body = $("#inventoryStyleDashboardBody");
+      if (!snapshot) {
+        $("#inventoryStyleDashboardSku").textContent = parentSku;
+        $("#inventoryStyleDashboardTitle").textContent = "没有找到该款号的库存数据";
+        $("#inventoryStyleDashboardTitle").removeAttribute("title");
+        $("#inventoryStyleDashboardMeta").textContent = "返回库存总览后可选择其他款号";
+        body.innerHTML = `<div class="empty-state"><strong>款号库存不存在</strong>该款号可能已退出产品库，或当前库存快照没有匹配到 SKU。</div>`;
+        return null;
+      }
+      const inventory = state.inventory;
+      const risk = inventoryRiskCopy[snapshot.systemRisk] || inventoryRiskCopy.HEALTHY;
+      const [insightTone, insightTitle, insightDetail] = inventoryStyleRiskInsight(snapshot);
+      const title = snapshot.representative.itemName || snapshot.parentSku;
+      $("#inventoryStyleDashboardSku").textContent = snapshot.parentSku;
+      $("#inventoryStyleDashboardTitle").textContent = title;
+      $("#inventoryStyleDashboardTitle").title = title;
+      $("#inventoryStyleDashboardMeta").textContent = `${integer(snapshot.skus.length)} 个 SKU · 库存快照 ${inventory.meta?.snapshotAt ? new Date(inventory.meta.snapshotAt).toLocaleString("zh-CN") : "—"} · 目标覆盖 ${integer(inventory.meta?.targetDays || state.inventoryTargetDays)} 天`;
+      const replenishTitle = snapshot.fcSuggest > 0 ? `建议补货 ${integer(snapshot.fcSuggest)} 件` : snapshot.productionSuggest > 0 ? `建议做货 ${integer(snapshot.productionSuggest)} 件` : "当前无需新增补货";
+      const replenishDetail = snapshot.fcSuggest > 0 || snapshot.productionSuggest > 0
+        ? `需求预测建议补货 ${integer(snapshot.fcSuggest)} 件，裁床建议做货 ${integer(snapshot.productionSuggest)} 件。`
+        : `当前库存与预测需求未形成新增缺口，继续观察销量和到货变化。`;
+      body.innerHTML = `<section class="product-dashboard-overview" id="inventoryStyleDashboardOverview">
+        <div class="product-dashboard-section-head"><div><span>INVENTORY CONTROL</span><h3>风险总览</h3><p>库存、需求和供应按同一款号聚合，国内仓保持独立口径。</p></div><div class="product-dashboard-freshness-list" aria-label="库存数据更新时间"><span class="product-dashboard-freshness"><i aria-hidden="true"></i>库存 ${escapeHtml(inventory.meta?.snapshotAt ? new Date(inventory.meta.snapshotAt).toLocaleDateString("zh-CN") : "—")}</span><span class="product-dashboard-freshness"><i aria-hidden="true"></i>目标 ${integer(inventory.meta?.targetDays || state.inventoryTargetDays)} 天</span></div></div>
+        <div class="inventory-style-kpi-grid">
+          ${inventoryStyleMetric("款号风险", `<span class="status-badge ${risk.badge}">${risk.label}</span>`, `${integer(snapshot.outOfStockSkuCount)} / ${integer(snapshot.skus.length)} SKU 无可售`, `risk-${snapshot.systemRisk.toLowerCase()}`)}
+          ${inventoryStyleMetric("总库存", `${integer(snapshot.totalStock)} 件`, "WFS + 做货 + 路途", "primary")}
+          ${inventoryStyleMetric("WFS 可售", `${integer(snapshot.totalAvailable)} 件`, "沃尔玛 Available units", "available")}
+          ${inventoryStyleMetric("国内仓", `${integer(snapshot.domesticUnits)} 件`, `建议发货 ${integer(snapshot.domesticShipment)} 件`, "domestic")}
+          ${inventoryStyleMetric("做货中", `${integer(snapshot.production)} 件`, `建议做货 ${integer(snapshot.productionSuggest)} 件`, "production")}
+          ${inventoryStyleMetric("路途中", `${integer(snapshot.totalTransit)} 件`, snapshot.totalTransit > 0 ? "可查看货件与到货倒计时" : "当前没有在途量", "transit")}
+          ${inventoryStyleMetric("近期销量", `${integer(snapshot.totalRecent)} 件`, `预测日均 ${number(snapshot.totalForecastDaily).toFixed(2)}`, "sales")}
+          ${inventoryStyleMetric("预测覆盖", snapshot.projected == null ? "—" : `${snapshot.projected.toFixed(1)} 天`, `目标 ${integer(inventory.meta?.targetDays || state.inventoryTargetDays)} 天`, "coverage")}
+        </div>
+        <div class="inventory-style-analysis-grid">
+          <section class="inventory-style-decision-card ${insightTone}" aria-labelledby="inventoryStyleDecisionTitle"><div><span>当前判断</span><h3 id="inventoryStyleDecisionTitle">${insightTitle}</h3><p>${insightDetail}</p></div><dl><div><dt>系统风险</dt><dd>${risk.label}</dd></div><div><dt>无可售 SKU</dt><dd>${integer(snapshot.outOfStockSkuCount)} / ${integer(snapshot.skus.length)}</dd></div><div><dt>累计退款率</dt><dd>${snapshot.cumulativeRefundRate == null ? "—" : percent(snapshot.cumulativeRefundRate)}</dd></div></dl></section>
+          <section class="inventory-style-action-card" aria-labelledby="inventoryStyleActionTitle"><div><span>建议动作</span><h3 id="inventoryStyleActionTitle">${replenishTitle}</h3><p>${replenishDetail}</p></div><div class="inventory-style-action-metrics"><div><span>预测补货</span><strong>${integer(snapshot.fcSuggest)}</strong></div><div><span>裁床做货</span><strong>${integer(snapshot.productionSuggest)}</strong></div><div><span>国内仓发货</span><strong>${integer(snapshot.domesticShipment)}</strong></div></div><div class="inventory-style-action-buttons">${snapshot.totalTransit > 0 ? `<button class="secondary-button" type="button" data-inventory-dashboard-transit="${escapeHtml(snapshot.parentSku)}">查看路途货件</button>` : ""}<button class="primary-button" type="button" data-inventory-dashboard-forecast="${escapeHtml(snapshot.parentSku)}">进入需求预测</button></div></section>
+        </div>
+      </section>
+      ${inventoryStyleStructure(snapshot)}
+      ${inventoryStyleRiskDistribution(snapshot)}
+      ${inventoryStyleSkuTable(snapshot)}`;
+      body.querySelectorAll("[data-inventory-dashboard-sort]").forEach((button) => button.addEventListener("click", () => {
+        const sortKey = button.dataset.inventoryDashboardSort;
+        const current = state.inventoryByStyleDetailSort;
+        if (current.key === sortKey) current.dir = current.dir === "asc" ? "desc" : "asc";
+        else { current.key = sortKey; current.dir = sortKey === "risk" || sortKey === "sku" ? "asc" : "desc"; }
+        renderInventoryStyleDashboard(parentSku);
+      }));
+      return snapshot;
+    }
+
+    async function openInventoryStyleDashboard(parentSku, options = {}) {
+      if (!parentSku) return;
+      if (state.view !== "inventory") switchView("inventory", { preserveHistory: true, keepInventoryStyleDashboard: true });
+      if (!state.inventory) {
+        $("#inventoryOverviewScreen").hidden = true;
+        $("#inventoryStyleDashboardScreen").hidden = false;
+        $("#inventoryStyleDashboardSku").textContent = parentSku;
+        $("#inventoryStyleDashboardTitle").textContent = "正在汇总款号库存";
+        $("#inventoryStyleDashboardTitle").removeAttribute("title");
+        $("#inventoryStyleDashboardMeta").textContent = "正在关联 WFS、国内仓、做货、路途和需求预测";
+        $("#inventoryStyleDashboardBody").innerHTML = `<div class="empty-state inventory-style-dashboard-loading"><strong>正在生成库存驾驶舱</strong>正在关联该款全部 SKU 的库存、销量和补货数据。</div>`;
+        const loaded = await loadInventory();
+        if (!loaded) return;
+      }
+      if (options.trigger) state.inventoryStyleDashboardTrigger = options.trigger;
+      state.inventoryStyleDashboardSku = parentSku;
+      $("#inventoryOverviewScreen").hidden = true;
+      $("#inventoryStyleDashboardScreen").hidden = false;
+      if (options.pushHistory !== false && location.hash !== `#inventory/${encodeURIComponent(parentSku)}`) {
+        history.pushState({ view: "inventory", parentSku }, "", `#inventory/${encodeURIComponent(parentSku)}`);
+      }
+      renderInventoryStyleDashboard(parentSku);
+      window.scrollTo({ top: 0, behavior: "auto" });
+      if (options.moveFocus !== false) requestAnimationFrame(() => $("#inventoryStyleDashboardTitle").focus());
+    }
+
+    function closeInventoryStyleDashboard(options = {}) {
+      if (!state.inventoryStyleDashboardSku) return;
+      const trigger = state.inventoryStyleDashboardTrigger;
+      state.inventoryStyleDashboardSku = null;
+      $("#inventoryStyleDashboardScreen").hidden = true;
+      $("#inventoryOverviewScreen").hidden = false;
+      if (options.updateHistory !== false && location.hash.startsWith("#inventory/")) history.replaceState({ view: "inventory" }, "", "#inventory");
+      window.scrollTo({ top: 0, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+      if (options.restoreFocus !== false && trigger?.isConnected) requestAnimationFrame(() => trigger.focus());
+    }
+
+    function openDemandForecastForParent(parentSku) {
+      if (!parentSku) return;
+      state.forecastWorkbenchFilter = "all";
+      state.forecastWorkbenchExpanded.add(parentSku);
+      switchView("demand-forecast");
+      renderDemandForecast();
+      requestAnimationFrame(() => {
+        const row = [...document.querySelectorAll("#forecastWorkbenchBody .forecast-style-row")].find((item) => item.dataset.style === parentSku);
+        if (!row) return;
+        row.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "center" });
+        row.classList.add("flash-highlight");
+        setTimeout(() => row.classList.remove("flash-highlight"), 1600);
       });
     }
 
@@ -6773,16 +7079,6 @@
         const active = th.dataset.sort === key;
         th.classList.toggle("active", active);
         const ind = th.querySelector(".bystyle-sort-ind");
-        if (ind) ind.textContent = active ? (dir === "asc" ? "▲" : "▼") : "";
-      });
-    }
-
-    function updateByStyleDetailSortIndicators() {
-      const { key, dir } = state.inventoryByStyleDetailSort;
-      $$(".bystyle-detail-sortable").forEach((th) => {
-        const active = th.dataset.sort === key;
-        th.classList.toggle("active", active);
-        const ind = th.querySelector(".bystyle-detail-sort-ind");
         if (ind) ind.textContent = active ? (dir === "asc" ? "▲" : "▼") : "";
       });
     }
@@ -6860,7 +7156,7 @@
       $$("#productTagFilters [data-product-tag-filter]").forEach((button) =>
         button.classList.toggle("active", button.dataset.productTagFilter === state.productTagFilter));
       $("#productStrikethroughFilter").value = state.productStrikethroughFilter;
-      $$("[data-product-parent]").forEach((button) => button.addEventListener("click", () => openProductDrawer(button.dataset.productParent)));
+      $$("[data-product-parent]").forEach((button) => button.addEventListener("click", () => openProductDashboard(button.dataset.productParent, { trigger: button })));
       $$("[data-operation-parent]").forEach((button) => button.addEventListener("click", () => prepareOperation("PARENT_SKU", button.dataset.operationParent)));
       $$("[data-product-parent-cutting]").forEach((box) => {
         box.addEventListener("dblclick", () => {
@@ -6940,8 +7236,8 @@
               const product = (state.products.products || []).find((item) => item.parentSku === parentSku);
               if (product) product.deliveryFee = value;
               syncProductCache();
-              if ($("#productDrawer").open && $("#productDrawerSku").textContent.startsWith(parentSku)) {
-                await openProductDrawer(parentSku);
+              if (state.productDashboardSku === parentSku) {
+                await openProductDashboard(parentSku, { refresh: true, pushHistory: false });
               }
               showToast(value == null ? "已清除手工配送费，回落系统反算" : "手工配送费已保存");
             } catch (error) {
@@ -6994,8 +7290,8 @@
               showToast(rate == null ? "已清除手工预估退款率" : "预估退款率已保存，正在重算利润…");
               invalidateProductCache();
               await loadProducts({ force: true });
-              if ($("#productDrawer").open && $("#productDrawerSku").textContent.startsWith(parentSku)) {
-                await openProductDrawer(parentSku);
+              if (state.productDashboardSku === parentSku) {
+                await openProductDashboard(parentSku, { refresh: true, pushHistory: false });
               }
             } catch (error) {
               restore(current);
@@ -7057,7 +7353,7 @@
         <div class="product-card-head">
           ${image}
           <div class="product-card-id">
-            <span class="product-parent-sku"><span class="product-group-label">主体父款</span>${escapeHtml(product.parentSku)}</span>
+            <button class="product-parent-sku product-parent-link" type="button" data-product-parent="${escapeHtml(product.parentSku)}" aria-label="打开 ${escapeHtml(product.parentSku)} 款号数据仪表盘"><span class="product-group-label">主体父款</span>${escapeHtml(product.parentSku)}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></button>
             ${productLifecycleTags(product)}
           </div>
         </div>
@@ -7076,7 +7372,7 @@
           <div class="pc-metric pc-metric-wide"><dt>更新时间</dt><dd>${product.updatedAt ? new Date(product.updatedAt).toLocaleDateString("zh-CN") : "未知"}</dd></div>
         </dl>
         <div class="product-card-actions">
-          <button class="table-link" type="button" data-product-parent="${escapeHtml(product.parentSku)}">查看详情</button>
+          <button class="table-link" type="button" data-product-parent="${escapeHtml(product.parentSku)}">打开仪表盘</button>
           <button class="table-link" type="button" data-operation-parent="${escapeHtml(product.parentSku)}">记操作</button>
         </div>
       </article>`;
@@ -7090,7 +7386,7 @@
       return `<article class="product-list-row">
         <div class="product-list-thumb-wrap">${image}</div>
         <div class="product-list-id">
-          <span class="product-parent-sku"><span class="product-group-label">主体父款</span>${escapeHtml(product.parentSku)}</span>
+          <button class="product-parent-sku product-parent-link" type="button" data-product-parent="${escapeHtml(product.parentSku)}" aria-label="打开 ${escapeHtml(product.parentSku)} 款号数据仪表盘"><span class="product-group-label">主体父款</span>${escapeHtml(product.parentSku)}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></button>
           ${productLifecycleTags(product)}
           ${product.title ? `<span class="product-list-title">${escapeHtml(product.title)}</span>` : ""}
         </div>
@@ -7107,7 +7403,7 @@
           <div><dt>裁床/布色</dt><dd>${cutting}</dd></div>
         </dl>
         <div class="product-list-actions">
-          <button class="table-link" type="button" data-product-parent="${escapeHtml(product.parentSku)}">查看详情</button>
+          <button class="table-link" type="button" data-product-parent="${escapeHtml(product.parentSku)}">打开仪表盘</button>
           <button class="table-link" type="button" data-operation-parent="${escapeHtml(product.parentSku)}">记操作</button>
         </div>
       </article>`;
@@ -7163,6 +7459,7 @@
     }
 
     function renderProductColorSelection(product, groups, selectedIndex) {
+      const performanceBySku = new Map((product.dashboard?.variants || []).map((row) => [row.sku, row]));
       const showAll = (selectedIndex == null || selectedIndex < 0 || !groups[selectedIndex]);
       const activeGroups = showAll ? groups : [groups[selectedIndex]];
       const group = showAll ? null : groups[selectedIndex];
@@ -7194,9 +7491,10 @@
         : (group.sizes || []);
       $("#selectedColorSizes").innerHTML = sizes.map((size) => `<span class="apparel-size-chip">${escapeHtml(size)}</span>`).join("") || `<span class="apparel-size-chip">未标注尺码</span>`;
       const colorCol = showAll ? `<th>颜色</th>` : "";
-      const head = `<thead><tr>${colorCol}<th>尺码</th><th>SKU</th><th>Item ID</th><th>UPC</th><th class="num">售价</th><th class="num">划线价</th><th class="num">配送重量(LB)</th><th class="num">预估配送费</th><th class="num">测试毛利/毛利率</th><th>图案 / 材质</th><th>更新时间</th><th>操作</th></tr></thead>`;
+      const head = `<thead><tr>${colorCol}<th>尺码</th><th>SKU</th><th>Item ID</th><th>UPC</th><th class="num">售价</th><th class="num">划线价</th><th class="num">30天销量</th><th class="num">销售额</th><th class="num">WFS</th><th class="num">国内仓</th><th class="num">路途</th><th class="num">配送重量(LB)</th><th class="num">预估配送费</th><th class="num">测试毛利/毛利率</th><th>图案 / 材质</th><th>更新时间</th><th>操作</th></tr></thead>`;
       const rows = activeGroups.flatMap((g) => (g.variants || []).map((variant) => {
         const colorCell = showAll ? `<td>${escapeHtml(g.color || "未标注颜色")}</td>` : "";
+        const performance = performanceBySku.get(variant.sku) || {};
         return `<tr>${colorCell}
           <td><span class="variant-sku">${escapeHtml(variant.size || "未标注")}</span>${variant.primaryVariant ? `<span class="sub-id">主变体</span>` : ""}</td>
           <td><span class="variant-sku">${escapeHtml(variant.sku || "")}</span></td>
@@ -7204,6 +7502,11 @@
           <td>${escapeHtml(variant.upc || "—")}</td>
           <td class="num">${variant.price != null ? money(variant.price, 2) : "—"}</td>
           <td class="num">${strikethroughPriceText(variant.strikethroughPrice, variant.price)}</td>
+          <td class="num product-dashboard-sales-cell">${integer(performance.salesUnits)}</td>
+          <td class="num">${money(performance.revenue, 2)}</td>
+          <td class="num product-dashboard-stock-cell">${integer(performance.wfsAvailable)}</td>
+          <td class="num">${integer(performance.domesticAvailable)}</td>
+          <td class="num">${integer(performance.transitUnits)}</td>
           <td class="num">${variant.shippingWeightLb != null ? Number(variant.shippingWeightLb).toFixed(2) : "—"}${variant.shippingWeightUnit ? " " + escapeHtml(variant.shippingWeightUnit) : ""}</td>
           <td class="num">${variant.deliveryFee != null ? money(variant.deliveryFee, 2) : "—"}</td>
           <td class="num">${profitText(variant.profit, variant.margin)}</td>
@@ -7211,7 +7514,7 @@
           <td>${variant.updatedAt ? new Date(variant.updatedAt).toLocaleDateString("zh-CN") : "—"}</td>
           <td><button class="table-link" type="button" data-operation-sku="${escapeHtml(variant.sku || "")}">记操作</button></td>
         </tr>`;
-      })).join("") || emptyRow(showAll ? 13 : 12, showAll ? "这款还没有 SKU" : "当前颜色没有 SKU", "请核对上传表的颜色与尺码字段。");
+      })).join("") || emptyRow(showAll ? 18 : 17, showAll ? "这款还没有 SKU" : "当前颜色没有 SKU", "请核对上传表的颜色与尺码字段。");
       const tableWrap = $("#selectedColorTable");
       if (tableWrap) tableWrap.innerHTML = `<table class="variant-table">${head}<tbody>${rows}</tbody></table>`;
       $$("#productColorGroups [data-color-index]").forEach((button) => {
@@ -7227,13 +7530,76 @@
         $$("#productGallery [data-gallery-url]").forEach((item) => item.classList.toggle("active", item === button));
       }));
       $$("#selectedColorTable [data-operation-sku]").forEach((button) => button.addEventListener("click", () => {
-        $("#productDrawer").close();
+        closeProductDashboard({ restoreFocus: false });
         prepareOperation("SKU", button.dataset.operationSku);
       }));
     }
 
+    function productDashboardMetric(label, value, note, tone = "") {
+      return `<article class="product-dashboard-kpi ${tone}"><span>${label}</span><strong>${value}</strong><small>${note}</small></article>`;
+    }
+
+    function productDashboardFreshness(label, value) {
+      if (!value) return `<span class="product-dashboard-freshness is-missing"><i></i>${label} 暂无</span>`;
+      const date = String(value).slice(0, 10);
+      return `<span class="product-dashboard-freshness"><i></i>${label} ${escapeHtml(date)}</span>`;
+    }
+
+    function productDashboardTrendMarkup(rows = []) {
+      if (!rows.length) return `<div class="empty-state"><strong>暂无趋势数据</strong>该款号在当前窗口没有可展示的销量或广告记录。</div>`;
+      const width = 760, height = 226, left = 38, right = 44, top = 18, bottom = 34;
+      const plotWidth = width - left - right, plotHeight = height - top - bottom;
+      const maxUnits = Math.max(...rows.map((row) => number(row.units)), 1);
+      const maxSpend = Math.max(...rows.map((row) => number(row.adSpend)), 1);
+      const step = plotWidth / rows.length;
+      const barWidth = Math.max(3, Math.min(14, step * .56));
+      const points = rows.map((row, index) => ({
+        x: left + step * index + step / 2,
+        y: top + plotHeight - number(row.adSpend) / maxSpend * plotHeight,
+      }));
+      const path = points.map((point, index) => `${index ? "L" : "M"}${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(" ");
+      const bars = rows.map((row, index) => {
+        const heightValue = number(row.units) / maxUnits * plotHeight;
+        const x = left + step * index + (step - barWidth) / 2;
+        return `<rect class="product-dashboard-trend-bar" x="${x.toFixed(1)}" y="${(top + plotHeight - heightValue).toFixed(1)}" width="${barWidth.toFixed(1)}" height="${Math.max(0, heightValue).toFixed(1)}" rx="2"><title>${escapeHtml(row.date)} · 销量 ${integer(row.units)} · 广告费 ${money(row.adSpend, 2)}</title></rect>`;
+      }).join("");
+      const labelEvery = Math.max(1, Math.ceil(rows.length / 6));
+      const labels = rows.map((row, index) => (index % labelEvery === 0 || index === rows.length - 1)
+        ? `<text class="product-dashboard-chart-label" x="${(left + step * index + step / 2).toFixed(1)}" y="${height - 10}" text-anchor="middle">${escapeHtml(String(row.date).slice(5))}</text>`
+        : "").join("");
+      const grid = [0, .5, 1].map((ratioValue) => {
+        const y = top + plotHeight * ratioValue;
+        return `<line class="product-dashboard-chart-grid" x1="${left}" x2="${left + plotWidth}" y1="${y}" y2="${y}"/><text class="product-dashboard-chart-label" x="${left - 7}" y="${y + 3}" text-anchor="end">${integer(maxUnits * (1 - ratioValue))}</text><text class="product-dashboard-chart-label" x="${left + plotWidth + 7}" y="${y + 3}" text-anchor="start">${money(maxSpend * (1 - ratioValue))}</text>`;
+      }).join("");
+      const tableRows = rows.map((row) => `<tr><td>${escapeHtml(row.date)}</td><td class="num">${integer(row.units)}</td><td class="num">${money(row.revenue, 2)}</td><td class="num">${money(row.adSpend, 2)}</td><td class="num">${money(row.adSales, 2)}</td></tr>`).join("");
+      return `<div class="product-dashboard-chart-legend"><span><i class="is-units"></i>销量</span><span><i class="is-spend"></i>广告费</span></div>
+        <svg class="product-dashboard-trend" viewBox="0 0 ${width} ${height}" role="img" aria-label="近 30 天每日销量柱状图与广告费折线图">${grid}${bars}<path class="product-dashboard-trend-line" d="${path}"/>${points.map((point) => `<circle class="product-dashboard-trend-point" cx="${point.x}" cy="${point.y}" r="3"/>`).join("")}${labels}</svg>
+        <details class="product-dashboard-daily"><summary>查看逐日数据</summary><div class="table-scroll"><table><thead><tr><th>日期</th><th class="num">销量</th><th class="num">销售额</th><th class="num">广告费</th><th class="num">广告销售</th></tr></thead><tbody>${tableRows}</tbody></table></div></details>`;
+    }
+
+    function productDashboardSignals(summary = {}) {
+      const days = summary.daysOfSupply;
+      const inventorySignal = days == null
+        ? { tone: "muted", title: "库存覆盖待判断", detail: "近 30 天暂无销量，不能用销量推算库存覆盖天数。" }
+        : days < 14
+          ? { tone: "risk", title: "WFS 库存偏紧", detail: `按近 30 天日均销量估算，仅可覆盖约 ${number(days).toFixed(1)} 天。` }
+          : days > 90
+            ? { tone: "warn", title: "WFS 库存覆盖偏高", detail: `按近 30 天日均销量估算，可覆盖约 ${number(days).toFixed(1)} 天。` }
+            : { tone: "good", title: "WFS 库存覆盖正常", detail: `按近 30 天日均销量估算，可覆盖约 ${number(days).toFixed(1)} 天。` };
+      const adSignal = number(summary.adSpend) <= 0
+        ? { tone: "muted", title: "当前窗口无广告消耗", detail: "该款近 30 天没有 AD_ITEM 广告花费。" }
+        : number(summary.roas) >= 3
+          ? { tone: "good", title: "广告产出较强", detail: `ROAS ${number(summary.roas).toFixed(2)}，ACOS ${percent(summary.acos)}。` }
+          : number(summary.roas) < 1.5
+            ? { tone: "risk", title: "广告效率需要关注", detail: `ROAS ${number(summary.roas).toFixed(2)}，ACOS ${percent(summary.acos)}。` }
+            : { tone: "warn", title: "广告仍在优化区间", detail: `ROAS ${number(summary.roas).toFixed(2)}，转化率 ${percent(summary.conversionRate)}。` };
+      return [inventorySignal, adSignal].map((signal) => `<article class="product-dashboard-signal ${signal.tone}"><i></i><div><strong>${signal.title}</strong><p>${signal.detail}</p></div></article>`).join("");
+    }
+
     function renderProductDetail(product) {
       const groups = productColorGroups(product);
+      const dashboard = product.dashboard || {};
+      const summary = dashboard.summary || {};
       const initialIndex = Math.max(0, groups.findIndex((group) => group.primaryColor));
       const initialGroup = groups[initialIndex] || {};
       const heroImage = initialGroup.images?.[0] || initialGroup.mainImageUrl || product.mainImageUrl;
@@ -7252,10 +7618,49 @@
           ${group.primaryColor ? `<span class="primary-color-marker">主体色</span>` : ""}
         </button>`;
       }).join("");
-      $("#productDrawerTitle").textContent = product.title || product.parentSku;
-      $("#productDrawerSku").textContent = `${product.parentSku} · ${groups.length} 个颜色组 · ${product.variantCount} 个 SKU`;
-      $("#productDrawerBody").innerHTML = `
-        <div class="product-overview">
+      $("#productDashboardTitle").textContent = product.title || product.parentSku;
+      $("#productDashboardSku").textContent = product.parentSku;
+      $("#productDashboardMeta").textContent = `${groups.length} 个颜色组 · ${product.variantCount} 个 SKU · 数据窗口 ${product.dashboard?.startDate || "—"} 至 ${product.dashboard?.endDate || "—"}`;
+      $("#productDashboardBody").innerHTML = `
+        <section class="product-dashboard-overview" id="productDashboardOverview">
+          <div class="product-dashboard-section-head">
+            <div><span>PERFORMANCE SNAPSHOT</span><h3>经营总览</h3><p>${escapeHtml(dashboard.startDate || "—")} 至 ${escapeHtml(dashboard.endDate || "—")}，销售与广告按同一可比窗口汇总。</p></div>
+            <div class="product-dashboard-freshness-list" aria-label="数据更新时间">
+              ${productDashboardFreshness("销量", dashboard.salesDataDate)}
+              ${productDashboardFreshness("广告", dashboard.adsDataDate)}
+              ${productDashboardFreshness("WFS库存", dashboard.inventoryDataAt)}
+              ${productDashboardFreshness("国内仓", dashboard.domesticDataAt)}
+              ${productDashboardFreshness("路途", dashboard.transitDataAt)}
+            </div>
+          </div>
+          <div class="product-dashboard-kpi-grid">
+            ${productDashboardMetric("近30天销量", `${integer(summary.salesUnits)} 件`, `${integer(summary.orders)} 个订单`, "primary")}
+            ${productDashboardMetric("销售额", money(summary.revenue, 2), `均价 ${money(summary.averageSellingPrice, 2)}`)}
+            ${productDashboardMetric("WFS 可售", `${integer(summary.wfsAvailable)} 件`, summary.daysOfSupply == null ? "暂无覆盖天数" : `约 ${number(summary.daysOfSupply).toFixed(1)} 天覆盖`, "inventory")}
+            ${productDashboardMetric("国内仓", `${integer(summary.domesticAvailable)} 件`, "可用于后续补货", "inventory")}
+            ${productDashboardMetric("路途库存", `${integer(summary.transitUnits)} 件`, "已申报 / 已发货 / 入库中", "inventory")}
+            ${productDashboardMetric("广告费", money(summary.adSpend, 2), `${integer(summary.clicks)} 点击`, "cost")}
+            ${productDashboardMetric("广告 ROAS", ratio(summary.roas), `ACOS ${percent(summary.acos)}`, number(summary.roas) >= 3 ? "good" : "")}
+            ${productDashboardMetric("当前退款率", product.refundRate == null ? "0.00%" : percent(product.refundRate, 2), refundSourceText(product.refundRateSource), "refund")}
+          </div>
+          <div class="product-dashboard-analysis-grid">
+            <section class="product-dashboard-panel product-dashboard-trend-panel" aria-labelledby="productDashboardTrendTitle">
+              <div class="product-dashboard-panel-head"><div><h3 id="productDashboardTrendTitle">销量与广告趋势</h3><p>柱状为销量，折线为广告费；悬停柱状可查看单日值。</p></div><span>${integer(summary.salesUnits)} 件 / ${money(summary.adSpend, 2)}</span></div>
+              ${productDashboardTrendMarkup(dashboard.trend || [])}
+            </section>
+            <aside class="product-dashboard-panel product-dashboard-decision-panel" aria-labelledby="productDashboardDecisionTitle">
+              <div class="product-dashboard-panel-head"><div><h3 id="productDashboardDecisionTitle">快速判断</h3><p>用库存覆盖和广告产出先定位需要处理的方向。</p></div></div>
+              <div class="product-dashboard-signal-list">${productDashboardSignals(summary)}</div>
+              <dl class="product-dashboard-ratio-list">
+                <div><dt>广告销售额</dt><dd>${money(summary.adSales, 2)}</dd></div>
+                <div><dt>广告订单</dt><dd>${integer(summary.adOrders)}</dd></div>
+                <div><dt>曝光 / 点击</dt><dd>${integer(summary.impressions)} / ${integer(summary.clicks)}</dd></div>
+                <div><dt>CTR / 转化率</dt><dd>${percent(summary.ctr)} / ${percent(summary.conversionRate)}</dd></div>
+              </dl>
+            </aside>
+          </div>
+        </section>
+        <div class="product-overview" id="productDashboardStructure">
           <div class="product-visual">
             <div class="product-subject-label"><span>产品组主体</span><strong>${escapeHtml(product.parentSku)}</strong></div>
             ${thumbTag("product-hero-image", heroImage, product.parentSku, product.title || product.parentSku, `id="productHeroImage"${heroImage ? "" : " hidden"}`)}
@@ -7274,7 +7679,7 @@
             </div>
           </div>
         </div>
-        <section class="product-detail-section">
+        <section class="product-detail-section" id="productDashboardSettings">
           <div class="apparel-section-header"><div><h3>经营标签</h3><p>清货款会停止国内仓发货和工厂做货；春夏、秋冬和四季款用于经营筛选，不会强制覆盖模型预测。</p></div><span class="apparel-section-meta">父款生效</span></div>
           <div class="product-tag-editor">
             <fieldset class="product-tag-options"><legend>经营标签</legend>
@@ -7284,7 +7689,7 @@
             <div class="product-tag-actions"><span class="product-tag-save-status" id="productTagSaveStatus" role="status" aria-live="polite"></span><button class="primary-button" id="saveProductTags" type="button">保存经营标签</button></div>
           </div>
         </section>
-        <section class="product-detail-section">
+        <section class="product-detail-section" id="productDashboardVariants">
           <div class="apparel-section-header"><div><h3>颜色、图片与尺码</h3><p>点击颜色查看该颜色的 SKU；再次点击已选中的颜色可取消选择，直接显示该款全部 SKU。</p></div><span class="apparel-section-meta">${integer(groups.length)} COLOR GROUPS</span></div>
           <div class="color-group-list" id="productColorGroups">${colorButtons || `<div class="empty-state"><strong>暂无颜色组</strong>请核对上传表中的颜色字段。</div>`}</div>
           <div class="color-group-panel">
@@ -7370,7 +7775,7 @@
           product.seasonType = payload.data?.seasonType || seasonType;
           invalidateProductCache();
           await Promise.all([loadProducts({ force: true }), fetchInventoryData(), loadDemandForecast()]);
-          await openProductDrawer(product.parentSku);
+          await openProductDashboard(product.parentSku, { refresh: true, pushHistory: false });
           showToast(clearance ? "已标记为清货款，做货建议已停止" : "经营标签已保存，做货建议已刷新");
         } catch (error) {
           status.textContent = `保存失败：${error.message}`;
@@ -7409,7 +7814,7 @@
           if (!response.ok || !payload.success) throw new Error(payload.message || `HTTP ${response.status}`);
           status.textContent = "已保存，正在刷新…";
           invalidateProductCache();
-          await Promise.all([openProductDrawer(product.parentSku), loadProducts({ force: true })]);
+          await Promise.all([openProductDashboard(product.parentSku, { refresh: true, pushHistory: false }), loadProducts({ force: true })]);
         } catch (error) {
           status.textContent = `保存失败：${error.message}`;
           saveButton.disabled = false;
@@ -7417,24 +7822,36 @@
       });
     }
 
-    /**
-     * 详情抽屉同样是「先秒开、再校验」：命中内存缓存直接渲染，
-     * 随后带 ETag 回源 —— 详情没变服务端回 304，连 328KB 的变体/图片清单都不用重算重传。
-     */
-    async function openProductDrawer(parentSku) {
-      const drawer = $("#productDrawer");
-      const cached = state.productDetailCache.get(parentSku);
-      if (cached) {
-        renderProductDetail(cached);
-      } else {
-        $("#productDrawerTitle").textContent = "正在读取产品详情";
-        $("#productDrawerSku").textContent = parentSku;
-        $("#productDrawerBody").innerHTML = `<div class="empty-state"><strong>正在解析 Listing 与图片</strong>请稍候。</div>`;
+    /** 款号驾驶舱先用内存缓存秒开，再带 ETag 校验；强制刷新时跳过缓存并回源。 */
+    async function openProductDashboard(parentSku, options = {}) {
+      const pushHistory = options.pushHistory !== false;
+      const refresh = options.refresh === true;
+      const moveFocus = options.moveFocus !== false && !refresh;
+      if (state.view !== "products") {
+        switchView("products", { preserveHistory: true, keepProductDashboard: true });
       }
-      if (!drawer.open) drawer.showModal();
+      if (options.trigger) state.productDashboardTrigger = options.trigger;
+      state.productDashboardSku = parentSku;
+      $("#productCatalogScreen").hidden = true;
+      $("#productDashboardScreen").hidden = false;
+      document.body.classList.add("product-dashboard-active");
+      if (pushHistory && location.hash !== `#products/${encodeURIComponent(parentSku)}`) {
+        history.pushState({ view: "products", parentSku }, "", `#products/${encodeURIComponent(parentSku)}`);
+      }
+      const cached = state.productDetailCache.get(parentSku);
+      if (cached && !refresh) {
+        renderProductDetail(cached);
+        if (moveFocus) requestAnimationFrame(() => $("#productDashboardTitle").focus());
+      } else {
+        $("#productDashboardTitle").textContent = "正在读取款号数据";
+        $("#productDashboardSku").textContent = parentSku;
+        $("#productDashboardMeta").textContent = "正在汇总库存、销量、广告和变体表现";
+        $("#productDashboardBody").innerHTML = `<div class="empty-state product-dashboard-loading"><strong>正在生成款号仪表盘</strong>正在关联 Listing、三段库存、近 30 天销量与广告数据。</div>`;
+      }
+      window.scrollTo({ top: 0, behavior: "auto" });
       try {
         const headers = {};
-        const previousEtag = state.productDetailEtag.get(parentSku);
+        const previousEtag = refresh ? "" : state.productDetailEtag.get(parentSku);
         if (previousEtag) headers["If-None-Match"] = previousEtag;
         const response = await fetch(`/api/products/${encodeURIComponent(parentSku)}`, { headers, cache: "no-store" });
         if (response.status === 304) return;
@@ -7445,13 +7862,28 @@
         state.productDetailEtag.set(parentSku, etag);
         state.productRawFieldsCache.delete(parentSku);
         renderProductDetail(payload.data);
+        if (!cached && moveFocus) requestAnimationFrame(() => $("#productDashboardTitle").focus());
       } catch (error) {
         if (cached) {
           showToast(error.message || "产品详情刷新失败");
         } else {
-          $("#productDrawerBody").innerHTML = `<div class="empty-state"><strong>产品详情读取失败</strong>${escapeHtml(error.message)}</div>`;
+          $("#productDashboardBody").innerHTML = `<div class="empty-state"><strong>款号仪表盘读取失败</strong>${escapeHtml(error.message)}</div>`;
         }
       }
+    }
+
+    function closeProductDashboard(options = {}) {
+      if (!state.productDashboardSku) return;
+      const trigger = state.productDashboardTrigger;
+      state.productDashboardSku = null;
+      $("#productDashboardScreen").hidden = true;
+      $("#productCatalogScreen").hidden = false;
+      document.body.classList.remove("product-dashboard-active");
+      if (options.updateHistory !== false && location.hash.startsWith("#products/")) {
+        history.replaceState({ view: "products" }, "", "#products");
+      }
+      window.scrollTo({ top: 0, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+      if (options.restoreFocus !== false && trigger?.isConnected) requestAnimationFrame(() => trigger.focus());
     }
 
     function applyCatalogPayload(data) {
@@ -7545,19 +7977,25 @@
     }
 
     async function loadInventory() {
-      if (state.inventoryLoading) return;
+      if (state.inventoryPromise) return state.inventoryPromise;
       state.inventoryLoading = true;
       $("#inventoryByStyleBody").innerHTML = emptyRow(13, "正在读取库存与销量", "请稍候。");
-      try {
-        await fetchInventoryData();
-        renderInventory();
-      } catch (error) {
-        $("#inventoryStatusHeadline").textContent = "库存读取失败";
-        $("#inventoryStatusDetail").textContent = error.message;
-        $("#inventoryByStyleBody").innerHTML = emptyRow(13, "库存读取失败", escapeHtml(error.message));
-      } finally {
-        state.inventoryLoading = false;
-      }
+      state.inventoryPromise = (async () => {
+        try {
+          await fetchInventoryData();
+          renderInventory();
+          return state.inventory;
+        } catch (error) {
+          $("#inventoryStatusHeadline").textContent = "库存读取失败";
+          $("#inventoryStatusDetail").textContent = error.message;
+          $("#inventoryByStyleBody").innerHTML = emptyRow(13, "库存读取失败", escapeHtml(error.message));
+          return null;
+        } finally {
+          state.inventoryLoading = false;
+          state.inventoryPromise = null;
+        }
+      })();
+      return state.inventoryPromise;
     }
 
     async function fetchInventoryData() {
@@ -8679,13 +9117,13 @@
       const system = currentConnectorSystem("SUPPLY_CHAIN");
       if (system?.status === "CONNECTED") {
         if (card) card.dataset.tone = "ok";
-        detail.textContent = `供应链会话已加密保存${system.lastValidatedAt ? ` · 最近验证 ${supplyChainDateTime(system.lastValidatedAt)}` : ""}；同步时由工作台按需启动系统 Chrome。`;
+        detail.textContent = `已识别当前 Chrome 的供应链会话${system.lastValidatedAt ? ` · 最近验证 ${supplyChainDateTime(system.lastValidatedAt)}` : ""}；业务页面始终读取本地数据库。`;
       } else if (system?.status === "LOGINING") {
         if (card) card.dataset.tone = "warning";
-        detail.textContent = "供应链登录窗口已经打开，完成登录后会自动关闭并立即同步。";
+        detail.textContent = "已打开供应链登录标签；登录完成后扩展会自动识别并同步。";
       } else {
         if (card) card.dataset.tone = "idle";
-        detail.textContent = system?.message || "供应链尚未登录，请在数据连接页面完成一次登录。";
+        detail.textContent = system?.message || "供应链尚未登录，请在数据中心的“自动同步”页签完成一次登录。";
       }
     }
 
@@ -9783,6 +10221,7 @@
         if (!response.ok || !payload.success) throw new Error(payload.message || `HTTP ${response.status}`);
         const result = payload.data || {};
         if (!result.accepted) throw new Error(result.message || "已有同步任务正在运行");
+        await publishCurrentChromeBridge(result.workspaceId, { action: "SYNC", source: "SUPPLY_CHAIN" });
         showToast("供应链同步任务已启动，页面会自动刷新进度");
         loadConnectorStatus(true);
         state.supplyChain = null;
@@ -12214,15 +12653,25 @@
         const nameElement = document.getElementById("workspaceChipName");
         if (nameElement) nameElement.textContent = name;
         const chip = document.getElementById("workspaceChip");
-        if (chip) chip.setAttribute("aria-label", `当前店铺 ${name}，打开店铺与同步设置`);
+        if (chip) chip.setAttribute("aria-label", `当前店铺 ${name}，前往店铺管理`);
       } catch (error) {
         // 工作区身份只用于页头显示，业务数据读取仍由服务端会话强制约束。
       }
     }
 
-    function switchView(view) {
+    function switchView(view, options = {}) {
+      if (view === "connectors" || view === "imports") {
+        state.dataCenterTab = view === "connectors" ? "sync" : "uploads";
+        view = "data-center";
+      }
+      if (state.productDashboardSku && !options.keepProductDashboard) {
+        closeProductDashboard({ updateHistory: false, restoreFocus: false });
+      }
+      if (state.inventoryStyleDashboardSku && !options.keepInventoryStyleDashboard) {
+        closeInventoryStyleDashboard({ updateHistory: false, restoreFocus: false });
+      }
       state.view = view;
-      history.replaceState(null, "", `#${view}`);
+      if (!options.preserveHistory) history.replaceState({ view }, "", `#${view}`);
       $$(".nav-button").forEach((button) => button.classList.toggle("active", button.dataset.view === view));
       $$(".view").forEach((section) => section.classList.toggle("active", section.id === `view-${view}`));
       $("#pageTitle").textContent = titles[view];
@@ -12258,11 +12707,13 @@
         if (!state.aiStatus) loadAiStatus();
         Promise.all([loadAgentModels(), loadAgentSkills()]).then(loadAgentConversations);
       }
-      if (view === "connectors") loadConnectorStatus(true);
-      if (view === "imports") {
-        loadBatches();
-        loadDomesticInventorySource();
-        loadWfsShipmentSource();
+      if (view === "data-center") {
+        setDataCenterTab(state.dataCenterTab);
+        refreshDataCenter(true);
+      }
+      if (view === "workspace") {
+        const frame = $("#workspacePageFrame");
+        if (frame && frame.src === "about:blank") frame.src = frame.dataset.src;
       }
       if (view === "wfs-settlement" || view === "wfs-storage") {
         const tg = document.querySelector('[data-nav-group="wfs"]');
@@ -12883,7 +13334,14 @@
         counter.textContent = `${selectedCount}/${importSources.length}`;
       });
       const uploadButton = $("#uploadImportPageButton");
-      if (uploadButton) uploadButton.disabled = state.importRunning || selectedCount === 0;
+      if (uploadButton) {
+        uploadButton.disabled = state.importRunning || selectedCount === 0;
+        if (!state.importRunning) {
+          uploadButton.textContent = state.importSources.has("PRODUCT")
+            ? "上传并预览产品差异"
+            : "选择文件上传（可多选）";
+        }
+      }
     }
 
     function initializeImportControls() {
@@ -12956,8 +13414,174 @@
       input.click();
     }
 
+    function productImportRows(preview, tab) {
+      if (!preview) return [];
+      if (tab === "add") return preview.additions || [];
+      if (tab === "update") return preview.updates || [];
+      if (tab === "retire") return preview.retirements || [];
+      return preview.conflicts || [];
+    }
+
+    function productImportRowMatches(row, query) {
+      if (!query) return true;
+      const fieldText = (row.fields || []).flatMap((field) => typeof field === "object"
+        ? [field.field, field.label, field.beforeValue, field.afterValue]
+        : [field]);
+      const text = [row.sku, row.parentSku, row.productName, row.color, row.size,
+        ...fieldText, ...(row.rowNumbers || [])].join(" ").toLowerCase();
+      return text.includes(query.toLowerCase());
+    }
+
+    function renderProductImportPreview() {
+      const preview = state.productImportPreview;
+      if (!preview) return;
+      const summary = preview.summary || {};
+      const metrics = [
+        { tone: "", label: "有效清单", value: summary.uniqueSkuCount || 0, note: `${summary.sourceRows || 0} 个源数据行` },
+        { tone: "add", label: "新增", value: summary.addedSkuCount || 0, note: `${summary.addedStyleCount || 0} 款 · 含恢复 ${summary.restoredSkuCount || 0}` },
+        { tone: "update", label: "修改", value: summary.updatedSkuCount || 0, note: `${summary.updatedStyleCount || 0} 款 · 仅非空字段` },
+        { tone: "retire", label: "停用", value: summary.retiredSkuCount || 0, note: `${summary.retiredStyleCount || 0} 款 · 整款 ${summary.wholeStyleRetiredCount || 0}` },
+        { tone: summary.conflictSkuCount ? "conflict" : "", label: "保持不变", value: summary.unchangedSkuCount || 0, note: summary.conflictSkuCount ? `${summary.conflictSkuCount} 个冲突待修正` : "不会重复计为修改" },
+      ];
+      $("#productImportSummary").innerHTML = metrics.map((item) => `
+        <div class="product-import-metric ${item.tone}"><span>${item.label}</span><strong>${integer(item.value)}</strong><small>${item.note}</small></div>`).join("");
+      $("#productImportPreviewSubtitle").textContent = `${preview.fileName || "产品上传表"} · 预览 ${new Date().toLocaleString("zh-CN", { hour12: false })}`;
+
+      const warning = $("#productImportWarning");
+      const warnings = [];
+      if (summary.conflictSkuCount) warnings.push(`发现 ${summary.conflictSkuCount} 个重复 SKU 内容冲突，当前文件不能导入。请根据冲突页签中的行号和字段修正表格。`);
+      if (summary.wholeStyleRetiredCount) warnings.push(`有 ${summary.wholeStyleRetiredCount} 款会整款停用，请重点核对“停用”页签。`);
+      if (summary.retiredSkuCount) warnings.push("本次文件按完整产品清单处理，文件中未出现的现有 SKU 会软停用。历史订单、广告和库存不会删除。");
+      warning.hidden = warnings.length === 0;
+      warning.innerHTML = warnings.map((item) => `<div>${escapeHtml(item)}</div>`).join("");
+
+      const tabCounts = {
+        add: preview.additions?.length || 0,
+        update: preview.updates?.length || 0,
+        retire: preview.retirements?.length || 0,
+        conflict: preview.conflicts?.length || 0,
+      };
+      $$("#productImportTabs [data-product-import-tab]").forEach((button) => {
+        const tab = button.dataset.productImportTab;
+        button.classList.toggle("active", tab === state.productImportTab);
+        const count = button.querySelector("span");
+        if (count) count.textContent = integer(tabCounts[tab]);
+      });
+
+      const query = state.productImportSearch.trim();
+      const rows = productImportRows(preview, state.productImportTab).filter((row) => productImportRowMatches(row, query));
+      const list = $("#productImportList");
+      if (!rows.length) {
+        list.innerHTML = `<div class="product-import-empty">${query ? "没有匹配的差异" : "当前分类没有差异"}</div>`;
+      } else if (state.productImportTab === "conflict") {
+        list.innerHTML = rows.map((row) => `
+          <details class="product-import-row">
+            <summary><div class="product-import-id"><strong>${escapeHtml(row.sku)}</strong><span>重复 SKU 内容不一致</span></div><div class="product-import-meta"><strong>Excel 行号</strong><span>${escapeHtml((row.rowNumbers || []).join("、"))}</span></div><div class="product-import-meta"><strong>冲突字段</strong><span>${escapeHtml((row.fields || []).join("、"))}</span></div><div class="product-import-badges"><span class="product-import-badge conflict">阻止导入</span></div></summary>
+            <div class="product-import-conflict-lines">请检查第 ${escapeHtml((row.rowNumbers || []).join("、"))} 行；冲突字段：${escapeHtml((row.fields || []).join("、"))}。相同 SKU 的内容完全一致时系统会自动合并。</div>
+          </details>`).join("");
+      } else {
+        const actionCopy = state.productImportTab === "add" ? "新增" : state.productImportTab === "update" ? "修改" : "停用";
+        list.innerHTML = rows.map((row) => {
+          const fields = row.fields || [];
+          const detail = fields.length ? fields.map((field) => `
+            <div class="product-import-field"><span class="product-import-field-name">${escapeHtml(field.label || field.field)}</span><span class="product-import-field-old">${escapeHtml(field.beforeValue ?? "—")}</span><span class="product-import-field-arrow">→</span><span class="product-import-field-new">${escapeHtml(field.afterValue ?? "—")}</span></div>`).join("") : `<div class="product-import-conflict-lines">基础资料没有字段变化；本次操作用于恢复该 SKU 的在售状态。</div>`;
+          return `<details class="product-import-row">
+            <summary><div class="product-import-id"><strong>${escapeHtml(row.sku)}</strong><span>${escapeHtml(row.parentSku || "无款号")}</span></div><div class="product-import-meta"><strong>${escapeHtml(row.productName || "未填写商品名称")}</strong><span>${escapeHtml(row.color || "无颜色")} · ${escapeHtml(row.size || "无尺码")}</span></div><div class="product-import-meta"><strong>${fields.length} 个字段变化</strong><span>${row.wholeStyle ? "该款全部 SKU 将停用" : row.restored ? "历史 SKU 将恢复" : "点击查看逐字段差异"}</span></div><div class="product-import-badges"><span class="product-import-badge ${state.productImportTab}">${actionCopy}</span>${row.restored ? '<span class="product-import-badge add">恢复</span>' : ""}${row.wholeStyle ? '<span class="product-import-badge danger">整款停用</span>' : ""}</div></summary>
+            <div class="product-import-fields">${detail}</div>
+          </details>`;
+        }).join("");
+      }
+
+      const confirm = $("#confirmProductImport");
+      confirm.disabled = !preview.canConfirm || state.importRunning;
+      confirm.textContent = preview.canConfirm
+        ? `确认导入：新增 ${integer(summary.addedSkuCount || 0)}、修改 ${integer(summary.updatedSkuCount || 0)}、停用 ${integer(summary.retiredSkuCount || 0)}`
+        : "请先修正冲突";
+      $("#productImportFooterTitle").textContent = preview.canConfirm ? "确认后写入当前店铺产品库" : "当前文件不能导入";
+      $("#productImportFooterDetail").textContent = preview.canConfirm
+        ? `预览有效至 ${preview.expiresAt ? new Date(preview.expiresAt).toLocaleTimeString("zh-CN", { hour12: false }) : "30 分钟后"}，确认时会再次校验产品库版本。`
+        : "产品库尚未发生任何变化。";
+    }
+
+    function openProductImportPreview(preview) {
+      state.productImportPreview = preview;
+      state.productImportSearch = "";
+      state.productImportTab = preview.conflicts?.length ? "conflict"
+        : preview.updates?.length ? "update"
+          : preview.additions?.length ? "add" : "retire";
+      $("#productImportSearch").value = "";
+      renderProductImportPreview();
+      $("#productImportPreviewDrawer").showModal();
+    }
+
+    async function discardProductImportPreview() {
+      const preview = state.productImportPreview;
+      state.productImportPreview = null;
+      if ($("#productImportPreviewDrawer").open) $("#productImportPreviewDrawer").close();
+      if (!preview?.token) return;
+      try { await fetch(`/api/imports/products/previews/${encodeURIComponent(preview.token)}`, { method: "DELETE" }); } catch (_) { /* expires automatically */ }
+    }
+
+    async function previewProductImport(file) {
+      const button = $("#uploadImportPageButton");
+      const body = new FormData();
+      body.append("file", file, file.name);
+      state.importRunning = true;
+      if (button) { button.disabled = true; button.textContent = "正在生成产品差异…"; }
+      try {
+        const response = await fetch("/api/imports/products/preview", { method: "POST", body });
+        const payload = await response.json();
+        if (!response.ok || !payload.success) throw new Error(payload.message || `HTTP ${response.status}`);
+        openProductImportPreview(payload.data);
+      } catch (error) {
+        showToast(`产品预览失败：${error.message}`);
+      } finally {
+        state.importRunning = false;
+        if (button) button.textContent = "选择文件上传（可多选）";
+        syncImportControls();
+        renderProductImportPreview();
+      }
+    }
+
+    async function confirmProductImport() {
+      const preview = state.productImportPreview;
+      if (!preview?.canConfirm || !preview.token || state.importRunning) return;
+      state.importRunning = true;
+      renderProductImportPreview();
+      try {
+        const response = await fetch(`/api/imports/products/previews/${encodeURIComponent(preview.token)}/confirm`, { method: "POST" });
+        const payload = await response.json();
+        if (!response.ok || !payload.success) throw new Error(payload.message || `HTTP ${response.status}`);
+        state.productImportPreview = null;
+        $("#productImportPreviewDrawer").close();
+        invalidateProductCache();
+        showToast("产品库已按确认差异更新");
+        await loadBatches();
+      } catch (error) {
+        showToast(`产品导入失败：${error.message}`);
+        if (/发生变化|过期|不存在/.test(error.message || "")) {
+          state.productImportPreview = null;
+          $("#productImportPreviewDrawer").close();
+        }
+      } finally {
+        state.importRunning = false;
+        syncImportControls();
+        renderProductImportPreview();
+      }
+    }
+
     async function uploadWorkspaceImport(files, source) {
       if (!files || files.length === 0 || !source || state.importRunning) return;
+      if (source === "PRODUCT") {
+        if (files.length !== 1) {
+          showToast("产品资料每次只能上传一个完整清单。");
+          return;
+        }
+        await previewProductImport(files[0]);
+        const productInput = $("#workspaceImportFile");
+        if (productInput) productInput.value = "";
+        return;
+      }
       const buttons = [$("#uploadImportPageButton")].filter(Boolean);
       const input = $("#workspaceImportFile");
       const body = new FormData();
@@ -12986,6 +13610,222 @@
       }
     }
 
+    const dataCenterTabs = new Set(["overview", "sync", "uploads", "history"]);
+
+    function setDataCenterTab(tab, options = {}) {
+      const nextTab = dataCenterTabs.has(tab) ? tab : "overview";
+      state.dataCenterTab = nextTab;
+      $$('[data-data-center-tab]').forEach((button) => {
+        const active = button.dataset.dataCenterTab === nextTab;
+        button.classList.toggle("active", active);
+        button.setAttribute("aria-selected", String(active));
+        button.tabIndex = active ? 0 : -1;
+        if (active && options.focus) button.focus();
+      });
+      $$('[data-data-center-panel]').forEach((panel) => {
+        panel.hidden = panel.dataset.dataCenterPanel !== nextTab;
+      });
+    }
+
+    async function refreshDataCenter(force = false) {
+      const button = $("#refreshConnectorsButton");
+      if (button) {
+        button.disabled = true;
+        button.setAttribute("aria-busy", "true");
+        button.textContent = "正在刷新…";
+      }
+      try {
+        await Promise.allSettled([
+          loadConnectorStatus(force),
+          loadDataCenterSyncPlan(force),
+          loadDomesticInventorySource(),
+          loadWfsShipmentSource(),
+          loadBatches(),
+        ]);
+        renderDataCenterOverview();
+      } finally {
+        if (button) {
+          button.disabled = false;
+          button.removeAttribute("aria-busy");
+          button.textContent = "刷新全部状态";
+        }
+      }
+    }
+
+    const workspaceSyncLabels = {
+      PRODUCTS: "商品 / SKU", SALES: "订单 / 销量", ADS: "广告全量",
+      INVENTORY: "当前库存", REVIEWS: "店铺评价", HISTORY: "历史回填",
+    };
+    const workspaceSyncStatusLabels = {
+      SUCCESS: "已同步", PARTIAL: "部分完成", FAILED: "同步失败",
+      RUNNING: "同步中", DEFERRED: "限流等待 · 自动重试",
+      SKIPPED: "等待领星结算", UNCONFIGURED: "待配置",
+    };
+
+    function workspaceSyncStatus(value) {
+      return workspaceSyncStatusLabels[value] || value || "尚未运行";
+    }
+
+    function workspaceSyncCadence(item) {
+      if (item.cadence === "SIX_HOURLY") return `每 6 小时（0/6/12/18 点）第 ${item.staggerMinute} 分钟`;
+      if (item.cadence === "HOURLY") return `每小时错峰第 ${item.staggerMinute} 分钟`;
+      if (item.cadence === "DAILY") return `每日错峰第 ${item.staggerMinute} 分钟`;
+      return "低优先级后台任务";
+    }
+
+    function workspaceInitializationLabel(value) {
+      return ({ PENDING_CONFIG: "等待店铺配置", SYNCING: "正在初始化同步", READY: "初始化完成", FAILED: "初始化需要处理" })[value] || value || "等待初始化";
+    }
+
+    function renderDataCenterSyncPlan(account = null) {
+      const settings = state.workspaceSyncSettings || [];
+      const runtime = settings[0] || {};
+      const runtimeElement = $("#dataCenterMcpRuntime");
+      if (runtimeElement) {
+        runtimeElement.dataset.tone = runtime.mcpCoolingDown ? "warn" : settings.length ? "ok" : "loading";
+        runtimeElement.innerHTML = runtime.mcpCoolingDown
+          ? `<span class="data-center-runtime-dot" aria-hidden="true"></span><div><strong>领星 MCP 正在冷却</strong><small>预计 ${connectorDateTime(runtime.mcpLimitedUntil)} 自动恢复；按钮和定时任务不会绕过冷却重复请求。</small></div>`
+          : `<span class="data-center-runtime-dot" aria-hidden="true"></span><div><strong>MCP 请求通道正常 · 全局串行队列</strong><small>商品、库存、销量、广告和评价共用会话与限速；最近请求 ${connectorDateTime(runtime.mcpLastRequestAt)}</small></div>`;
+      }
+      const cards = $("#dataCenterSyncPlanCards");
+      if (cards) cards.innerHTML = settings.map((item) => `<article class="data-center-sync-plan-card" data-status="${escapeHtml(item.lastStatus || "IDLE")}" data-enabled="${item.enabled}">
+        <div class="data-center-sync-plan-head"><div><span>${escapeHtml(workspaceSyncCadence(item))}</span><strong>${escapeHtml(workspaceSyncLabels[item.category] || item.category)}</strong></div><button class="data-center-switch ${item.enabled ? "on" : ""}" type="button" data-workspace-sync="${escapeHtml(item.category)}" data-enabled="${item.enabled}" aria-label="${item.enabled ? "暂停" : "启用"}${escapeHtml(workspaceSyncLabels[item.category] || item.category)}同步" aria-pressed="${item.enabled}"><span aria-hidden="true"></span></button></div>
+        <div class="data-center-sync-counts"><span>读取<b>${item.lastFetchedCount ?? "—"}</b></span><span>写入<b>${item.lastWrittenCount ?? "—"}</b></span><span>校验<b>${escapeHtml(item.integrityStatus || "—")}</b></span></div>
+        ${item.lastMessage ? `<p title="${escapeHtml(item.lastMessage)}">${escapeHtml(item.lastMessage)}</p>` : ""}
+        <footer><span class="data-center-sync-state" data-status="${escapeHtml(item.lastStatus || "IDLE")}">${escapeHtml(workspaceSyncStatus(item.lastStatus))}</span><time>有效数据 ${connectorDateTime(item.lastValidDataAt || item.lastCompletedAt)}</time></footer>
+      </article>`).join("") || `<div class="empty-grid-state"><strong>暂无同步配置</strong><span>请先在店铺管理中完成领星连接。</span></div>`;
+
+      const init = account || {};
+      const initHeadline = $("#dataCenterInitHeadline");
+      const initMessage = $("#dataCenterInitMessage");
+      const initTrack = $("#dataCenterInitTrack");
+      if (initHeadline) initHeadline.textContent = workspaceInitializationLabel(init.initializationStatus);
+      if (initMessage) initMessage.textContent = init.initializationMessage || "先同步商品与当前库存，历史数据在后台继续回填。";
+      if (initTrack) initTrack.style.width = `${({ PENDING_CONFIG: 5, SYNCING: 46, READY: 100, FAILED: 28 })[init.initializationStatus] || 12}%`;
+
+      const runList = $("#dataCenterWorkspaceSyncRuns");
+      if (runList) runList.innerHTML = (state.workspaceSyncRuns || []).map((run) => `<div class="data-center-workspace-run" data-status="${escapeHtml(run.status || "IDLE")}">
+        <span class="data-center-sync-state" data-status="${escapeHtml(run.status || "IDLE")}">${escapeHtml(workspaceSyncStatus(run.status))}</span>
+        <div><strong>${escapeHtml(workspaceSyncLabels[run.category] || run.category)} · ${escapeHtml(run.triggerSource || "—")}</strong><small>${escapeHtml(run.message || run.integrityStatus || "执行完成")}</small></div>
+        <div class="data-center-workspace-run-metrics"><span>读取 ${run.fetchedCount ?? "—"}</span><span>写入 ${run.writtenCount ?? "—"}</span><span>${run.durationMs == null ? "进行中" : `${(run.durationMs / 1000).toFixed(1)}s`}</span></div>
+        <time>${connectorDateTime(run.startedAt)}</time>
+      </div>`).join("") || `<div class="empty-grid-state"><strong>暂无领星业务同步记录</strong><span>任务运行后会在这里显示。</span></div>`;
+    }
+
+    async function loadDataCenterSyncPlan(force = false) {
+      if (state.workspaceSyncLoading && !force) return;
+      state.workspaceSyncLoading = true;
+      try {
+        const responses = await Promise.all([
+          fetch("/api/workspace/sync-settings", { cache: "no-store" }),
+          fetch("/api/workspace/sync-runs", { cache: "no-store" }),
+          fetch("/api/workspace/me", { cache: "no-store" }),
+        ]);
+        const payloads = await Promise.all(responses.map((response) => response.json().catch(() => ({}))));
+        responses.forEach((response, index) => {
+          if (!response.ok || !payloads[index].success) throw new Error(payloads[index].message || `HTTP ${response.status}`);
+        });
+        state.workspaceSyncSettings = payloads[0].data || [];
+        state.workspaceSyncRuns = payloads[1].data || [];
+        renderDataCenterSyncPlan(payloads[2].data || {});
+      } catch (error) {
+        const cards = $("#dataCenterSyncPlanCards");
+        const runs = $("#dataCenterWorkspaceSyncRuns");
+        if (cards) cards.innerHTML = `<div class="empty-grid-state"><strong>同步计划读取失败</strong><span>${escapeHtml(error.message)}</span></div>`;
+        if (runs) runs.innerHTML = `<div class="empty-grid-state"><strong>同步记录读取失败</strong><span>${escapeHtml(error.message)}</span></div>`;
+      } finally {
+        state.workspaceSyncLoading = false;
+      }
+    }
+
+    async function toggleWorkspaceSync(category, enabled, button) {
+      button.disabled = true;
+      try {
+        const response = await fetch(`/api/workspace/sync-settings/${encodeURIComponent(category)}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ enabled }),
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok || !payload.success) throw new Error(payload.message || `HTTP ${response.status}`);
+        showToast(`${workspaceSyncLabels[category] || category}同步已${enabled ? "启用" : "暂停"}`);
+        await loadDataCenterSyncPlan(true);
+      } catch (error) {
+        showToast(`同步计划修改失败：${error.message}`);
+        button.disabled = false;
+      }
+    }
+
+    function dataCenterEndpointSource(status, kind) {
+      if (!status) return { tone: "loading", status: "读取中", meta: "正在读取数据库中的数据源状态" };
+      if (!status.activeSource || status.activeSource === "NONE") {
+        return { tone: "error", status: "暂无数据", meta: "自动同步尚未成功，可使用文件补录兜底" };
+      }
+      const fileFallback = status.activeSource === "FILE_UPLOAD";
+      const stale = Boolean(status.stale);
+      const count = kind === "inventory"
+        ? `${integer(status.skuCount || 0)} 个 SKU · ${integer(status.availableUnits || 0)} 件`
+        : `${integer(status.shipmentCount || 0)} 个货件 · 在途 ${integer(status.transitUnits || 0)} 件`;
+      return {
+        tone: stale || fileFallback ? "warn" : "ok",
+        status: fileFallback ? "文件兜底" : stale ? "自动数据过期" : "自动同步",
+        meta: `${status.activeAt ? connectorDateTime(status.activeAt) : "时间未知"} · ${count}`,
+      };
+    }
+
+    function renderDataCenterOverview() {
+      const workspaces = state.connectors?.workspaces || [];
+      const systems = workspaces.flatMap((workspace) => workspace.systems || []);
+      const sources = workspaces.flatMap((workspace) => (workspace.sources || []).map((source) => ({ ...source, workspace })));
+      const enabledSources = sources.filter((source) => source.enabled);
+      const healthySources = enabledSources.filter((source) => ["SUCCESS", "RUNNING"].includes(source.status));
+      const connectedSystems = systems.filter((system) => system.status === "CONNECTED");
+      const totalRecords = enabledSources.reduce((sum, source) => sum + number(source.recordCount || 0), 0);
+      const latestSuccess = enabledSources.map((source) => source.lastSuccessAt).filter(Boolean)
+        .sort((left, right) => new Date(right) - new Date(left))[0];
+      const summary = $("#dataCenterSummary");
+      if (summary) {
+        const metrics = [
+          { label: "自动数据源", value: `${healthySources.length}/${enabledSources.length || 3}`, note: enabledSources.some((source) => ["FAILED", "LOGIN_REQUIRED"].includes(source.status)) ? "有数据源需要处理" : "按计划写入本地数据库" },
+          { label: "系统登录", value: `${connectedSystems.length}/${systems.length || 2}`, note: systems.length && connectedSystems.length === systems.length ? "领星与供应链会话正常" : "缺少登录时会提示处理" },
+          { label: "最近同步记录", value: integer(totalRecords), note: "自动连接器最近一次入库条数" },
+          { label: "最近成功", value: latestSuccess ? connectorDateTime(latestSuccess).split(" ").at(-1) : "—", note: latestSuccess ? connectorDateTime(latestSuccess).split(" ")[0] : "尚无成功记录" },
+        ];
+        summary.innerHTML = metrics.map((metric) => `<div class="data-center-summary-card"><span>${escapeHtml(metric.label)}</span><strong>${escapeHtml(metric.value)}</strong><small>${escapeHtml(metric.note)}</small></div>`).join("");
+      }
+
+      const supplySource = enabledSources.find((source) => source.sourceCode === "SUPPLY_CHAIN");
+      const supplyTone = supplySource?.status === "SUCCESS" ? "ok"
+        : supplySource?.status === "RUNNING" ? "running"
+          : ["FAILED", "LOGIN_REQUIRED"].includes(supplySource?.status) ? "error" : "warn";
+      const domestic = dataCenterEndpointSource(state.domesticSource, "inventory");
+      const wfs = dataCenterEndpointSource(state.wfsShipmentSource, "wfs");
+      const cards = [
+        { name: "产品资料", source: "文件维护", tone: "manual", status: "按需补录", meta: "完整清单上传；确认新增、修改与停用差异后写入", target: "uploads", importSource: "PRODUCT", action: "上传产品资料" },
+        { name: "月度退款", source: "文件维护", tone: "manual", status: "按月补录", meta: "上传 Customer returns 月度报表，退款率由数据库统一计算", target: "uploads", importSource: "RETURN_ORDER", action: "上传退款报表" },
+        { name: "国内仓库存", source: "领星", ...domestic, target: domestic.tone === "ok" ? "sync" : "uploads", action: domestic.tone === "ok" ? "查看同步" : "处理数据源" },
+        { name: "WFS 货件", source: "领星", ...wfs, target: wfs.tone === "ok" ? "sync" : "uploads", action: wfs.tone === "ok" ? "查看同步" : "处理数据源" },
+        { name: "生产与物流", source: "供应链", tone: supplyTone, status: supplySource ? (connectorStatusCopy[supplySource.status] || supplySource.status) : "等待首次同步", meta: supplySource ? `${supplySource.lastSuccessAt ? `最近成功 ${connectorDateTime(supplySource.lastSuccessAt)}` : "尚无成功记录"} · ${integer(supplySource.recordCount || 0)} 条` : "生产订单、生产发货单与物流信息登记", target: "sync", action: "管理同步" },
+      ];
+      const grid = $("#dataCenterSourceGrid");
+      if (grid) grid.innerHTML = cards.map((card) => `<article class="data-center-source-card" data-tone="${escapeHtml(card.tone)}">
+        <div class="data-center-source-head"><span class="data-center-source-dot" aria-hidden="true"></span><span>${escapeHtml(card.source)}</span></div>
+        <strong>${escapeHtml(card.name)}</strong><div class="data-center-source-status">${escapeHtml(card.status)}</div><p>${escapeHtml(card.meta)}</p>
+        <button class="secondary-button" type="button" data-data-center-target="${escapeHtml(card.target)}"${card.importSource ? ` data-data-center-import-source="${escapeHtml(card.importSource)}"` : ""}>${escapeHtml(card.action)}</button>
+      </article>`).join("");
+    }
+
+    function renderConnectorRunHistory() {
+      const list = $("#connectorRunHistoryList");
+      if (!list) return;
+      const rows = (state.connectors?.workspaces || []).flatMap((workspace) => (workspace.recentRuns || []).map((run) => ({
+        ...run,
+        storeName: workspace.storeAbbreviation || workspace.storeName || "当前店铺",
+      }))).sort((left, right) => new Date(right.startedAt || 0) - new Date(left.startedAt || 0)).slice(0, 40);
+      list.innerHTML = rows.map((run) => `<div class="connector-audit-row" data-status="${escapeHtml(run.status || "WAITING")}"><span>${connectorDateTime(run.startedAt)}</span><strong>${escapeHtml(connectorSourceCopy[run.sourceCode] || run.sourceCode)}</strong><span>${escapeHtml(connectorStatusCopy[run.status] || run.status)} · ${escapeHtml(run.storeName)}</span><span>${escapeHtml(run.message || "—")}</span></div>`).join("")
+        || `<div class="connector-audit-row"><span>暂无自动同步记录</span><strong>完成第一次同步后会在这里显示。</strong></div>`;
+    }
+
     const connectorSourceCopy = {
       LINGXING_INVENTORY: "领星国内仓库存",
       LINGXING_WFS: "领星 WFS 货件",
@@ -12993,13 +13833,74 @@
     };
     const connectorStatusCopy = {
       SUCCESS: "同步成功", RUNNING: "同步中", FAILED: "同步失败",
-      LOGIN_REQUIRED: "需要登录", WAITING: "等待首次同步", CONNECTED: "已连接", LOGINING: "登录中",
+      LOGIN_REQUIRED: "需要登录", WAITING: "等待首次同步", WAITING_BROWSER: "等待当前 Chrome",
+      CONNECTED: "已连接", LOGINING: "登录中",
     };
+
+    const connectorBridgeBootstraps = new Map();
+
+    async function connectorBridgeBootstrap(workspaceId = null) {
+      const cacheKey = workspaceId ? String(workspaceId) : "current";
+      if (!connectorBridgeBootstraps.has(cacheKey)) {
+        connectorBridgeBootstraps.set(cacheKey, (async () => {
+          const response = await fetch("/api/data-connectors/browser-bridge/bootstrap", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ workspaceId: workspaceId || null }),
+          });
+          const payload = await response.json();
+          if (!response.ok || !payload.success) throw new Error(payload.message || `HTTP ${response.status}`);
+          return payload.data;
+        })().catch((error) => {
+          connectorBridgeBootstraps.delete(cacheKey);
+          throw error;
+        }));
+      }
+      return connectorBridgeBootstraps.get(cacheKey);
+    }
+
+    async function publishCurrentChromeBridge(workspaceId = null, command = null) {
+      const bootstrap = await connectorBridgeBootstrap(workspaceId);
+      window.postMessage({
+        source: "WALMART_WORKBENCH",
+        type: "CURRENT_CHROME_BRIDGE",
+        bootstrap,
+        command,
+      }, window.location.origin);
+      window.setTimeout(() => loadConnectorStatus(true), 700);
+      return bootstrap;
+    }
+
+    window.addEventListener("message", (event) => {
+      if (event.source !== window || event.origin !== window.location.origin) return;
+      if (event.data?.source !== "WALMART_WORKBENCH_EXTENSION") return;
+      if (event.data.type === "CURRENT_CHROME_BRIDGE_READY") {
+        publishCurrentChromeBridge().catch(() => {});
+      } else if (event.data.type === "CURRENT_CHROME_BRIDGE_ACK") {
+        window.setTimeout(() => loadConnectorStatus(true), 350);
+      } else if (event.data.type === "CURRENT_CHROME_BRIDGE_ERROR") {
+        showToast(`当前 Chrome 数据连接失败：${event.data.message || "请检查扩展是否已启用"}`);
+      }
+    });
 
     function connectorDateTime(value) {
       if (!value) return "—";
       const date = new Date(value);
       return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString("zh-CN", { hour12: false });
+    }
+
+    function connectorElapsed(value) {
+      const startedAt = value ? new Date(value).getTime() : NaN;
+      if (!Number.isFinite(startedAt)) return "刚刚开始";
+      const seconds = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
+      if (seconds < 60) return `${seconds} 秒`;
+      const minutes = Math.floor(seconds / 60);
+      if (minutes < 60) return `${minutes} 分 ${seconds % 60} 秒`;
+      return `${Math.floor(minutes / 60)} 小时 ${minutes % 60} 分`;
+    }
+
+    function connectorProgressStep(message) {
+      return /页面数据已读取|登录会话有效|正在使用加密凭证|凭证已续期/.test(message || "") ? 2 : 1;
     }
 
     function currentConnectorWorkspace() {
@@ -13012,9 +13913,19 @@
 
     function updateConnectorAlert() {
       const workspaces = state.connectors?.workspaces || [];
-      const abnormalCount = workspaces.reduce((total, workspace) => total
-        + (workspace.sources || []).filter((source) => source.enabled && ["FAILED", "LOGIN_REQUIRED"].includes(source.status)).length
-        + (workspace.systems || []).filter((system) => system.status === "LOGIN_REQUIRED").length, 0);
+      const abnormalCount = workspaces.reduce((total, workspace) => {
+        const loginRequiredSystems = new Set((workspace.systems || [])
+          .filter((system) => system.status === "LOGIN_REQUIRED")
+          .map((system) => system.system));
+        const sourceIssues = (workspace.sources || []).filter((source) => {
+          if (!source.enabled) return false;
+          if (source.status === "FAILED") return true;
+          if (source.status !== "LOGIN_REQUIRED") return false;
+          const system = source.sourceCode === "SUPPLY_CHAIN" ? "SUPPLY_CHAIN" : "LINGXING";
+          return !loginRequiredSystems.has(system);
+        }).length;
+        return total + loginRequiredSystems.size + sourceIssues;
+      }, 0);
       const topBadge = $("#connectorAlertCount");
       const navBadge = $("#connectorNavBadge");
       const trigger = $("#connectorAlert");
@@ -13031,13 +13942,28 @@
       const data = state.connectors || {};
       const browserNote = $("#connectorBrowserNote");
       if (browserNote) {
-        browserNote.dataset.tone = data.chromeReady ? "ok" : "error";
-        browserNote.innerHTML = `<span class="connector-browser-dot" aria-hidden="true"></span><div><strong>${data.chromeReady ? "系统 Chrome 已就绪" : "系统 Chrome 不可用"}</strong><small>${escapeHtml(data.chromeReady ? `${data.chrome} · 同步时按需启动，完成即关闭` : (data.chromeError || "请安装 Chrome"))}</small></div>`;
+        const running = (data.workspaces || []).flatMap((workspace) => (workspace.sources || [])
+          .filter((source) => source.status === "RUNNING")
+          .map((source) => ({ ...source, workspace })))
+          .sort((left, right) => new Date(right.lastStartedAt || 0) - new Date(left.lastStartedAt || 0))[0];
+        const runningMs = running?.lastStartedAt ? Date.now() - new Date(running.lastStartedAt).getTime() : 0;
+        if (running) {
+          const takingLong = Number.isFinite(runningMs) && runningMs > 180000;
+          browserNote.dataset.tone = takingLong ? "warn" : "running";
+          browserNote.innerHTML = `<span class="connector-browser-dot" aria-hidden="true"></span><div class="connector-browser-copy"><strong>${takingLong ? "本次同步耗时较长" : "正在后台同步"} · ${escapeHtml(connectorSourceCopy[running.sourceCode] || running.sourceCode)}</strong><small>${escapeHtml(running.message || "正在准备采集任务")} · 已运行 ${escapeHtml(connectorElapsed(running.lastStartedAt))}</small></div><span class="connector-runtime-tag">${takingLong ? "等待外部页面" : `步骤 ${connectorProgressStep(running.message)}/2`}</span>`;
+        } else {
+          const bridges = (data.workspaces || []).map((workspace) => workspace.browserBridge).filter(Boolean);
+          const online = bridges.some((bridge) => bridge.online);
+          const lastSeen = bridges.map((bridge) => bridge.lastSeenAt).filter(Boolean).sort().at(-1);
+          browserNote.dataset.tone = online ? "ok" : "warn";
+          browserNote.innerHTML = `<span class="connector-browser-dot" aria-hidden="true"></span><div class="connector-browser-copy"><strong>${online ? "当前 Chrome 已连接" : "等待当前 Chrome 扩展连接"}</strong><small>${escapeHtml(online ? `直接复用工作台所在浏览器的领星与供应链登录状态${lastSeen ? ` · 最近响应 ${connectorDateTime(lastSeen)}` : ""}` : "刷新工作台页面即可自动握手；未登录时只会新开对应系统的登录标签。")}</small></div><span class="connector-runtime-tag">同一浏览器</span>`;
+        }
       }
       const list = $("#connectorWorkspaceList");
       if (!list) return;
       const workspaces = data.workspaces || [];
       list.innerHTML = workspaces.map((workspace) => {
+        const bridgeOnline = Boolean(workspace.browserBridge?.online);
         const systems = (workspace.systems || []).map((system) => {
           const connected = system.status === "CONNECTED";
           const logging = system.status === "LOGINING" || system.loginWindowOpen;
@@ -13045,26 +13971,34 @@
             ? `最近验证 ${connectorDateTime(system.lastValidatedAt)}`
             : (system.message || "尚未登录");
           return `<article class="connector-system-card" data-status="${escapeHtml(system.status || "LOGIN_REQUIRED")}">
-            <div class="connector-system-copy"><strong>${escapeHtml(system.label)}</strong><span>${escapeHtml(detail)}</span><small>${connected ? "会话已加密保存到当前店铺" : "登录成功后自动保存并补拉数据"}</small></div>
+            <div class="connector-system-copy"><strong>${escapeHtml(system.label)}</strong><span>${escapeHtml(detail)}</span><small>${bridgeOnline ? "复用当前 Chrome 登录会话，数据按店铺隔离入库" : "扩展连接后自动识别登录；未登录才打开登录标签"}</small></div>
             <button class="secondary-button" type="button" data-connector-login="${escapeHtml(system.system)}" data-workspace-id="${workspace.workspaceId}" ${logging ? "disabled" : ""}>${logging ? "等待登录" : connected ? "重新登录" : "登录"}</button>
           </article>`;
         }).join("");
-        const sources = (workspace.sources || []).map((source) => `<div class="connector-source-row" data-status="${escapeHtml(source.status || "WAITING")}">
+        const sources = (workspace.sources || []).map((source) => {
+          const isRunning = source.status === "RUNNING";
+          const elapsedMs = source.lastStartedAt ? Date.now() - new Date(source.lastStartedAt).getTime() : 0;
+          const takingLong = isRunning && Number.isFinite(elapsedMs) && elapsedMs > 180000;
+          const statusLabel = isRunning
+            ? `${takingLong ? "同步耗时较长" : "同步中"} · ${connectorElapsed(source.lastStartedAt)}`
+            : (connectorStatusCopy[source.status] || source.status || "等待");
+          return `<div class="connector-source-row" data-status="${escapeHtml(source.status || "WAITING")}" data-long-running="${takingLong}">
           <div class="connector-source-name"><span class="connector-source-dot" aria-hidden="true"></span><span>${escapeHtml(connectorSourceCopy[source.sourceCode] || source.sourceCode)}</span></div>
-          <div class="connector-source-time"><strong>${escapeHtml(connectorStatusCopy[source.status] || source.status || "等待")}</strong><span>${source.lastSuccessAt ? `成功 ${connectorDateTime(source.lastSuccessAt)}` : "尚无成功记录"}</span></div>
-          <div class="connector-source-message"><strong>${integer(source.recordCount || 0)} 条</strong><span title="${escapeHtml(source.message || "")}">${escapeHtml(source.message || "等待自动同步")}</span></div>
-          <button class="secondary-button" type="button" data-connector-sync="${escapeHtml(source.sourceCode)}" data-workspace-id="${workspace.workspaceId}" ${!source.enabled || source.status === "RUNNING" ? "disabled" : ""}>${source.status === "RUNNING" ? "同步中" : "立即同步"}</button>
-        </div>`).join("");
-        const runs = (workspace.recentRuns || []).map((run) => `<div class="connector-audit-row"><span>${connectorDateTime(run.startedAt)}</span><strong>${escapeHtml(connectorSourceCopy[run.sourceCode] || run.sourceCode)}</strong><span>${escapeHtml(connectorStatusCopy[run.status] || run.status)}</span><span>${escapeHtml(run.message || "—")}</span></div>`).join("") || `<div class="connector-audit-row"><span>暂无运行记录</span></div>`;
+          <div class="connector-source-time"><strong>${escapeHtml(statusLabel)}</strong><span>${source.lastSuccessAt ? `上次成功 ${connectorDateTime(source.lastSuccessAt)}` : "尚无成功记录"}</span></div>
+          <div class="connector-source-message"><strong>${isRunning ? "上次 " : ""}${integer(source.recordCount || 0)} 条</strong><span title="${escapeHtml(source.message || "")}">${escapeHtml(source.message || (isRunning ? "正在准备采集任务" : "等待自动同步"))}</span></div>
+          <button class="secondary-button" type="button" data-connector-sync="${escapeHtml(source.sourceCode)}" data-workspace-id="${workspace.workspaceId}" ${!source.enabled || ["RUNNING", "LOGIN_REQUIRED"].includes(source.status) ? "disabled" : ""}>${source.status === "RUNNING" ? "同步中" : source.status === "LOGIN_REQUIRED" ? "需先登录" : "立即同步"}</button>
+        </div>`;
+        }).join("");
         const healthClass = workspace.syncing ? "running" : workspace.abnormal ? "warning" : "";
         const healthLabel = workspace.syncing ? "正在同步" : workspace.abnormal ? "需要处理" : "连接正常";
         const mark = escapeHtml((workspace.storeAbbreviation || workspace.storeName || "店").slice(0, 2).toUpperCase());
         return `<section class="connector-workspace-card">
           <header class="connector-workspace-head"><div class="connector-store"><span class="connector-store-mark">${mark}</span><div class="connector-store-copy"><strong>${escapeHtml(workspace.storeName || workspace.storeAbbreviation || "未命名店铺")}</strong><small>${escapeHtml(workspace.storeAbbreviation || "未设置缩写")} · 独立会话与数据空间</small></div><span class="connector-health ${healthClass}">${healthLabel}</span></div><div class="connector-workspace-actions"><button class="primary-button" type="button" data-connector-sync="ALL" data-workspace-id="${workspace.workspaceId}" ${workspace.syncing ? "disabled" : ""}>${workspace.syncing ? "同步中" : "同步全部"}</button></div></header>
           <div class="connector-system-grid">${systems}</div><div class="connector-source-list">${sources}</div>
-          <details class="connector-audit"><summary>最近执行记录 · 详细日志保留 30 天</summary><div class="connector-audit-list">${runs}</div></details>
         </section>`;
       }).join("") || `<div class="empty-grid-state"><strong>没有已启用店铺</strong><span>请先完成店铺注册和领星 MCP 配置。</span></div>`;
+      renderDataCenterOverview();
+      renderConnectorRunHistory();
       updateConnectorAlert();
       if (state.supplyChain) renderSupplyChainBridge();
     }
@@ -13089,7 +14023,9 @@
         scheduleConnectorRefresh();
       } catch (error) {
         const list = $("#connectorWorkspaceList");
-        if (list && state.view === "connectors") list.innerHTML = `<div class="empty-grid-state"><strong>数据连接状态读取失败</strong><span>${escapeHtml(error.message)}</span></div>`;
+        if (list && state.view === "data-center") list.innerHTML = `<div class="empty-grid-state"><strong>自动同步状态读取失败</strong><span>${escapeHtml(error.message)}</span></div>`;
+        const history = $("#connectorRunHistoryList");
+        if (history && state.view === "data-center") history.innerHTML = `<div class="connector-audit-row"><span>执行记录读取失败</span><strong>${escapeHtml(error.message)}</strong></div>`;
       } finally {
         state.connectorsLoading = false;
       }
@@ -13107,6 +14043,7 @@
     async function startConnectorLogin(workspaceId, system) {
       try {
         await connectorAction("/api/data-connectors/login", { workspaceId: workspaceId || null, system }, "登录窗口已打开");
+        await publishCurrentChromeBridge(workspaceId, { action: "LOGIN", system });
       } catch (error) {
         showToast(`打开登录窗口失败：${error.message}`);
       }
@@ -13115,6 +14052,7 @@
     async function startConnectorSync(workspaceId, source) {
       try {
         await connectorAction("/api/data-connectors/sync", { workspaceId: workspaceId || null, source }, "同步任务已启动");
+        await publishCurrentChromeBridge(workspaceId, { action: "SYNC", source });
       } catch (error) {
         showToast(`启动同步失败：${error.message}`);
       }
@@ -13128,7 +14066,8 @@
         const response = await fetch("/api/imports/batches?limit=30");
         const payload = await response.json();
         if (!response.ok || !payload.success) throw new Error(payload.message || `HTTP ${response.status}`);
-        body.innerHTML = payload.data.map((batch) => `<tr><td class="mono">#${batch.id}</td><td>${new Date(batch.startedAt).toLocaleString("zh-CN")}</td><td><span class="status-badge ${batch.status === "SUCCESS" ? "scale" : batch.status === "FAILED" ? "reduce" : "optimize"}">${escapeHtml(batch.status)}</span></td><td class="num">${integer(batch.discovered)}</td><td class="num">${integer(batch.imported)}</td><td class="num">${integer(batch.skipped)}</td><td class="num">${integer(batch.failed)}</td></tr>`).join("") || emptyRow(7, "还没有导入记录", "选择文件上传后，这里会显示导入结果。");
+        state.importBatches = payload.data || [];
+        body.innerHTML = state.importBatches.map((batch) => `<tr><td class="mono">#${batch.id}</td><td>${new Date(batch.startedAt).toLocaleString("zh-CN")}</td><td><span class="status-badge ${batch.status === "SUCCESS" ? "scale" : batch.status === "FAILED" ? "reduce" : "optimize"}">${escapeHtml(batch.status)}</span></td><td class="num">${integer(batch.discovered)}</td><td class="num">${integer(batch.imported)}</td><td class="num">${integer(batch.skipped)}</td><td class="num">${integer(batch.failed)}</td></tr>`).join("") || emptyRow(7, "还没有补录记录", "选择文件上传后，这里会显示处理结果。");
       } catch (error) {
         body.innerHTML = emptyRow(7, "读取失败", escapeHtml(error.message));
       }
@@ -13144,6 +14083,7 @@
         const payload = await response.json();
         if (!response.ok || !payload.success) throw new Error(payload.message || `HTTP ${response.status}`);
         const status = payload.data || {};
+        state.domesticSource = status;
         const sourceLabel = status.activeSource === "PROJECT_CONNECTOR"
           ? "工作台自动同步"
           : status.activeSource === "FILE_UPLOAD" ? "XLSX 上传兜底" : "尚无数据";
@@ -13151,11 +14091,14 @@
         title.textContent = `国内仓库存 · 当前使用 ${sourceLabel}`;
         detail.textContent = status.activeAt
           ? `${new Date(status.activeAt).toLocaleString("zh-CN")} · ${integer(status.skuCount)} 个 SKU · ${integer(status.availableUnits)} 件${status.stale ? " · 自动数据已超过 36 小时" : ""}`
-          : "项目每天 08:00 自动读取；登录失效时请到数据连接页面重新登录，也可选择国内仓 XLSX 上传兜底。";
+          : "项目每天 08:00 自动读取；登录失效时请到自动同步页签重新登录，也可选择国内仓 XLSX 上传兜底。";
+        renderDataCenterOverview();
       } catch (error) {
+        state.domesticSource = { activeSource: "NONE", error: error.message };
         bar.dataset.tone = "error";
         title.textContent = "国内仓库存数据源状态读取失败";
         detail.textContent = error.message;
+        renderDataCenterOverview();
       }
     }
 
@@ -13169,6 +14112,7 @@
         const payload = await response.json();
         if (!response.ok || !payload.success) throw new Error(payload.message || `HTTP ${response.status}`);
         const status = payload.data || {};
+        state.wfsShipmentSource = status;
         const sourceLabel = status.activeSource === "PROJECT_CONNECTOR"
           ? "工作台自动同步"
           : status.activeSource === "FILE_UPLOAD" ? "XLSX 上传兜底" : "尚无数据";
@@ -13176,11 +14120,14 @@
         title.textContent = `WFS 货件 · 当前使用 ${sourceLabel}`;
         detail.textContent = status.activeAt
           ? `${new Date(status.activeAt).toLocaleString("zh-CN")} · ${integer(status.shipmentCount)} 个货件 · ${integer(status.itemCount)} 个 SKU 明细 · 在途 ${integer(status.transitUnits)} 件${status.stale ? " · 自动数据已超过 36 小时" : ""}`
-          : "项目每天 08:00 自动读取；登录失效时请到数据连接页面重新登录，也可选择货件 XLSX 上传兜底。";
+          : "项目每天 08:00 自动读取；登录失效时请到自动同步页签重新登录，也可选择货件 XLSX 上传兜底。";
+        renderDataCenterOverview();
       } catch (error) {
+        state.wfsShipmentSource = { activeSource: "NONE", error: error.message };
         bar.dataset.tone = "error";
         title.textContent = "WFS 货件数据源状态读取失败";
         detail.textContent = error.message;
+        renderDataCenterOverview();
       }
     }
 
@@ -13878,10 +14825,29 @@
       showToast(`已导出 ${rows.length} 条建议，未执行任何广告变更。`);
     }
 
-    $$(".nav-button[data-view]").forEach((button) => button.addEventListener("click", () => switchView(button.dataset.view)));
+    $$(".nav-button[data-view]").forEach((button) => button.addEventListener("click", () => {
+      switchView(button.dataset.view);
+    }));
+    window.addEventListener("popstate", () => {
+      const route = location.hash.replace("#", "");
+      if (route.startsWith("products/")) {
+        const parentSku = decodeURIComponent(route.slice("products/".length));
+        switchView("products", { preserveHistory: true, keepProductDashboard: true });
+        openProductDashboard(parentSku, { pushHistory: false });
+        return;
+      }
+      if (route.startsWith("inventory/")) {
+        const parentSku = decodeURIComponent(route.slice("inventory/".length));
+        switchView("inventory", { preserveHistory: true, keepInventoryStyleDashboard: true });
+        openInventoryStyleDashboard(parentSku, { pushHistory: false });
+        return;
+      }
+      if (state.productDashboardSku) closeProductDashboard({ updateHistory: false, restoreFocus: false });
+      if (state.inventoryStyleDashboardSku) closeInventoryStyleDashboard({ updateHistory: false, restoreFocus: false });
+      switchView(["connectors", "imports"].includes(route) ? route : titles[route] ? route : "dashboard", { preserveHistory: true });
+    });
     bindLingxingEvents();
-    $("#workspaceSettingsNav")?.addEventListener("click", () => { location.href = "/workspace.html"; });
-    $("#workspaceChip")?.addEventListener("click", () => { location.href = "/workspace.html"; });
+    $("#workspaceChip")?.addEventListener("click", () => switchView("workspace"));
     $$('[data-jump]').forEach((button) => button.addEventListener("click", () => switchView(button.dataset.jump)));
     $$("#orderFlowQuick [data-order-flow-quick]").forEach((button) => button.addEventListener("click", () => {
       applyOrderFlowQuick(button.dataset.orderFlowQuick);
@@ -14104,25 +15070,13 @@
       setAdWorkspace("explorer");
       loadLingXingAdData();
     });
-    // 搜索框：防抖 + 搜索态自动展开匹配款号、清空恢复用户原展开态
+    // 搜索框：款号清单防抖过滤；SKU 命中时保留所属款号，明细统一在库存驾驶舱查看。
     let inventorySearchTimer = null;
     const inventorySearchInput = $("#inventorySearch");
     inventorySearchInput.addEventListener("input", (event) => {
       const raw = event.target.value;
-      const hadQuery = (state.inventorySearch || "").trim() !== "";
       clearTimeout(inventorySearchTimer);
       inventorySearchTimer = setTimeout(() => {
-        const hasQuery = raw.trim() !== "";
-        if (hasQuery && !hadQuery) {
-          // 进入搜索态：保存当前展开态，并把匹配款号全部展开，直接看到命中 SKU
-          state.inventorySearchSavedExpanded = new Set(state.inventoryByStyleExpanded);
-          const matched = inventoryMatchedParentSkus();
-          state.inventoryByStyleExpanded = matched ? new Set(matched) : new Set();
-        } else if (!hasQuery && hadQuery) {
-          // 退出搜索态：还原用户原来的展开态
-          state.inventoryByStyleExpanded = state.inventorySearchSavedExpanded || new Set();
-          state.inventorySearchSavedExpanded = null;
-        }
         state.inventorySearch = raw;
         if (state.inventory) renderInventoryByStyle(state.inventory.rows);
       }, 150);
@@ -14221,6 +15175,36 @@
           other.setAttribute("aria-pressed", active ? "true" : "false");
         });
         renderProductCatalog();
+      });
+    });
+    $("#productDashboardBack").addEventListener("click", () => closeProductDashboard());
+    $("#productDashboardRefresh").addEventListener("click", async (event) => {
+      const button = event.currentTarget;
+      const parentSku = state.productDashboardSku;
+      if (!parentSku) return;
+      button.disabled = true;
+      button.classList.add("is-loading");
+      try {
+        await openProductDashboard(parentSku, { refresh: true, pushHistory: false });
+        showToast(`${parentSku} 仪表盘已刷新`);
+      } finally {
+        button.disabled = false;
+        button.classList.remove("is-loading");
+      }
+    });
+    $("#productDashboardOperation").addEventListener("click", () => {
+      const parentSku = state.productDashboardSku;
+      if (!parentSku) return;
+      closeProductDashboard({ restoreFocus: false });
+      prepareOperation("PARENT_SKU", parentSku);
+    });
+    $("#productDashboardScreen .product-dashboard-nav").addEventListener("click", (event) => {
+      const link = event.target.closest("a[href^='#productDashboard']");
+      if (!link) return;
+      event.preventDefault();
+      document.querySelector(link.getAttribute("href"))?.scrollIntoView({
+        behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+        block: "start",
       });
     });
     let operationSearchTimer;
@@ -14556,8 +15540,52 @@
     });
     $("#inventoryByStyleBody").addEventListener("click", (event) => {
       const cell = event.target.closest("[data-transit-parent]");
-      if (!cell) return;
-      openTransitInventoryDetails(cell.dataset.transitParent);
+      if (cell) {
+        openTransitInventoryDetails(cell.dataset.transitParent);
+        return;
+      }
+      const trigger = event.target.closest("[data-inventory-style]");
+      if (trigger) openInventoryStyleDashboard(trigger.dataset.inventoryStyle, { trigger });
+    });
+    $("#inventoryStyleDashboardBack").addEventListener("click", () => closeInventoryStyleDashboard());
+    $("#inventoryStyleDashboardRefresh").addEventListener("click", async (event) => {
+      const button = event.currentTarget;
+      const parentSku = state.inventoryStyleDashboardSku;
+      if (!parentSku) return;
+      button.disabled = true;
+      button.setAttribute("aria-busy", "true");
+      button.classList.add("is-loading");
+      try {
+        await fetchInventoryData();
+        renderInventory();
+        renderInventoryStyleDashboard(parentSku);
+        showToast(`${parentSku} 库存仪表盘已刷新`);
+      } catch (error) {
+        showToast(`库存刷新失败：${error.message}`);
+      } finally {
+        button.disabled = false;
+        button.removeAttribute("aria-busy");
+        button.classList.remove("is-loading");
+      }
+    });
+    $("#inventoryStyleDashboardForecast").addEventListener("click", () => openDemandForecastForParent(state.inventoryStyleDashboardSku));
+    $("#inventoryStyleDashboardScreen .inventory-style-dashboard-nav").addEventListener("click", (event) => {
+      const link = event.target.closest("a[href^='#inventoryStyleDashboard']");
+      if (!link) return;
+      event.preventDefault();
+      document.querySelector(link.getAttribute("href"))?.scrollIntoView({
+        behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+        block: "start",
+      });
+    });
+    $("#inventoryStyleDashboardBody").addEventListener("click", (event) => {
+      const transitButton = event.target.closest("[data-inventory-dashboard-transit]");
+      if (transitButton) {
+        openTransitInventoryDetails(transitButton.dataset.inventoryDashboardTransit);
+        return;
+      }
+      const forecastButton = event.target.closest("[data-inventory-dashboard-forecast]");
+      if (forecastButton) openDemandForecastForParent(forecastButton.dataset.inventoryDashboardForecast);
     });
     $("#toggleTransitChannelLeadTime").addEventListener("click", () => {
       setTransitChannelLeadTimeCollapsed(!$("#transitChannelLeadTimeContent").hidden);
@@ -14740,7 +15768,6 @@
         $("#recalculateForecast").click();
       }
     });
-    $("#closeProductDrawer").addEventListener("click", () => $("#productDrawer").close());
     $("#closeTransitDrawer").addEventListener("click", () => {
       closeTransitDatePicker(false);
       $("#transitDrawer").close();
@@ -14767,7 +15794,7 @@
         if (lightboxReturnDrawer && lightboxReturnDrawer.parentSku) {
           const sku = lightboxReturnDrawer.parentSku;
           lightboxReturnDrawer = null;
-          openProductDrawer(sku);
+          openProductDashboard(sku, { pushHistory: false });
         } else {
           lightboxReturnDrawer = null;
         }
@@ -14778,8 +15805,56 @@
     $("#exportButton").addEventListener("click", exportRecommendations);
     initializeCustomPeriodControl();
     initializeImportControls();
+    setDataCenterTab(state.dataCenterTab);
+    $("#view-data-center")?.addEventListener("click", (event) => {
+      const tab = event.target.closest("[data-data-center-tab]");
+      if (tab) {
+        setDataCenterTab(tab.dataset.dataCenterTab);
+        return;
+      }
+      const syncToggle = event.target.closest("[data-workspace-sync]");
+      if (syncToggle) {
+        toggleWorkspaceSync(syncToggle.dataset.workspaceSync, syncToggle.dataset.enabled !== "true", syncToggle);
+        return;
+      }
+      const target = event.target.closest("[data-data-center-target]");
+      if (target) {
+        if (target.dataset.dataCenterImportSource) {
+          state.importSources = new Set([target.dataset.dataCenterImportSource]);
+          syncImportControls();
+        }
+        setDataCenterTab(target.dataset.dataCenterTarget, { focus: true });
+      }
+    });
+    $(".data-center-tabs")?.addEventListener("keydown", (event) => {
+      if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+      const tabs = [...$$('[data-data-center-tab]')];
+      const currentIndex = Math.max(0, tabs.indexOf(event.target.closest("[data-data-center-tab]")));
+      const nextIndex = event.key === "Home" ? 0
+        : event.key === "End" ? tabs.length - 1
+          : (currentIndex + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
+      event.preventDefault();
+      setDataCenterTab(tabs[nextIndex].dataset.dataCenterTab, { focus: true });
+    });
     bindProfitCalculator();
     $("#uploadImportPageButton")?.addEventListener("click", runImport);
+    $("#productImportTabs")?.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-product-import-tab]");
+      if (!button) return;
+      state.productImportTab = button.dataset.productImportTab;
+      renderProductImportPreview();
+    });
+    $("#productImportSearch")?.addEventListener("input", (event) => {
+      state.productImportSearch = event.target.value || "";
+      renderProductImportPreview();
+    });
+    $("#closeProductImportPreview")?.addEventListener("click", discardProductImportPreview);
+    $("#cancelProductImport")?.addEventListener("click", discardProductImportPreview);
+    $("#confirmProductImport")?.addEventListener("click", confirmProductImport);
+    $("#productImportPreviewDrawer")?.addEventListener("cancel", (event) => {
+      event.preventDefault();
+      discardProductImportPreview();
+    });
     $("#openLingxingInventoryButton")?.addEventListener("click", () => {
       window.open("https://czyx.lingxing.com/erp/msupply/warehouseDetail", "_blank", "noopener,noreferrer");
     });
@@ -14792,8 +15867,12 @@
       }
     });
     $("#refreshBatchesButton").addEventListener("click", loadBatches);
-    $("#refreshConnectorsButton")?.addEventListener("click", () => loadConnectorStatus(true));
-    $("#connectorAlert")?.addEventListener("click", () => switchView("connectors"));
+    $("#refreshConnectorsButton")?.addEventListener("click", () => refreshDataCenter(true));
+    $("#refreshWorkspaceSyncPlan")?.addEventListener("click", () => loadDataCenterSyncPlan(true));
+    $("#connectorAlert")?.addEventListener("click", () => {
+      state.dataCenterTab = "sync";
+      switchView("data-center");
+    });
     $("#connectorWorkspaceList")?.addEventListener("click", (event) => {
       const login = event.target.closest("[data-connector-login]");
       if (login) {
@@ -14971,8 +16050,17 @@
     });
     setupWfs();
     initBoxConvert();
+    publishCurrentChromeBridge().catch(() => {}); // 当前浏览器扩展存在时自动绑定到已登录店铺
     loadConnectorStatus(); // 启动即检查数据连接，使右上角异常提醒无需进入模块即可显示
-    switchView(titles[requestedViewAtStartup] ? requestedViewAtStartup : "dashboard");
+    switchView(titles[requestedViewAtStartup] ? requestedViewAtStartup : "dashboard", { preserveHistory: Boolean(requestedProductSkuAtStartup || requestedInventorySkuAtStartup) });
+    if (requestedProductSkuAtStartup) {
+      openProductDashboard(requestedProductSkuAtStartup, { pushHistory: false });
+    }
+    if (requestedInventorySkuAtStartup) {
+      loadInventory().then((data) => {
+        if (data) openInventoryStyleDashboard(requestedInventorySkuAtStartup, { pushHistory: false });
+      });
+    }
     loadReputation(); // 启动即预拉口碑数据，使导航角标在打开模块前就亮
   </script>
   <dialog class="image-lightbox" id="imageLightbox" aria-label="图片放大查看">

@@ -35,7 +35,7 @@ class ProductCatalogCuttingYieldServiceTest {
         products = mock(ProductRecordRepository.class);
         service = new ProductCatalogService(
                 jdbc, new ObjectMapper(), new ProfitCalculator(), null, null, products,
-                mock(ParentLifecycleService.class));
+                mock(ParentLifecycleService.class), mock(ProductDashboardService.class));
     }
 
     @AfterEach

@@ -25,6 +25,8 @@ import java.util.List;
 public class LxInventorySnapshotWriter {
 
     private static final Logger log = LoggerFactory.getLogger(LxInventorySnapshotWriter.class);
+    private static final long MIN_REFERENCE_ROWS = 100;
+    private static final double MIN_ACCEPTED_RATIO = 0.60;
 
     private final LxInventorySnapshotRepository repository;
     private final ReplenishmentPlanCache replenishmentPlanCache;
@@ -39,6 +41,7 @@ public class LxInventorySnapshotWriter {
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public int replaceDay(LocalDate businessDate, LocalDateTime snapshotAt, List<LxInventorySnapshot> rows) {
+        assertComplete(businessDate, rows.size());
         int removed = repository.deleteByBusinessDate(businessDate);
         if (!rows.isEmpty()) {
             repository.saveAll(rows);
@@ -47,6 +50,35 @@ public class LxInventorySnapshotWriter {
         log.info("领星库存快照整窗替换：businessDate={}, snapshotAt={}, removed={}, inserted={}",
                 businessDate, snapshotAt, removed, rows.size());
         return rows.size();
+    }
+
+    /**
+     * Reject a sharply truncated listing response before it can replace the last complete inventory window.
+     * Small/new stores are exempt until a stable reference of at least 100 rows exists.
+     */
+    @Transactional(readOnly = true)
+    public void assertComplete(LocalDate businessDate, int incomingRows) {
+        LocalDate referenceDate = repository.findLatestBusinessDate();
+        if (referenceDate == null) {
+            return;
+        }
+        long referenceRows = repository.countByBusinessDate(referenceDate);
+        if (isSuspiciouslySmall(incomingRows, referenceRows)) {
+            throw new IncompleteSnapshotException(
+                    "领星 Listing 本次仅返回 " + incomingRows + " 条，上次完整快照为 " + referenceRows
+                            + " 条，已拒绝覆盖库存（业务日 " + businessDate + "）");
+        }
+    }
+
+    static boolean isSuspiciouslySmall(int incomingRows, long referenceRows) {
+        return referenceRows >= MIN_REFERENCE_ROWS
+                && incomingRows < Math.ceil(referenceRows * MIN_ACCEPTED_RATIO);
+    }
+
+    public static class IncompleteSnapshotException extends IllegalStateException {
+        public IncompleteSnapshotException(String message) {
+            super(message);
+        }
     }
 
     /**

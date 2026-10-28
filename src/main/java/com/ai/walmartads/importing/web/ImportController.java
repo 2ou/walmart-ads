@@ -5,6 +5,7 @@ import com.ai.walmartads.importing.application.ImportSource;
 import com.ai.walmartads.importing.application.ImportService;
 import com.ai.walmartads.importing.application.SourceFileCandidate;
 import com.ai.walmartads.importing.application.UploadCandidateFactory;
+import com.ai.walmartads.importing.application.ProductImportPreviewService;
 import com.ai.walmartads.importing.domain.ImportBatch;
 import com.ai.walmartads.importing.domain.ImportFile;
 import com.ai.walmartads.importing.repository.ImportBatchRepository;
@@ -12,6 +13,7 @@ import com.ai.walmartads.importing.repository.ImportFileRepository;
 import com.ai.walmartads.shared.api.ApiResponse;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -37,6 +39,7 @@ public class ImportController {
     private final ImportBatchRepository batchRepository;
     private final ImportFileRepository fileRepository;
     private final UploadCandidateFactory uploadCandidateFactory;
+    private final ProductImportPreviewService productImportPreviewService;
     @Autowired(required = false)
     private WorkspaceOwnershipService ownershipService;
 
@@ -46,13 +49,44 @@ public class ImportController {
             FileImportProcessor fileImportProcessor,
             ImportBatchRepository batchRepository,
             ImportFileRepository fileRepository,
-            UploadCandidateFactory uploadCandidateFactory
+            UploadCandidateFactory uploadCandidateFactory,
+            ProductImportPreviewService productImportPreviewService
     ) {
         this.importService = importService;
         this.fileImportProcessor = fileImportProcessor;
         this.batchRepository = batchRepository;
         this.fileRepository = fileRepository;
         this.uploadCandidateFactory = uploadCandidateFactory;
+        this.productImportPreviewService = productImportPreviewService;
+    }
+
+    @PostMapping(value = "/products/preview", consumes = "multipart/form-data")
+    public ApiResponse<ProductImportPreviewService.Preview> previewProducts(
+            @RequestParam("file") MultipartFile file
+    ) throws IOException {
+        UploadData upload = productUpload(file);
+        if (ownershipService != null) {
+            ownershipService.verifyUploadedWorkbook(upload.content(), ImportSource.PRODUCT, upload.fileName());
+        }
+        ProductImportPreviewService.Preview preview = productImportPreviewService.preview(
+                upload.fileName(), upload.content());
+        String message = preview.canConfirm()
+                ? "产品差异已生成，请核对后确认导入"
+                : "产品表存在冲突，修正后才能导入";
+        return ApiResponse.ok(message, preview);
+    }
+
+    @PostMapping("/products/previews/{token}/confirm")
+    public ApiResponse<ProductImportPreviewService.ConfirmResult> confirmProducts(@PathVariable String token)
+            throws IOException {
+        ProductImportPreviewService.ConfirmResult result = productImportPreviewService.confirm(token);
+        return ApiResponse.ok("产品库导入完成", result);
+    }
+
+    @DeleteMapping("/products/previews/{token}")
+    public ApiResponse<Void> discardProductPreview(@PathVariable String token) {
+        productImportPreviewService.discard(token);
+        return ApiResponse.ok("产品导入预览已取消", null);
     }
 
     @PostMapping(value = "/upload", consumes = "multipart/form-data")
@@ -94,6 +128,9 @@ public class ImportController {
         } catch (RuntimeException exception) {
             throw new IllegalArgumentException("未知导入类型：" + sourceValue);
         }
+        if (source == ImportSource.PRODUCT) {
+            throw new IllegalArgumentException("产品资料必须先生成差异预览并确认后导入");
+        }
         if (file == null || file.isEmpty()) {
             throw new IllegalArgumentException("存在空文件，请重新选择");
         }
@@ -109,6 +146,24 @@ public class ImportController {
         SourceFileCandidate candidate = uploadCandidateFactory.create(safeName, source, LocalDateTime.now());
         return importService.importUploaded(candidate, source, content);
     }
+
+    private static UploadData productUpload(MultipartFile file) throws IOException {
+        if (file == null || file.isEmpty()) {
+            throw new IllegalArgumentException("请选择产品上传表");
+        }
+        String original = file.getOriginalFilename();
+        String safeName = original == null ? "products-upload.xlsx" : Path.of(original).getFileName().toString();
+        if (!safeName.toLowerCase().endsWith(".xlsx")) {
+            throw new IllegalArgumentException("产品资料仅支持 .xlsx 工作簿");
+        }
+        byte[] content = file.getBytes();
+        if (content.length > 30 * 1024 * 1024) {
+            throw new IllegalArgumentException("产品上传表不能超过 30MB");
+        }
+        return new UploadData(safeName, content);
+    }
+
+    private record UploadData(String fileName, byte[] content) { }
 
     @GetMapping("/tools")
     public ApiResponse<List<CodeToolView>> tools() {

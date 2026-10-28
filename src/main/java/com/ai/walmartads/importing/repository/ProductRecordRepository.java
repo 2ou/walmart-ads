@@ -20,6 +20,14 @@ public interface ProductRecordRepository extends JpaRepository<ProductRecord, Lo
 
     List<ProductRecord> findAllBySkuInAndCurrentVersionTrue(Collection<String> skus);
 
+    List<ProductRecord> findAllByCurrentVersionTrueOrderBySkuAsc();
+
+    List<ProductRecord> findAllBySkuInOrderByCreatedAtDescIdDesc(Collection<String> skus);
+
+    @Modifying
+    @Query("update ProductRecord product set product.currentVersion = false where product.currentVersion = true")
+    int deactivateAllCurrentVersions();
+
     @Query(value = """
             select parent_sku, cutting_yield
               from wm_ads_product_manual_setting

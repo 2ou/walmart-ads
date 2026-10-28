@@ -5,6 +5,7 @@ import com.ai.walmartads.importing.application.ImportSource;
 import com.ai.walmartads.importing.application.ImportService;
 import com.ai.walmartads.importing.application.SourceFileCandidate;
 import com.ai.walmartads.importing.application.UploadCandidateFactory;
+import com.ai.walmartads.importing.application.ProductImportPreviewService;
 import com.ai.walmartads.importing.domain.ImportFileType;
 import com.ai.walmartads.importing.repository.ImportBatchRepository;
 import com.ai.walmartads.importing.repository.ImportFileRepository;
@@ -35,10 +36,10 @@ class ImportControllerTest {
         UploadCandidateFactory candidateFactory = mock(UploadCandidateFactory.class);
         SourceFileCandidate candidate = new SourceFileCandidate(
                 Path.of("database-upload/products-upload.xlsx"), Path.of("database-upload/products-upload.xlsx"),
-                ImportFileType.PRODUCT, null, null, null);
-        when(candidateFactory.create(eq("products-upload.xlsx"), eq(ImportSource.PRODUCT),
+                ImportFileType.RETURN_ORDER, null, null, null);
+        when(candidateFactory.create(eq("products-upload.xlsx"), eq(ImportSource.RETURN_ORDER),
                 any(LocalDateTime.class))).thenReturn(candidate);
-        when(importService.importUploaded(eq(candidate), eq(ImportSource.PRODUCT), any(byte[].class))).thenReturn(
+        when(importService.importUploaded(eq(candidate), eq(ImportSource.RETURN_ORDER), any(byte[].class))).thenReturn(
                 new ImportService.ImportRunResult(1L, "SUCCESS", "ok", List.of()));
         MockMvc mvc = mvc(importService, candidateFactory);
         MockMultipartFile file = new MockMultipartFile(
@@ -48,7 +49,7 @@ class ImportControllerTest {
         try {
             mvc.perform(multipart("/api/imports/upload")
                             .file(file)
-                            .param("source", "PRODUCT"))
+                            .param("source", "RETURN_ORDER"))
                     .andExpect(status().isOk());
         } finally {
             WorkspaceContext.clear();
@@ -64,7 +65,8 @@ class ImportControllerTest {
                 mock(FileImportProcessor.class),
                 mock(ImportBatchRepository.class),
                 mock(ImportFileRepository.class),
-                candidateFactory
+                candidateFactory,
+                mock(ProductImportPreviewService.class)
         );
         return MockMvcBuilders.standaloneSetup(controller)
                 .setControllerAdvice(new GlobalExceptionHandler())

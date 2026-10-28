@@ -35,8 +35,9 @@ public class DataConnectorSessionService {
 
     public void save(long workspaceId, ConnectorSystem system, String storageState,
                      String credential, boolean login, String message) {
-        store.saveSession(workspaceId, system, crypto.encrypt(storageState),
-                crypto.encrypt(credential), message, login);
+        store.saveSession(workspaceId, system,
+                storageState == null ? null : crypto.encrypt(storageState),
+                credential == null ? null : crypto.encrypt(credential), message, login);
     }
 
     public void requireLogin(long workspaceId, ConnectorSystem system, String message,

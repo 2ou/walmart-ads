@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>沃尔玛工作台数据连接</title>
+  <style>
+    body{width:330px;margin:0;padding:18px;font:14px/1.5 system-ui;color:#17324d;background:#f5f8fb}
+    h1{font-size:17px;margin:0 0 6px}.sub{color:#64748b;margin:0 0 16px}
+    .card{background:#fff;border:1px solid #dce5ee;border-radius:14px;padding:14px;margin-bottom:12px}
+    .state{display:flex;align-items:center;gap:8px;font-weight:700}.dot{width:9px;height:9px;border-radius:50%;background:#d97706}.dot.ok{background:#16845b}
+    small{display:block;color:#64748b;margin-top:6px}button{width:100%;border:0;border-radius:10px;padding:10px 12px;background:#1677ff;color:white;font-weight:700;cursor:pointer}
+    button:disabled{opacity:.5}.row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}.row button{background:#e8f1fb;color:#155b9d}
+    #message{min-height:20px;color:#52677d;margin-top:10px}
+  </style>
+</head>
+<body>
+  <h1>当前浏览器数据连接</h1>
+  <p class="sub">复用此 Chrome 的登录状态，不启动专属浏览器。</p>
+  <div class="card"><div class="state"><span id="dot" class="dot"></span><span id="state">等待工作台</span></div><small id="store">请打开并登录沃尔玛工作台</small></div>
+  <button id="syncAll">立即同步全部</button>
+  <div class="row"><button data-source="LINGXING_INVENTORY">领星库存</button><button data-source="LINGXING_WFS">WFS 货件</button></div>
+  <div class="row"><button data-source="SUPPLY_CHAIN">供应链</button><button id="openWorkbench">打开工作台</button></div>
+  <div id="message"></div>
+  <script src="popup.js"></script>
+</body>
+</html>

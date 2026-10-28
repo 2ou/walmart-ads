@@ -1,11 +1,13 @@
 package com.ai.walmartads.walmartlisting;
 
+import com.ai.walmartads.common.UsBusinessDate;
 import com.ai.walmartads.config.LingXingProperties;
 import com.ai.walmartads.importing.domain.ProductRecord;
 import com.ai.walmartads.importing.repository.ProductRecordRepository;
 import com.ai.walmartads.inventory.application.LxInventorySnapshotWriter;
 import com.ai.walmartads.inventory.domain.LxInventorySnapshot;
 import com.ai.walmartads.workspace.WorkspaceLingXingConfigService;
+import com.ai.walmartads.workspace.LingXingMcpCoordinator;
 import com.ai.walmartads.walmartlisting.domain.WalmartListingSyncLog;
 import com.ai.walmartads.walmartlisting.repository.WalmartListingSyncLogRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -13,8 +15,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Propagation;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -46,6 +46,8 @@ public class WalmartListingSyncService {
     private final SkuMappingSyncService skuMappingSyncService;
     @Autowired
     private WorkspaceLingXingConfigService workspaceConfig;
+    @Autowired
+    private LingXingMcpCoordinator mcpCoordinator;
 
     public WalmartListingSyncService(
             LingXingProperties properties,
@@ -63,19 +65,22 @@ public class WalmartListingSyncService {
         this.skuMappingSyncService = skuMappingSyncService;
     }
 
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public SyncSummary syncNow(String triggeredBy) {
         WorkspaceLingXingConfigService.Config config = workspaceConfig.current();
         if (!config.configured()) {
             throw new IllegalStateException("领星 MCP 未配置，无法同步");
         }
         LingXingClient client = new LingXingClient(config.baseUrl(), config.apiKey(), config.pageSize(),
-                10, 30, objectMapper, List.of());
+                10, 30, objectMapper, List.of(), "PRODUCTS", mcpCoordinator);
         WalmartListingSyncLog record = new WalmartListingSyncLog(LocalDateTime.now(), "lingxing_mcp", triggeredBy);
         logRepository.save(record);
         long start = System.currentTimeMillis();
         try {
             List<WalmartListingDto> listings = client.fetchAllListings(config.storeId());
+            if (listings.isEmpty()) {
+                throw new LxInventorySnapshotWriter.IncompleteSnapshotException(
+                        "领星 Listing 返回 0 条，已按异常空结果处理并保留原商品与库存数据");
+            }
             Map<String, WalmartListingDto> bySku = listings.stream()
                     .filter(d -> d.sku != null && !d.sku.isBlank())
                     .collect(Collectors.toMap(
@@ -83,6 +88,10 @@ public class WalmartListingSyncService {
                             d -> d,
                             (first, second) -> first
                     ));
+            // Validate before mutating product rows. A truncated first page must fail the whole sync
+            // instead of being recorded as success and replacing the inventory snapshot.
+            // 日期必须与 writeInventorySnapshot 用的业务日一致，否则校验与写入会错位一天。
+            inventorySnapshotWriter.assertComplete(UsBusinessDate.usToday(), bySku.size());
             List<ProductRecord> products = productRepository
                     .findAllBySkuInAndCurrentVersionTrue(bySku.keySet());
             int updated = 0;
@@ -112,7 +121,8 @@ public class WalmartListingSyncService {
             record.setDurationMs(duration);
             logRepository.save(record);
             log.info("沃尔玛在线商品同步完成：fetched={}, updated={}, duration={}ms", listings.size(), updated, duration);
-            return new SyncSummary(listings.size(), updated, 0, "SUCCESS", null, duration, LocalDateTime.now());
+            return new SyncSummary(listings.size(), updated, 0, record.getStatus(),
+                    record.getErrorMessage(), duration, LocalDateTime.now());
         } catch (Exception exception) {
             long duration = System.currentTimeMillis() - start;
             record.setStatus("FAILED");
@@ -140,7 +150,10 @@ public class WalmartListingSyncService {
                             product -> product,
                             (first, second) -> first
                     ));
-            LocalDate businessDate = LocalDate.now();
+            // 库存快照的 business_date 必须是美西业务日：领星 listing 反映的是沃尔玛当前时点库存，
+            // 而订单/广告的 report_date 也都是美西日历日。用服务器本地日期（北京）会让快照
+            // 比销量数据提前一天，跨日对账时出现「当天有销量但没库存」的假缺口。
+            LocalDate businessDate = UsBusinessDate.usToday();
             LocalDateTime snapshotAt = LocalDateTime.now();
             List<LxInventorySnapshot> rows = new ArrayList<>(bySku.size());
             for (WalmartListingDto dto : bySku.values()) {
@@ -156,6 +169,8 @@ public class WalmartListingSyncService {
             }
             int written = inventorySnapshotWriter.replaceDay(businessDate, snapshotAt, rows);
             log.info("领星库存快照已整窗替换：businessDate={}, rows={}", businessDate, written);
+        } catch (LxInventorySnapshotWriter.IncompleteSnapshotException exception) {
+            throw exception;
         } catch (Exception exception) {
             log.error("领星库存快照写入失败（不影响在线商品同步）：{}", exception.getMessage());
         }

@@ -1,10 +1,14 @@
 package com.ai.walmartads.inventory.application;
 
+import com.ai.walmartads.config.DataConnectorProperties;
 import com.ai.walmartads.workspace.WorkspaceContext;
 import com.ai.walmartads.workspace.WorkspacePrincipal;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -12,7 +16,11 @@ import org.springframework.util.StringUtils;
 
 import java.math.BigDecimal;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -30,6 +38,9 @@ import java.util.Set;
  */
 @Service
 public class LingxingDomesticInventoryService {
+
+    private static final Logger log = LoggerFactory.getLogger(LingxingDomesticInventoryService.class);
+    private static final DateTimeFormatter DUMP_STAMP = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss");
 
     public static final String SOURCE_HOST = "czyx.lingxing.com";
     public static final String SOURCE_PATH = "/api/storage/lists";
@@ -58,10 +69,18 @@ public class LingxingDomesticInventoryService {
 
     private final JdbcTemplate jdbc;
     private final ObjectMapper objectMapper;
+    private final DataConnectorProperties connectorProperties;
 
     public LingxingDomesticInventoryService(JdbcTemplate jdbc, ObjectMapper objectMapper) {
+        this(jdbc, objectMapper, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public LingxingDomesticInventoryService(JdbcTemplate jdbc, ObjectMapper objectMapper,
+                                            DataConnectorProperties connectorProperties) {
         this.jdbc = jdbc;
         this.objectMapper = objectMapper;
+        this.connectorProperties = connectorProperties;
     }
 
     @Transactional
@@ -80,17 +99,35 @@ public class LingxingDomesticInventoryService {
         LocalDateTime syncedAt = normalizeCapturedAt(capturedAt);
         Map<String, Accumulator> bySku = new LinkedHashMap<>();
         int skipped = 0;
+        int noSku = 0;
+        int noAvailable = 0;
+        int negative = 0;
+        int prefixMismatch = 0;
+        List<String> foreignSamples = new ArrayList<>();
         for (JsonNode row : rows) {
             String sku = firstText(row, SKU_KEYS);
             BigDecimal available = availableFor(row);
-            if (!StringUtils.hasText(sku) || available == null || available.signum() < 0) {
+            if (!StringUtils.hasText(sku)) {
                 skipped++;
+                noSku++;
+                continue;
+            }
+            if (available == null) {
+                skipped++;
+                noAvailable++;
+                continue;
+            }
+            if (available.signum() < 0) {
+                skipped++;
+                negative++;
                 continue;
             }
             String normalizedSku = sku.trim();
             if (StringUtils.hasText(prefix)
                     && !normalizedSku.toUpperCase(Locale.ROOT).startsWith(prefix)) {
                 skipped++;
+                prefixMismatch++;
+                if (foreignSamples.size() < 5) foreignSamples.add(normalizedSku);
                 continue;
             }
             Accumulator value = bySku.computeIfAbsent(normalizedSku,
@@ -101,8 +138,13 @@ public class LingxingDomesticInventoryService {
             value.addStore(firstText(row, STORE_KEYS));
         }
         if (bySku.isEmpty()) {
+            String detail = String.format(
+                    "共读入 %d 行：无 SKU %d、无可识别可用库存 %d、负库存 %d、前缀不符 %d%s",
+                    rows.size(), noSku, noAvailable, negative, prefixMismatch,
+                    foreignSamples.isEmpty() ? "" : "；不符示例 " + String.join(" / ", foreignSamples));
+            dumpFailure(sourceUrl, response, detail, prefix);
             throw new IllegalArgumentException("领星库存响应未包含当前店铺前缀 "
-                    + (StringUtils.hasText(prefix) ? prefix : "对应") + " 的 SKU，已保留原库存");
+                    + (StringUtils.hasText(prefix) ? prefix : "对应") + " 的 SKU（" + detail + "），已保留原库存");
         }
 
         long workspaceId = principal.workspaceId();
@@ -293,6 +335,30 @@ public class LingxingDomesticInventoryService {
             found = true;
         }
         return found ? total : null;
+    }
+
+    /**
+     * 前缀不符时把原始响应落盘，便于判断是「领星页面带了筛选条件」还是「接口字段改名」。
+     * 落盘失败不影响主流程报错。
+     */
+    private void dumpFailure(String sourceUrl, JsonNode response, String detail, String prefix) {
+        if (connectorProperties == null) return;
+        try {
+            Path dir = connectorProperties.resolvedDataDir().resolve("diagnostics");
+            Files.createDirectories(dir);
+            ObjectNode payload = objectMapper.createObjectNode();
+            payload.put("capturedAt", LocalDateTime.now().toString());
+            payload.put("sourceUrl", sourceUrl == null ? "" : sourceUrl);
+            payload.put("storePrefix", prefix == null ? "" : prefix);
+            payload.put("detail", detail);
+            payload.set("response", response);
+            Path file = dir.resolve("lx-inventory-fail-" + DUMP_STAMP.format(LocalDateTime.now()) + ".json");
+            Files.writeString(file, objectMapper.writerWithDefaultPrettyPrinter()
+                    .writeValueAsString(payload), StandardCharsets.UTF_8);
+            log.warn("领星国内仓库存同步失败，原始响应已保存 {}：{}", file, detail);
+        } catch (Exception exception) {
+            log.warn("领星国内仓库存失败响应落盘失败：{}", exception.getMessage());
+        }
     }
 
     private String json(JsonNode value) {

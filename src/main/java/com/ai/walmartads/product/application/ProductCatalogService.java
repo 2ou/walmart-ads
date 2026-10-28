@@ -59,6 +59,7 @@ public class ProductCatalogService {
     private final RefundRateService refundRateService;
     private final ProductRecordRepository productRecordRepository;
     private final ParentLifecycleService lifecycleService;
+    private final ProductDashboardService productDashboardService;
 
     /**
      * 产品库列表快照。列表接口的整条链路（主查询 + 退款率 + 生命周期 + 28 款 summary + searchTerms 拼装
@@ -75,7 +76,8 @@ public class ProductCatalogService {
             ProfitAssumptionRepository profitAssumptionRepository,
             RefundRateService refundRateService,
             ProductRecordRepository productRecordRepository,
-            ParentLifecycleService lifecycleService
+            ParentLifecycleService lifecycleService,
+            ProductDashboardService productDashboardService
     ) {
         this.jdbc = jdbc;
         this.objectMapper = objectMapper;
@@ -84,6 +86,7 @@ public class ProductCatalogService {
         this.refundRateService = refundRateService;
         this.productRecordRepository = productRecordRepository;
         this.lifecycleService = lifecycleService;
+        this.productDashboardService = productDashboardService;
     }
 
     /**
@@ -162,7 +165,7 @@ public class ProductCatalogService {
     @Transactional(readOnly = true)
     public String detailVersion(String parentSku) {
         String safeParentSku = parentSku == null ? "" : parentSku.trim();
-        return fingerprint() + "|" + safeParentSku;
+        return fingerprint() + "|" + safeParentSku + "|" + productDashboardService.version(safeParentSku);
     }
 
     /**
@@ -256,6 +259,10 @@ public class ProductCatalogService {
                 representative.preferManualRefundRate(),
                 representative.manualDeliveryFee()
         );
+        ProductDashboardService.ProductDashboard dashboard = productDashboardService.load(
+                safeParentSku,
+                rows.stream().map(SourceProduct::sku).filter(ProductCatalogService::present).distinct().toList()
+        );
         return new ProductDetail(
                 safeParentSku,
                 representative.productName(),
@@ -280,7 +287,8 @@ public class ProductCatalogService {
                 representativeProfit.historicalRefundRate(),
                 lifecycle.clearance(),
                 lifecycle.allSeason(),
-                lifecycle.seasonType()
+                lifecycle.seasonType(),
+                dashboard
         );
     }
 
@@ -1203,7 +1211,8 @@ public class ProductCatalogService {
             BigDecimal historicalRefundRate,
             boolean clearance,
             boolean allSeason,
-            String seasonType
+            String seasonType,
+            ProductDashboardService.ProductDashboard dashboard
     ) {
     }
 

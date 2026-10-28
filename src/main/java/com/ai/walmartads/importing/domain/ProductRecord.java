@@ -9,6 +9,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import jakarta.persistence.Transient;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -208,6 +209,10 @@ public class ProductRecord extends com.ai.walmartads.workspace.WorkspaceOwnedEnt
     /** 创建时间 */
     private LocalDateTime createdAt;
 
+    /** Workbook row number used only while planning an import; never persisted. */
+    @Transient
+    private int sourceRowNumber;
+
     protected ProductRecord() {
     }
 
@@ -265,6 +270,10 @@ public class ProductRecord extends com.ai.walmartads.workspace.WorkspaceOwnedEnt
         return sku;
     }
 
+    public Long getId() {
+        return id;
+    }
+
     public LocalDateTime getSourceUpdatedAt() {
         return sourceUpdatedAt;
     }
@@ -273,12 +282,68 @@ public class ProductRecord extends com.ai.walmartads.workspace.WorkspaceOwnedEnt
         return parentSku;
     }
 
+    public String getProductType() {
+        return productType;
+    }
+
+    public String getProductIdType() {
+        return productIdType;
+    }
+
     public String getProductName() {
         return productName;
     }
 
     public String getBrand() {
         return brand;
+    }
+
+    public String getShortDescription() {
+        return shortDescription;
+    }
+
+    public String getKeyFeatures() {
+        return keyFeatures;
+    }
+
+    public String getMainImageUrl() {
+        return mainImageUrl;
+    }
+
+    public String getSecondaryImageUrls() {
+        return secondaryImageUrls;
+    }
+
+    public String getColor() {
+        return color;
+    }
+
+    public String getColorCategory() {
+        return colorCategory;
+    }
+
+    public String getSize() {
+        return size;
+    }
+
+    public String getSizeGroup() {
+        return sizeGroup;
+    }
+
+    public String getPatternName() {
+        return patternName;
+    }
+
+    public String getMaterialName() {
+        return materialName;
+    }
+
+    public String getGender() {
+        return gender;
+    }
+
+    public String getVariantGroupId() {
+        return variantGroupId;
     }
 
     public String getProductId() {
@@ -291,6 +356,76 @@ public class ProductRecord extends com.ai.walmartads.workspace.WorkspaceOwnedEnt
 
     public String getRawPayload() {
         return rawPayload;
+    }
+
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
+    }
+
+    public int getSourceRowNumber() {
+        return sourceRowNumber;
+    }
+
+    public void setSourceRowNumber(int sourceRowNumber) {
+        this.sourceRowNumber = sourceRowNumber;
+    }
+
+    /**
+     * Resolves a product-upload row into a complete new version. Empty upload cells inherit the previous
+     * value, while connector/report-owned operational fields always inherit the previous value.
+     */
+    public void mergeProductUploadFrom(ProductRecord previous, String mergedRawPayload) {
+        if (previous != null) {
+            if (blank(productType)) productType = previous.productType;
+            if (blank(productId)) productId = previous.productId;
+            if (blank(productIdType)) productIdType = previous.productIdType;
+            if (blank(productName)) productName = previous.productName;
+            if (blank(brand)) brand = previous.brand;
+            if (blank(shortDescription)) shortDescription = previous.shortDescription;
+            if (emptyJson(keyFeatures)) keyFeatures = previous.keyFeatures;
+            if (blank(mainImageUrl)) mainImageUrl = previous.mainImageUrl;
+            if (emptyJson(secondaryImageUrls)) secondaryImageUrls = previous.secondaryImageUrls;
+            if (blank(color)) color = previous.color;
+            if (blank(colorCategory)) colorCategory = previous.colorCategory;
+            if (blank(size)) size = previous.size;
+            if (blank(sizeGroup)) sizeGroup = previous.sizeGroup;
+            if (blank(patternName)) patternName = previous.patternName;
+            if (blank(materialName)) materialName = previous.materialName;
+            if (blank(gender)) gender = previous.gender;
+            if (blank(variantGroupId)) variantGroupId = previous.variantGroupId;
+
+            cuttingYield = previous.cuttingYield;
+            launchDate = previous.launchDate;
+            price = previous.price;
+            strikethroughPrice = previous.strikethroughPrice;
+            upc = previous.upc;
+            gtin = previous.gtin;
+            listingStatus = previous.listingStatus;
+            store = previous.store;
+            wfsAvailable = previous.wfsAvailable;
+            nonWfsAvailable = previous.nonWfsAvailable;
+            buyBoxPrice = previous.buyBoxPrice;
+            reviewCount = previous.reviewCount;
+            averageRating = previous.averageRating;
+            competitorPrice = previous.competitorPrice;
+            fulfillmentType = previous.fulfillmentType;
+            fulfillmentTypeName = previous.fulfillmentTypeName;
+            listingStartTime = previous.listingStartTime;
+            offerEndDate = previous.offerEndDate;
+            itemUrl = previous.itemUrl;
+            promotionJson = previous.promotionJson;
+            lastSyncedAt = previous.lastSyncedAt;
+            deliveryFee = previous.deliveryFee;
+        }
+        rawPayload = mergedRawPayload;
+    }
+
+    private static boolean blank(String value) {
+        return value == null || value.isBlank();
+    }
+
+    private static boolean emptyJson(String value) {
+        return blank(value) || "[]".equals(value.trim()) || "{}".equals(value.trim());
     }
 
     public Integer getCuttingYield() {

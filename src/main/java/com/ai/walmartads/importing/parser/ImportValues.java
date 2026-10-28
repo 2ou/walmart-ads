@@ -46,6 +46,18 @@ public final class ImportValues {
     }
 
     /**
+     * Reads an identifier without trimming it. Product uploads deliberately use exact SKU matching, so a
+     * differently cased value or a value with surrounding whitespace must not silently target another SKU.
+     */
+    public static String exactText(Cell cell) {
+        if (cell == null || cell.getCellType() == CellType.BLANK) {
+            return null;
+        }
+        String value = FORMATTER.formatCellValue(cell);
+        return value == null || value.isEmpty() ? null : value;
+    }
+
+    /**
      * 读取公式单元格时优先取工作簿缓存值，避免重新计算复杂 Excel 公式。
      */
     public static String cachedText(Cell cell) {

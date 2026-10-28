@@ -4,8 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="color-scheme" content="light">
-  <title>店铺与同步 · 沃尔玛工作台</title>
-  <link rel="stylesheet" href="workspace.css?v=20261008-workspace">
+  <script>if(new URLSearchParams(location.search).get("embedded")==="1")document.documentElement.dataset.embedded="true";</script>
+  <title>店铺管理 · 沃尔玛工作台</title>
+  <link rel="stylesheet" href="workspace.css?v=20261028-store-management">
 </head>
 <body>
   <div class="settings-shell">
@@ -13,16 +14,15 @@
       <a class="settings-brand" href="/"><span>W</span><strong>沃尔玛工作台</strong></a>
       <nav>
         <button class="is-active" data-tab="store" type="button"><i>01</i><span>店铺与领星</span></button>
-        <button data-tab="sync" type="button"><i>02</i><span>同步计划</span></button>
-        <button data-tab="security" type="button"><i>03</i><span>账号安全</span></button>
-        <button data-tab="audit" type="button"><i>04</i><span>运行审计</span></button>
+        <button data-tab="security" type="button"><i>02</i><span>账号安全</span></button>
+        <button data-tab="audit" type="button"><i>03</i><span>运行审计</span></button>
       </nav>
       <div class="sidebar-account"><span class="status-dot"></span><div><strong id="sideStore">读取中…</strong><small id="sideUser"></small></div></div>
     </aside>
 
     <main class="settings-main">
       <header class="settings-topbar">
-        <div><p>自动化准备 / 店铺与同步</p><h1>店铺工作区</h1></div>
+        <div><p>自动化准备 / 店铺管理</p><h1>店铺管理</h1></div>
         <div class="topbar-actions"><a id="backWorkbench" href="/">返回工作台</a><button id="logoutButton" type="button">退出登录</button></div>
       </header>
 
@@ -54,12 +54,12 @@
           </form>
 
           <section class="settings-card">
-            <div class="card-heading"><div><span class="card-index">02</span><h3>账号身份</h3><p>登录账号就是领星真实店铺名，店铺名和缩写创建后均不可修改。</p></div></div>
+            <div class="card-heading"><div><span class="card-index">02</span><h3>账号身份</h3><p>登录账号就是领星真实店铺名，店铺名和缩写创建后均不可修改。</p></div><button class="secondary account-create-toggle" id="toggleCreateAccount" type="button" aria-expanded="false" aria-controls="createAccountCard"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>新增店铺账号</span></button></div>
             <dl class="identity-list"><div><dt>登录店铺名</dt><dd id="accountUsername">—</dd></div><div><dt>店铺缩写</dt><dd id="accountAbbreviation">—</dd></div><div><dt>Store ID</dt><dd id="accountStoreId">—</dd></div><div><dt>供应链权限</dt><dd id="accountSupplyChain">—</dd></div></dl>
           </section>
 
-          <section class="settings-card wide">
-            <div class="card-heading"><div><span class="card-index">03</span><h3>新增店铺账号</h3><p>直接连接领星并创建独立店铺空间；登录账号自动使用所选店铺的真实名称。</p></div></div>
+          <section class="settings-card wide create-account-card" id="createAccountCard" hidden>
+            <div class="card-heading"><div><span class="card-index">03</span><h3>新增店铺账号</h3><p>直接连接领星并创建独立店铺空间；登录账号自动使用所选店铺的真实名称。</p></div><button class="secondary" id="closeCreateAccount" type="button">收起</button></div>
             <form id="createAccountForm" class="form-grid">
               <label class="full">新店铺 X-Mcp-Key<input id="newMcpKey" type="password" required autocomplete="off"></label>
               <label class="full advanced-field">MCP 地址<input id="newMcpBaseUrl" type="url" value="https://openmcp.lingxing.com/mcp-servers/lingxing-mcp"></label>
@@ -79,12 +79,6 @@
         </div>
       </section>
 
-      <section class="settings-tab" data-panel="sync">
-        <div class="section-heading"><div><span class="kicker">SYNC ORCHESTRATION</span><h2>同步计划</h2><p>各工作区错峰运行。只能启停同步类别，不开放原始 Cron，避免高峰碰撞。</p></div><button class="secondary" id="refreshSync" type="button">刷新状态</button></div>
-        <div id="syncCards" class="sync-grid"><div class="settings-card loading-card">正在读取同步计划…</div></div>
-        <section class="settings-card init-card"><div><span class="card-index">初始化进度</span><h3 id="initHeadline">等待读取</h3><p id="initMessage">新店铺先同步商品与当前库存，再在后台补齐历史销量、广告和评价。</p></div><div class="init-track"><span id="initTrack"></span></div></section>
-      </section>
-
       <section class="settings-tab" data-panel="security">
         <div class="section-heading"><div><span class="kicker">ACCOUNT SECURITY</span><h2>账号安全</h2><p>修改密码只需输入两次新密码；已登录浏览器会话继续有效。</p></div></div>
         <div class="settings-grid">
@@ -102,6 +96,6 @@
 
   <dialog id="managedPasswordDialog"><form id="managedPasswordForm" class="dialog-card"><span class="kicker">PINKSIR ACCOUNT ADMIN</span><h2>重置店铺密码</h2><p id="managedPasswordTarget">—</p><input id="managedWorkspaceId" type="hidden"><div class="compact-form"><label>新密码<input id="managedNewPassword" type="password" autocomplete="new-password" required minlength="8"></label><label>确认密码<input id="managedConfirmPassword" type="password" autocomplete="new-password" required minlength="8"></label></div><div><button class="secondary" id="cancelManagedPassword" type="button">取消</button><button class="primary" type="submit">确认重置</button></div></form></dialog>
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
-  <script src="workspace.js?v=20261008-workspace"></script>
+  <script src="workspace.js?v=20261028-store-management"></script>
 </body>
 </html>

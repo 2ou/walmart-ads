@@ -275,6 +275,22 @@ public class WalmartAdStore {
                 reportRows + sliceRows, durationMs, id);
     }
 
+    /**
+     * 窗口内全部是「行在、指标全 0」的未结算空壳日：本轮不写库，只把任务收尾成 SKIPPED。
+     *
+     * <p>以前这种情况会走 {@link #completeLog} 记成 SUCCESS，页面上看起来「同步成功」，
+     * 实际一条广告数据都没进来（2026-10-28 06:40 那次就是典型），运营据此判断会误判。
+     */
+    public void skipLog(long id, int completedTools, String message, long durationMs) {
+        jdbc.update("""
+                update wm_ads_lx_ad_sync_log
+                   set finished_at = ?, status = 'SKIPPED', completed_tool_count = ?,
+                       report_rows = 0, slice_rows = 0, fetched_count = 0,
+                       error_message = ?, duration_ms = ?
+                 where id = ?
+                """, LocalDateTime.now(), completedTools, abbreviate(message, 60000), durationMs, id);
+    }
+
     public void failLog(long id, int completedTools, String error, long durationMs) {
         jdbc.update("""
                 update wm_ads_lx_ad_sync_log
@@ -297,11 +313,17 @@ public class WalmartAdStore {
         return rows.isEmpty() ? Map.of() : rows.getFirst();
     }
 
+    /**
+     * 历史回填的断点：取最后一天「已处理」的日期。
+     *
+     * <p>{@code SKIPPED} 也算已处理 —— 它表示领星那天确实没有可结算数据，
+     * 若不推进断点，回填会永远卡在同一天反复重试，后面的日期永远补不上。
+     */
     public LocalDate latestSuccessfulBackfillDate() {
         return jdbc.query("""
                 select max(window_end) as latest_date
                   from wm_ads_lx_ad_sync_log
-                 where status = 'SUCCESS' and triggered_by = 'BACKFILL'
+                 where status in ('SUCCESS','SKIPPED') and triggered_by = 'BACKFILL'
                 """, resultSet -> resultSet.next() && resultSet.getDate("latest_date") != null
                 ? resultSet.getDate("latest_date").toLocalDate()
                 : null);

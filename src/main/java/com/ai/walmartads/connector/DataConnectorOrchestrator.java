@@ -40,9 +40,11 @@ public class DataConnectorOrchestrator {
     private final DataConnectorStore store;
     private final WorkspaceLingXingConfigService workspaces;
     private final EmbeddedBrowserConnector browser;
+    private final DataConnectorSessionService sessions;
     private final LingxingDomesticInventoryService inventory;
     private final LingxingWfsShipmentService wfs;
     private final SupplyChainSyncService supplyChain;
+    private final CurrentBrowserBridgeService currentBrowserBridge;
     private final ExecutorService executor = Executors.newCachedThreadPool(
             Thread.ofPlatform().daemon().name("data-connector-", 0).factory());
     private final Set<Long> syncing = ConcurrentHashMap.newKeySet();
@@ -53,17 +55,21 @@ public class DataConnectorOrchestrator {
             DataConnectorStore store,
             WorkspaceLingXingConfigService workspaces,
             EmbeddedBrowserConnector browser,
+            DataConnectorSessionService sessions,
             LingxingDomesticInventoryService inventory,
             LingxingWfsShipmentService wfs,
-            SupplyChainSyncService supplyChain
+            SupplyChainSyncService supplyChain,
+            CurrentBrowserBridgeService currentBrowserBridge
     ) {
         this.properties = properties;
         this.store = store;
         this.workspaces = workspaces;
         this.browser = browser;
+        this.sessions = sessions;
         this.inventory = inventory;
         this.wfs = wfs;
         this.supplyChain = supplyChain;
+        this.currentBrowserBridge = currentBrowserBridge;
     }
 
     @EventListener(ApplicationReadyEvent.class)
@@ -115,28 +121,13 @@ public class DataConnectorOrchestrator {
         } catch (IllegalArgumentException exception) {
             throw new IllegalArgumentException("登录系统仅支持 LINGXING 或 SUPPLY_CHAIN");
         }
-        String key = target.workspaceId() + ":" + system.name();
-        if (!loggingIn.add(key)) {
-            return new StartResult(false, target.workspaceId(), target.storeName(), List.of(system.name()),
-                    system.label() + "登录窗口已经打开");
-        }
         store.ensureWorkspace(target);
-        executor.submit(() -> {
-            try {
-                WorkspaceContext.runAs(target, () -> browser.login(target, system));
-                EnumSet<ConnectorSource> sources = system == ConnectorSystem.LINGXING
-                        ? EnumSet.of(ConnectorSource.LINGXING_INVENTORY, ConnectorSource.LINGXING_WFS)
-                        : EnumSet.of(ConnectorSource.SUPPLY_CHAIN);
-                start(target, sources, "LOGIN_CATCHUP", true);
-            } catch (Exception exception) {
-                log.warn("{}登录未完成：workspace={}, {}", system.label(), target.workspaceId(),
-                        rootMessage(exception));
-            } finally {
-                loggingIn.remove(key);
-            }
-        });
         return new StartResult(true, target.workspaceId(), target.storeName(), List.of(system.name()),
-                "已打开" + system.label() + "登录窗口，登录成功后会自动同步");
+                "将使用当前 Chrome 检查" + system.label() + "登录状态");
+    }
+
+    public WorkspacePrincipal bridgeTarget(WorkspacePrincipal actor, Long workspaceId) {
+        return resolveTarget(actor, workspaceId);
     }
 
     public List<WorkspaceStatus> visibleStatus(WorkspacePrincipal actor) {
@@ -158,7 +149,7 @@ public class DataConnectorOrchestrator {
                     || systems.stream().anyMatch(system -> "LOGIN_REQUIRED".equals(system.status()));
             result.add(new WorkspaceStatus(target.workspaceId(), target.storeName(), target.storeAbbreviation(),
                     syncing.contains(target.workspaceId()), abnormal, systems, sources,
-                    store.recentRuns(target.workspaceId(), 20)));
+                    store.recentRuns(target.workspaceId(), 20), currentBrowserBridge.status(target.workspaceId())));
         }
         return result;
     }
@@ -189,16 +180,7 @@ public class DataConnectorOrchestrator {
             selected.removeIf(source -> store.succeededToday(principal.workspaceId(), source, today));
         }
         if (selected.isEmpty()) return false;
-        if (!syncing.add(principal.workspaceId())) return false;
-        executor.submit(() -> {
-            try {
-                for (ConnectorSource source : selected) {
-                    WorkspaceContext.runAs(principal, () -> runSource(principal, source, triggeredBy));
-                }
-            } finally {
-                syncing.remove(principal.workspaceId());
-            }
-        });
+        store.requestBrowserSync(principal.workspaceId(), selected, triggeredBy);
         return true;
     }
 
@@ -208,18 +190,28 @@ public class DataConnectorOrchestrator {
             int count;
             String message;
             if (source == ConnectorSource.LINGXING_INVENTORY) {
+                progress(runId, principal.workspaceId(), source, "正在启动 Chrome，打开领星库存页面");
                 EmbeddedBrowserConnector.LingxingSnapshot snapshot = browser.readLingxing(principal, source);
+                progress(runId, principal.workspaceId(), source, "页面数据已读取，正在更新库存数据库");
                 var summary = inventory.replaceFromConnector(snapshot.sourceUrl(), snapshot.response(), snapshot.capturedAt());
                 count = summary.importedSkus();
                 message = "同步 " + count + " 个 SKU，可用库存 " + summary.availableUnits();
             } else if (source == ConnectorSource.LINGXING_WFS) {
+                progress(runId, principal.workspaceId(), source, "正在启动 Chrome，打开领星 WFS 货件页面");
                 EmbeddedBrowserConnector.LingxingSnapshot snapshot = browser.readLingxing(principal, source);
+                progress(runId, principal.workspaceId(), source, "页面数据已读取，正在更新货件数据库");
                 var summary = wfs.replaceFromConnector(snapshot.sourceUrl(), snapshot.response(), snapshot.capturedAt());
                 count = summary.importedRows();
                 message = "同步 " + summary.importedShipments() + " 张货件、" + count + " 行明细";
             } else {
-                browser.captureSupplyCredential(principal);
+                if (!sessions.currentSupplyConfigured()) {
+                    throw new ConnectorLoginRequiredException("供应链登录已失效，请点击“登录供应链”完成一次登录");
+                }
+                progress(runId, principal.workspaceId(), source, "正在使用加密凭证读取生产与物流数据");
                 SupplyChainSyncService.SyncSummary summary = supplyChain.syncNow("PROJECT_CONNECTOR_" + triggeredBy);
+                if (!"SUCCESS".equals(summary.status()) && !sessions.currentSupplyConfigured()) {
+                    throw new ConnectorLoginRequiredException("供应链登录已失效，请点击“登录供应链”完成一次登录");
+                }
                 if (!"SUCCESS".equals(summary.status())) {
                     throw new IllegalStateException(summary.message() == null ? "供应链同步失败" : summary.message());
                 }
@@ -237,6 +229,10 @@ public class DataConnectorOrchestrator {
                     rootMessage(exception));
             log.error("数据连接同步失败：workspace={}, source={}", principal.workspaceId(), source, exception);
         }
+    }
+
+    private void progress(long runId, long workspaceId, ConnectorSource source, String message) {
+        store.updateRunProgress(runId, workspaceId, source, message);
     }
 
     private SystemStatus toSystemStatus(long workspaceId, ConnectorSystem system) {
@@ -314,6 +310,7 @@ public class DataConnectorOrchestrator {
     public record WorkspaceStatus(long workspaceId, String storeName, String storeAbbreviation,
                                   boolean syncing, boolean abnormal, List<SystemStatus> systems,
                                   List<DataConnectorStore.SourceState> sources,
-                                  List<DataConnectorStore.RunRow> recentRuns) {
+                                  List<DataConnectorStore.RunRow> recentRuns,
+                                  CurrentBrowserBridgeService.BridgeStatus browserBridge) {
     }
 }

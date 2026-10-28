@@ -1,6 +1,7 @@
 package com.ai.walmartads.walmartad;
 
 import com.ai.walmartads.analytics.application.CampaignStyleDiagnosisService;
+import com.ai.walmartads.common.UsBusinessDate;
 import com.ai.walmartads.config.LingXingProperties;
 import com.ai.walmartads.importing.parser.SkuResolver;
 import com.ai.walmartads.workspace.WorkspaceLingXingConfigService;
@@ -35,6 +36,26 @@ import java.util.concurrent.locks.ReentrantLock;
 public class WalmartAdSyncService {
 
     private static final Logger log = LoggerFactory.getLogger(WalmartAdSyncService.class);
+
+    /** 广告历史回填单批推进的天数上限，避免一次调用长时间占锁并撞限流。 */
+    private static final int BACKFILL_BATCH_DAYS = 1;
+
+    /**
+     * 领星广告的结算滞后天数：实测 T 与 T-1 多数情况下还没结算，返回「行在、指标全 0」。
+     *
+     * <p>逐小时同步只重拉 {@code usToday - 2} 这一天 —— 它才是每个整点最有可能从空壳
+     * 变成真实数据的那一天。改造前每小时固定重拉 3 天（18 工具 × 3 = 54 次调用），
+     * 其中 2 天必然是空壳，纯属白烧配额。
+     */
+    private static final int SETTLEMENT_LAG_DAYS = 2;
+
+    /**
+     * 每日一轮的归因修正窗口天数：重拉 T-4 ~ T-1。
+     *
+     * <p>归因是滚动回填的，已结算日的指标在之后几天还会继续变化（实测 10-23 归因在
+     * 10-26 仍有修正），所以每天必须整段覆盖一次，否则老日期的广告销售会长期偏低。
+     */
+    private static final int DAILY_REVISION_DAYS = 4;
 
     private final LingXingProperties properties;
     private final LingXingAdClient client;
@@ -72,15 +93,14 @@ public class WalmartAdSyncService {
             return;
         }
         try {
-            LocalDate end = LocalDate.now();
-            LocalDate start = end.minusDays(properties.resolvedAdWindowDays() - 1L);
-            syncWindowUnlocked("CRON", start, end);
+            LocalDate target = UsBusinessDate.usToday().minusDays(SETTLEMENT_LAG_DAYS);
+            syncWindowUnlocked("CRON", target, target);
         } catch (Exception exception) {
             log.error("Hourly LingXing ad synchronization failed: {}", exception.getMessage(), exception);
         } finally {
             syncLock.unlock();
         }
-        resumeHistoricalBackfill();
+        // History is scheduled by the workspace orchestrator only after a successful current-data run.
     }
 
     /** Starts or resumes the one-time historical backfill without blocking application startup. */
@@ -91,15 +111,24 @@ public class WalmartAdSyncService {
         resumeHistoricalBackfill();
     }
 
-    private void resumeHistoricalBackfill() {
+    /**
+     * 续跑广告历史回填：从 {@code wm_ads_lx_ad_sync_log} 里最后一天 SUCCESS 的 BACKFILL 之后接着跑。
+     *
+     * <p>单批最多推进 {@link #BACKFILL_BATCH_DAYS} 天：一次跑完整段（7/21 至今近百天）会在
+     * 中途撞限流并长时间占着同步锁，改为小批量后每个整点推进一段，被限流也只是本轮不推进。
+     */
+    public void resumeHistoricalBackfill() {
         try {
             LocalDate completed = store.latestSuccessfulBackfillDate();
             LocalDate start = completed == null
                     ? properties.resolvedAdBackfillStart()
                     : completed.plusDays(1);
-            if (!start.isAfter(LocalDate.now())) {
-                startBackfill(start, LocalDate.now());
+            LocalDate today = LocalDate.now();
+            if (start.isAfter(today)) {
+                return;
             }
+            LocalDate batchEnd = start.plusDays(BACKFILL_BATCH_DAYS - 1L);
+            startBackfill(start, batchEnd.isAfter(today) ? today : batchEnd);
         } catch (DataAccessException exception) {
             // Some test and maintenance profiles deliberately start without Flyway/schema access.
             log.warn("LingXing ad history backfill was not started because the normalized schema is unavailable: {}",
@@ -107,9 +136,27 @@ public class WalmartAdSyncService {
         }
     }
 
+    /**
+     * 逐小时的增量同步：只重拉「最早可能已结算」的那一天。
+     *
+     * <p>改造前是固定 3 天窗口（T-2 ~ T），每小时 54 次调用；T 与 T-1 在领星侧还未结算，
+     * 拉回来只有空壳行会被丢弃，等于每小时白打 36 次请求。现在单轮只发 18 次，
+     * 把省下的配额留给每日归因修正和初始化回填。
+     */
     public SyncSummary syncNow(String triggeredBy) {
-        LocalDate end = LocalDate.now();
-        LocalDate start = end.minusDays(properties.resolvedAdWindowDays() - 1L);
+        LocalDate target = UsBusinessDate.usToday().minusDays(SETTLEMENT_LAG_DAYS);
+        return syncWindow(triggeredBy, target, target);
+    }
+
+    /**
+     * 每日一轮的归因修正：整段重拉最近 {@link #DAILY_REVISION_DAYS} 个已收盘业务日。
+     *
+     * <p>领星归因是滚动回填的，已结算日的广告销售/订单在之后几天还会继续修正；
+     * 只靠逐小时增量（每次只碰 T-2）会让 T-3 以前的日子永远停在首次结算值。
+     */
+    public SyncSummary syncDailyRevision(String triggeredBy) {
+        LocalDate end = UsBusinessDate.usToday().minusDays(1);
+        LocalDate start = end.minusDays(DAILY_REVISION_DAYS - 1L);
         return syncWindow(triggeredBy, start, end);
     }
 
@@ -192,6 +239,10 @@ public class WalmartAdSyncService {
             }
             List<AdReportRow> reportRows = new ArrayList<>(reports.values());
             List<AdSliceRow> sliceRows = new ArrayList<>(slices.values());
+            if (!"BACKFILL".equalsIgnoreCase(triggeredBy) && reportRows.isEmpty() && sliceRows.isEmpty()) {
+                throw new IllegalStateException(
+                        "领星广告当前窗口返回 0 条，已按异常空结果处理并保留原广告数据");
+            }
 
             // 同步存储层把关：领星对尚未结算的当日/昨日会返回「行在、指标全 0」的空壳结果
             // （实测约 T+2 才结算）。若照单写入，广告诊断等页面会把这些 0 值日当成真实数据，
@@ -209,6 +260,19 @@ public class WalmartAdSyncService {
                     : sliceRows.stream().filter(row -> settledDates.contains(row.reportDate())).toList();
             if (!shellDates.isEmpty()) {
                 log.info("LingXing ad synchronization skipped unsettled (all-zero) days={}", shellDates);
+            }
+
+            if (settledReports.isEmpty() && settledSlices.isEmpty()) {
+                // 整个窗口都是「行在、指标全 0」：领星尚未结算。照单写库会把 0 值当真实数据，
+                // 而 BACKFILL 还会把已有日期整窗清空。两种都是事故，所以一律跳过写库，
+                // 并记成 SKIPPED（等待结算），不再假报 SUCCESS 误导运营。
+                long skippedDuration = System.currentTimeMillis() - started;
+                String message = "领星广告窗口 " + start + "~" + end + " 尚未结算（"
+                        + reportRows.size() + " 条空壳行），本轮保留原数据，等待下一轮自动重试";
+                store.skipLog(logId, completedTools, message, skippedDuration);
+                log.info("LingXing ad synchronization skipped unsettled window {}..{}, shellRows={}, sliceRows={}",
+                        start, end, reportRows.size(), sliceRows.size());
+                return new SyncSummary("SKIPPED", start, end, completedTools, 0, 0, skippedDuration);
             }
 
             List<Long> advertiserIds = workspaceConfig.current().advertiserIds();

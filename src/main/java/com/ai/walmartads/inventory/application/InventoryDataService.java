@@ -29,6 +29,8 @@ import java.util.Map;
 public class InventoryDataService {
 
     private static final BigDecimal ZERO = BigDecimal.ZERO;
+    private static final int MIN_COMPLETE_SNAPSHOT_ROWS = 100;
+    private static final double MIN_COMPLETE_SNAPSHOT_RATIO = 0.60;
 
     private final NamedParameterJdbcTemplate jdbc;
     private final ProductionOrderSource productionOrderSource;
@@ -275,13 +277,35 @@ public class InventoryDataService {
     }
 
     private LocalDateTime latestSnapshotAt() {
-        return jdbc.queryForList("""
-                select max(inventory.snapshot_at) as snapshot_at
+        List<SnapshotCandidate> candidates = jdbc.queryForList("""
+                select inventory.snapshot_at, count(*) as row_count
                   from wm_ads_inventory_unified inventory
+                 group by inventory.snapshot_at
+                 order by inventory.snapshot_at desc
+                 limit 2
                 """, new MapSqlParameterSource()).stream()
-                .map(row -> localDateTime(row.get("snapshot_at")))
-                .findFirst()
-                .orElse(null);
+                .map(row -> new SnapshotCandidate(
+                        localDateTime(row.get("snapshot_at")),
+                        integer(row.get("row_count"))))
+                .toList();
+        return selectCompleteSnapshot(candidates);
+    }
+
+    static LocalDateTime selectCompleteSnapshot(List<SnapshotCandidate> candidates) {
+        if (candidates == null || candidates.isEmpty()) {
+            return null;
+        }
+        SnapshotCandidate latest = candidates.getFirst();
+        if (candidates.size() == 1) {
+            return latest.snapshotAt();
+        }
+        SnapshotCandidate previous = candidates.get(1);
+        boolean latestIsTruncated = previous.rowCount() >= MIN_COMPLETE_SNAPSHOT_ROWS
+                && latest.rowCount() < Math.ceil(previous.rowCount() * MIN_COMPLETE_SNAPSHOT_RATIO);
+        return latestIsTruncated ? previous.snapshotAt() : latest.snapshotAt();
+    }
+
+    record SnapshotCandidate(LocalDateTime snapshotAt, int rowCount) {
     }
 
     private SalesWindow salesWindow(

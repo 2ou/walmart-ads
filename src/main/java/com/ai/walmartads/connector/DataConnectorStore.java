@@ -11,6 +11,7 @@ import java.sql.Timestamp;
 import java.sql.Statement;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 
 @Repository
@@ -62,7 +63,7 @@ public class DataConnectorStore {
                     last_login_at,last_validated_at,last_message
                 ) values (?,?,?,?,'CONNECTED',if(?,now(6),null),now(6),?)
                 on duplicate key update
-                    encrypted_state=values(encrypted_state),
+                    encrypted_state=coalesce(values(encrypted_state),encrypted_state),
                     encrypted_credential=coalesce(values(encrypted_credential),encrypted_credential),
                     status='CONNECTED',
                     last_login_at=if(?,now(6),last_login_at),
@@ -123,6 +124,28 @@ public class DataConnectorStore {
                 truncate(message, 1000), workspaceId, source.name());
     }
 
+    public void updateRunProgress(long runId, long workspaceId, ConnectorSource source, String message) {
+        String safeMessage = truncate(message, 1000);
+        jdbc.update("update wm_ads_connector_run set message=? where id=? and status='RUNNING'",
+                safeMessage, runId);
+        jdbc.update("""
+                update wm_ads_connector_source_state set last_message=?
+                 where workspace_id=? and source_code=? and status='RUNNING'
+                """, safeMessage, workspaceId, source.name());
+    }
+
+    @Transactional
+    public void requestBrowserSync(long workspaceId, Collection<ConnectorSource> sources, String triggeredBy) {
+        for (ConnectorSource source : sources) {
+            jdbc.update("""
+                    update wm_ads_connector_source_state
+                       set status='WAITING_BROWSER',last_started_at=now(6),
+                           last_message='等待当前 Chrome 读取登录会话',last_triggered_by=?
+                     where workspace_id=? and source_code=? and enabled=1
+                    """, triggeredBy, workspaceId, source.name());
+        }
+    }
+
     public boolean succeededToday(long workspaceId, ConnectorSource source, LocalDate today) {
         Integer count = jdbc.queryForObject("""
                 select count(*) from wm_ads_connector_source_state
@@ -161,14 +184,22 @@ public class DataConnectorStore {
                 Math.max(1, retentionDays));
     }
 
-    /** JVM 已退出时不可能仍有任务运行；启动后关闭遗留的假 RUNNING 审计。 */
+    /** JVM 已退出时不可能仍有任务运行；启动后同时关闭审计与来源状态中的假 RUNNING。 */
+    @Transactional
     public int recoverAbandonedRuns() {
-        return jdbc.update("""
+        int recovered = jdbc.update("""
                 update wm_ads_connector_run
                    set status='FAILED', finished_at=now(6),
-                       message=coalesce(message,'服务重启，上一轮同步已中断')
+                       message='服务重启，上一轮同步已中断'
                  where status='RUNNING'
                 """);
+        jdbc.update("""
+                update wm_ads_connector_source_state
+                   set status='FAILED', last_failure_at=now(6),
+                       last_message='服务重启，上一轮同步已中断，可重新同步'
+                 where status='RUNNING'
+                """);
+        return recovered;
     }
 
     private static LocalDateTime time(Timestamp value) {

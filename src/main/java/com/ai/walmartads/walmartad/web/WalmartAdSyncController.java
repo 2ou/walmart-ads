@@ -24,10 +24,15 @@ public class WalmartAdSyncController {
         this.queryService = queryService;
     }
 
-    /** Manually refreshes today and the configured rolling attribution window. */
+    /**
+     * 手动刷新：跑每日归因修正窗口（最近 4 个已收盘业务日）。
+     *
+     * <p>手动点击的意图是「把最近几天补齐」，所以走 4 天窗口而不是逐小时那一天的增量，
+     * 一次 72 次调用、约 2.5 分钟。想补更早的日期用 {@code /sync/backfill}。
+     */
     @PostMapping("/sync")
     public ApiResponse<WalmartAdSyncService.SyncSummary> sync() {
-        return ApiResponse.ok(syncService.syncNow("MANUAL"));
+        return ApiResponse.ok(syncService.syncDailyRevision("MANUAL"));
     }
 
     /** Starts/resumes the one-time exact-day history backfill in a virtual thread. */

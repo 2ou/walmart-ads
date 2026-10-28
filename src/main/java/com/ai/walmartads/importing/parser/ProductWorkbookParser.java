@@ -51,8 +51,8 @@ public class ProductWorkbookParser {
                     continue;
                 }
                 sourceRows++;
-                String sku = ImportValues.text(row.getCell(header.skuColumn()));
-                if (sku == null || !sku.toUpperCase().startsWith("PNK")) {
+                String sku = ImportValues.exactText(row.getCell(header.skuColumn()));
+                if (sku == null || !sku.trim().toUpperCase().startsWith("PNK")) {
                     continue;
                 }
                 Map<String, Object> raw = new LinkedHashMap<>();
@@ -61,10 +61,12 @@ public class ProductWorkbookParser {
                     if (name != null && "price".equalsIgnoreCase(name.trim())) {
                         continue;
                     }
-                    String value = ImportValues.text(row.getCell(column));
+                    String value = column == header.skuColumn()
+                            ? sku
+                            : ImportValues.text(row.getCell(column));
                     ImportValues.addPreservingDuplicates(raw, name, value);
                 }
-                records.add(new ProductRecord(
+                ProductRecord record = new ProductRecord(
                         importFile,
                         importFile.getSourceModifiedAt(),
                         sku,
@@ -87,7 +89,9 @@ public class ProductWorkbookParser {
                         ImportValues.first(raw, "gender"),
                         ImportValues.first(raw, "variantGroupId"),
                         json.write(raw)
-                ));
+                );
+                record.setSourceRowNumber(rowIndex + 1);
+                records.add(record);
             }
         }
         return new ParsedRows<>(sourceRows, records);

@@ -194,7 +194,8 @@ class ProductCatalogServiceTest {
                 (ProfitAssumptionRepository) null,
                 new RefundRateService(jdbc),
                 null,
-                new ParentLifecycleService(mock(ParentLifecycleRepository.class))
+                new ParentLifecycleService(mock(ParentLifecycleRepository.class)),
+                mock(ProductDashboardService.class)
         );
     }
 

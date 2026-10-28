@@ -118,6 +118,11 @@ public class WorkspaceController {
         return ApiResponse.ok(accounts.syncSettings());
     }
 
+    @GetMapping("/sync-runs")
+    public ApiResponse<List<WorkspaceAccountService.SyncRunView>> syncRuns() {
+        return ApiResponse.ok(accounts.syncRuns());
+    }
+
     @PatchMapping("/sync-settings/{category}")
     public ApiResponse<Void> setSyncEnabled(
             @PathVariable String category,

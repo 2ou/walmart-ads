@@ -29,7 +29,13 @@ public class CampaignDiagnosisCacheWarmup {
     @EventListener(ApplicationReadyEvent.class)
     public void prewarmActiveWorkspaces() {
         try {
-            for (WorkspacePrincipal principal : workspaceConfig.activeWorkspaces("ADS", "HOURLY", null)) {
+            // 同步周期已由 HOURLY 改为 SIX_HOURLY；这里两种 cadence 都认，
+            // 避免库表迁移未完成时预热静默失效。
+            var principals = workspaceConfig.activeWorkspaces("ADS", "SIX_HOURLY", null);
+            if (principals.isEmpty()) {
+                principals = workspaceConfig.activeWorkspaces("ADS", "HOURLY", null);
+            }
+            for (WorkspacePrincipal principal : principals) {
                 Thread.startVirtualThread(() -> WorkspaceContext.runAs(principal, () -> prewarm(principal)));
             }
         } catch (Exception exception) {

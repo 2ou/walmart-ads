@@ -35,6 +35,7 @@ public class WorkspaceSqlGuard {
             "wm_ads_supply_delivery_detail", "wm_ads_supply_logistics_register",
             "wm_ads_supply_chain_sync_log", "wm_ads_dashboard_ad_daily", "wm_ads_dashboard_ad_sku_daily",
             "wm_ads_dashboard_ad_campaign_daily", "wm_ads_wfs_import_batch", "wm_ads_wfs_batch_row",
+            "wm_ads_product_import_change",
             "wm_ads_lx_domestic_inventory", "wm_ads_lx_domestic_inventory_sync_log",
             "wm_ads_lx_wfs_shipment_sync_log");
 

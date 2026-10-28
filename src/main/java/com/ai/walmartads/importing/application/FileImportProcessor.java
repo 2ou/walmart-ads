@@ -5,6 +5,7 @@ import com.ai.walmartads.importing.domain.DomesticInventorySnapshot;
 import com.ai.walmartads.importing.domain.ImportFile;
 import com.ai.walmartads.importing.domain.ImportFileType;
 import com.ai.walmartads.importing.domain.ProductRecord;
+import com.ai.walmartads.importing.domain.ProductImportChange;
 import com.ai.walmartads.importing.domain.ProductionOrderRecord;
 import com.ai.walmartads.importing.domain.ReturnOrderRecord;
 import com.ai.walmartads.importing.domain.SkuMapping;
@@ -28,6 +29,7 @@ import com.ai.walmartads.importing.repository.DomesticInventorySnapshotRepositor
 import com.ai.walmartads.importing.repository.ImportFileRepository;
 import com.ai.walmartads.importing.repository.OrderRecordRepository;
 import com.ai.walmartads.importing.repository.ProductRecordRepository;
+import com.ai.walmartads.importing.repository.ProductImportChangeRepository;
 import com.ai.walmartads.importing.repository.ProductionOrderRepository;
 import com.ai.walmartads.importing.repository.ReturnOrderRecordRepository;
 import com.ai.walmartads.importing.repository.SkuMappingRepository;
@@ -64,6 +66,8 @@ public class FileImportProcessor {
     private final ImportFileRepository fileRepository;
     private final OrderRecordRepository orderRepository;
     private final ProductRecordRepository productRepository;
+    private final ProductImportChangeRepository productImportChangeRepository;
+    private final ProductImportPlanner productImportPlanner;
     private final SkuMappingRepository mappingRepository;
     private final ReturnOrderRecordRepository returnOrderRepository;
     private final ProductWorkbookParser productParser;
@@ -90,6 +94,8 @@ public class FileImportProcessor {
             ImportFileRepository fileRepository,
             OrderRecordRepository orderRepository,
             ProductRecordRepository productRepository,
+            ProductImportChangeRepository productImportChangeRepository,
+            ProductImportPlanner productImportPlanner,
             SkuMappingRepository mappingRepository,
             ReturnOrderRecordRepository returnOrderRepository,
             ProductWorkbookParser productParser,
@@ -113,6 +119,8 @@ public class FileImportProcessor {
         this.fileRepository = fileRepository;
         this.orderRepository = orderRepository;
         this.productRepository = productRepository;
+        this.productImportChangeRepository = productImportChangeRepository;
+        this.productImportPlanner = productImportPlanner;
         this.mappingRepository = mappingRepository;
         this.returnOrderRepository = returnOrderRepository;
         this.productParser = productParser;
@@ -137,8 +145,8 @@ public class FileImportProcessor {
         // ORDER（PO_Data 每日订单明细）已由领星 MCP 接管：不再扫描、不再注册处理工具。
         // ImportFileType.ORDER 枚举保留，仅为读回历史 import_file 行。
         register(
-                "legacy",
-                (path, file) -> saveProducts(productParser.parse(path, file)),
+                "2",
+                (path, file) -> saveProducts(productParser.parse(path, file), file),
                 ImportFileType.PRODUCT
         );
         register(
@@ -204,7 +212,7 @@ public class FileImportProcessor {
         ImportFile file = fileRepository.findById(fileId)
                 .orElseThrow(() -> new IllegalArgumentException("导入文件记录不存在：" + fileId));
         DocumentImportTool.ImportOutcome result = switch (file.getFileType()) {
-            case PRODUCT -> saveProducts(productParser.parse(content, file));
+            case PRODUCT -> saveProducts(productParser.parse(content, file), file);
             case RETURN_ORDER -> saveReturnOrders(returnOrderParser.parse(content, file), file);
             case DOMESTIC_INVENTORY -> saveDomesticInventory(domesticInventoryParser.parse(content, file));
             case PRODUCTION_ORDER -> saveProductionOrders(productionOrderParser.parse(content, file), file);
@@ -277,12 +285,19 @@ public class FileImportProcessor {
         }
     }
 
-    private DocumentImportTool.ImportOutcome saveProducts(ParsedRows<ProductRecord> parsed) {
-        List<String> skus = parsed.rows().stream()
-                .map(ProductRecord::getSku)
-                .distinct()
-                .toList();
-        List<String> parentSkus = parsed.rows().stream()
+    private DocumentImportTool.ImportOutcome saveProducts(ParsedRows<ProductRecord> parsed, ImportFile file) {
+        ProductImportPlanner.Plan plan = productImportPlanner.plan(parsed);
+        if (!plan.conflicts().isEmpty()) {
+            String detail = plan.conflicts().stream()
+                    .map(conflict -> "%s（行 %s，冲突字段：%s）".formatted(
+                            conflict.sku(), conflict.rowNumbers(), String.join("、", conflict.fields())))
+                    .collect(Collectors.joining("；"));
+            throw new IllegalArgumentException("产品表存在重复 SKU 冲突：" + detail);
+        }
+        if (plan.resolvedRecords().isEmpty()) {
+            throw new IllegalArgumentException("产品表没有可导入的 SKU");
+        }
+        List<String> parentSkus = plan.resolvedRecords().stream()
                 .map(ProductRecord::getParentSku)
                 .filter(parentSku -> parentSku != null && !parentSku.isBlank())
                 .distinct()
@@ -299,42 +314,21 @@ public class FileImportProcessor {
                                 row -> ((Number) row[1]).intValue(),
                                 (first, second) -> first
                         ));
-        Map<String, ProductRecord> previous = Map.of();
-        if (!skus.isEmpty()) {
-            // 重新导入产品库时，保留此前由「沃尔玛商品」扫描回写的列，避免被上传文件里的空值覆盖。
-            previous = productRepository.findAllBySkuInAndCurrentVersionTrue(skus).stream()
-                    .collect(Collectors.toMap(ProductRecord::getSku, record -> record, (first, second) -> first));
-            productRepository.deactivateCurrentVersions(skus);
-        }
-        for (ProductRecord record : parsed.rows()) {
-            ProductRecord old = previous.get(record.getSku());
-            applyCuttingYield(record, old, manualCuttingYields);
-            if (old != null) {
-                if (record.getPrice() == null) record.setPrice(old.getPrice());
-                if (record.getStrikethroughPrice() == null) record.setStrikethroughPrice(old.getStrikethroughPrice());
-                if (record.getUpc() == null) record.setUpc(old.getUpc());
-                if (record.getGtin() == null) record.setGtin(old.getGtin());
-                if (record.getListingStatus() == null) record.setListingStatus(old.getListingStatus());
-                if (record.getStore() == null) record.setStore(old.getStore());
-                if (record.getProductId() == null) record.setProductId(old.getProductId());
-                // 保留由领星 MCP 每小时同步回写的实时运营列，避免重新导入产品资料时被空值覆盖。
-                if (record.getWfsAvailable() == null) record.setWfsAvailable(old.getWfsAvailable());
-                if (record.getNonWfsAvailable() == null) record.setNonWfsAvailable(old.getNonWfsAvailable());
-                if (record.getBuyBoxPrice() == null) record.setBuyBoxPrice(old.getBuyBoxPrice());
-                if (record.getReviewCount() == null) record.setReviewCount(old.getReviewCount());
-                if (record.getAverageRating() == null) record.setAverageRating(old.getAverageRating());
-                if (record.getCompetitorPrice() == null) record.setCompetitorPrice(old.getCompetitorPrice());
-                if (record.getFulfillmentType() == null) record.setFulfillmentType(old.getFulfillmentType());
-                if (record.getFulfillmentTypeName() == null) record.setFulfillmentTypeName(old.getFulfillmentTypeName());
-                if (record.getListingStartTime() == null) record.setListingStartTime(old.getListingStartTime());
-                if (record.getOfferEndDate() == null) record.setOfferEndDate(old.getOfferEndDate());
-                if (record.getItemUrl() == null) record.setItemUrl(old.getItemUrl());
-                if (record.getPromotionJson() == null) record.setPromotionJson(old.getPromotionJson());
-                if (record.getLastSyncedAt() == null) record.setLastSyncedAt(old.getLastSyncedAt());
-            }
-        }
-        productRepository.saveAll(parsed.rows());
-        return new DocumentImportTool.ImportOutcome(parsed.sourceRowCount(), parsed.rows().size());
+        plan.resolvedRecords().forEach(record -> applyCuttingYield(record, null, manualCuttingYields));
+
+        // A confirmed product workbook is a complete catalog snapshot for the current workspace.
+        // Rows missing from the workbook are soft-retired; all history remains queryable.
+        productRepository.deactivateAllCurrentVersions();
+        productRepository.saveAll(plan.resolvedRecords());
+
+        String operator = WorkspaceContext.requirePrincipal().username();
+        List<ProductImportChange> audit = plan.changes().stream()
+                .filter(change -> change.type() != ProductImportPlanner.ChangeType.UNCHANGED)
+                .map(change -> new ProductImportChange(
+                        file, change, productImportPlanner.fieldsJson(change), operator))
+                .toList();
+        productImportChangeRepository.saveAll(audit);
+        return new DocumentImportTool.ImportOutcome(parsed.sourceRowCount(), plan.uniqueSkuCount());
     }
 
     static void applyCuttingYield(

@@ -8,6 +8,7 @@ import com.ai.walmartads.walmartcomment.repository.WalmartCommentRepository;
 import com.ai.walmartads.walmartcomment.repository.WalmartCommentSyncLogRepository;
 import com.ai.walmartads.walmartlisting.LingXingClient;
 import com.ai.walmartads.workspace.WorkspaceLingXingConfigService;
+import com.ai.walmartads.workspace.LingXingMcpCoordinator;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -78,6 +79,8 @@ public class WalmartCommentSyncService {
     private final ObjectMapper objectMapper;
     @Autowired(required = false)
     private WorkspaceLingXingConfigService workspaceConfig;
+    @Autowired(required = false)
+    private LingXingMcpCoordinator mcpCoordinator;
 
     public WalmartCommentSyncService(
             LingXingProperties properties,
@@ -167,7 +170,7 @@ public class WalmartCommentSyncService {
             throw new IllegalStateException("领星 MCP 未配置，无法同步 Walmart 评价");
         }
         LingXingClient client = new LingXingClient(config.baseUrl(), config.apiKey(), PAGE_SIZE,
-                10, 60, objectMapper, List.of());
+                10, 60, objectMapper, List.of(), "REVIEWS", mcpCoordinator);
         LocalDate end = requestedEnd == null ? LocalDate.now() : requestedEnd;
         LocalDate start = requestedStart == null
                 ? end.minusDays(properties.resolvedCommentWindowDays() - 1L)
@@ -182,6 +185,11 @@ public class WalmartCommentSyncService {
         long begin = System.currentTimeMillis();
         try {
             List<Map<String, Object>> rows = fetch(client, config.storeId(), start, end);
+            if (rows.isEmpty() && !commentRepository
+                    .findByPlatformAndCommentDateBetweenOrderByCommentDateDesc(PLATFORM, start, end).isEmpty()) {
+                throw new IllegalStateException(
+                        "领星评价本次返回 0 条，但库内同期已有评价；已保留原数据并标记异常空结果");
+            }
             WriteResult written = persist(rows);
             int rescued = rescueUnmatched();
             long duration = System.currentTimeMillis() - begin;

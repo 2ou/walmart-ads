@@ -40,6 +40,7 @@ public class WorkspaceAccountService {
     private final PasswordEncoder passwordEncoder;
     private final ObjectMapper objectMapper;
     private final LingXingProperties legacyProperties;
+    private final LingXingMcpCoordinator mcpCoordinator;
 
     private final RowMapper<AccountRow> accountMapper = (rs, rowNum) -> new AccountRow(
             rs.getLong("id"), rs.getString("username"), rs.getString("password_hash"),
@@ -53,12 +54,14 @@ public class WorkspaceAccountService {
             JdbcTemplate jdbc,
             PasswordEncoder passwordEncoder,
             ObjectMapper objectMapper,
-            LingXingProperties legacyProperties
+            LingXingProperties legacyProperties,
+            LingXingMcpCoordinator mcpCoordinator
     ) {
         this.jdbc = jdbc;
         this.passwordEncoder = passwordEncoder;
         this.objectMapper = objectMapper;
         this.legacyProperties = legacyProperties;
+        this.mcpCoordinator = mcpCoordinator;
     }
 
     public boolean setupRequired() {
@@ -263,7 +266,8 @@ public class WorkspaceAccountService {
     }
 
     public List<StoreOption> discoverStores(String baseUrl, String key) {
-        LingXingClient client = new LingXingClient(baseUrl, key, 200, 15, 45, objectMapper, List.of());
+        LingXingClient client = new LingXingClient(baseUrl, key, 200, 15, 45,
+                objectMapper, List.of(), "WORKSPACE", mcpCoordinator);
         JsonNode data = client.callTool("get_multi_platform_shop_list", Map.of("platform_code", List.of("10008")));
         List<StoreOption> stores = new ArrayList<>();
         collectStores(data, stores);
@@ -400,14 +404,35 @@ public class WorkspaceAccountService {
     }
 
     public List<SyncSettingView> syncSettings() {
+        long workspaceId = WorkspaceContext.requireId();
+        AccountRow account = requireAccount(workspaceId);
+        LingXingMcpCoordinator.RuntimeStatus runtime = mcpCoordinator.status(account.mcpBaseUrl(), account.mcpKey());
         return jdbc.query("""
                 select sync_category, enabled, cadence, stagger_minute, last_started_at, last_completed_at,
-                       last_status, last_message
+                       last_status, last_message,last_valid_data_at,last_fetched_count,last_written_count,
+                       integrity_status,next_retry_at
                   from wm_ads_workspace_sync_setting where workspace_id=? order by sync_category
                 """, (rs, rowNum) -> new SyncSettingView(rs.getString("sync_category"), rs.getBoolean("enabled"),
                 rs.getString("cadence"), rs.getInt("stagger_minute"), timestamp(rs, "last_started_at"),
-                timestamp(rs, "last_completed_at"), rs.getString("last_status"), rs.getString("last_message")),
-                WorkspaceContext.requireId());
+                timestamp(rs, "last_completed_at"), rs.getString("last_status"), rs.getString("last_message"),
+                timestamp(rs, "last_valid_data_at"), nullableLong(rs, "last_fetched_count"),
+                nullableLong(rs, "last_written_count"), rs.getString("integrity_status"),
+                timestamp(rs, "next_retry_at"), runtime.coolingDown(), runtime.limitedUntil(),
+                runtime.lastRequestAt()), workspaceId);
+    }
+
+    public List<SyncRunView> syncRuns() {
+        return jdbc.query("""
+                select sync_category,trigger_source,status,fetched_count,written_count,integrity_status,
+                       message,started_at,completed_at,duration_ms
+                  from wm_ads_workspace_sync_run
+                 where workspace_id=? order by started_at desc limit 30
+                """, (rs, rowNum) -> new SyncRunView(rs.getString("sync_category"),
+                rs.getString("trigger_source"), rs.getString("status"),
+                nullableLong(rs, "fetched_count"), nullableLong(rs, "written_count"),
+                rs.getString("integrity_status"), rs.getString("message"),
+                timestamp(rs, "started_at"), timestamp(rs, "completed_at"),
+                nullableLong(rs, "duration_ms")), WorkspaceContext.requireId());
     }
 
     public void setSyncEnabled(String category, boolean enabled, String ip, String userAgent) {
@@ -478,7 +503,7 @@ public class WorkspaceAccountService {
     private void seedSyncSettings(long workspaceId, boolean adsConfigured) {
         int minute = (int) Math.floorMod(workspaceId * 7, 50) + 5;
         for (String category : List.of("PRODUCTS", "SALES", "INVENTORY")) {
-            jdbc.update("insert into wm_ads_workspace_sync_setting (workspace_id,sync_category,enabled,cadence,stagger_minute) values (?,?,1,'HOURLY',?)",
+            jdbc.update("insert into wm_ads_workspace_sync_setting (workspace_id,sync_category,enabled,cadence,stagger_minute) values (?,?,1,'SIX_HOURLY',?)",
                     workspaceId, category, minute);
         }
         jdbc.update("""
@@ -702,6 +727,11 @@ public class WorkspaceAccountService {
         return value == null ? null : value.toLocalDateTime();
     }
 
+    private static Long nullableLong(java.sql.ResultSet rs, String column) throws java.sql.SQLException {
+        Object value = rs.getObject(column);
+        return value instanceof Number number ? number.longValue() : null;
+    }
+
     private record AccountRow(long id, String username, String passwordHash, String status, long sessionVersion,
                               String storeId, String storeName, String storeAbbreviation, String skuPrefixes,
                               String mcpBaseUrl, String mcpKey, String mcpKeyLast4,
@@ -738,9 +768,17 @@ public class WorkspaceAccountService {
     }
 
     public record SyncSettingView(String category, boolean enabled, String cadence, int staggerMinute,
-                                  LocalDateTime lastStartedAt, LocalDateTime lastCompletedAt,
-                                  String lastStatus, String lastMessage) {
+                                   LocalDateTime lastStartedAt, LocalDateTime lastCompletedAt,
+                                   String lastStatus, String lastMessage, LocalDateTime lastValidDataAt,
+                                   Long lastFetchedCount, Long lastWrittenCount, String integrityStatus,
+                                   LocalDateTime nextRetryAt, boolean mcpCoolingDown,
+                                   LocalDateTime mcpLimitedUntil, LocalDateTime mcpLastRequestAt) {
     }
+
+    public record SyncRunView(String category, String triggerSource, String status,
+                              Long fetchedCount, Long writtenCount, String integrityStatus,
+                              String message, LocalDateTime startedAt, LocalDateTime completedAt,
+                              Long durationMs) { }
 
     public record SetupRequest(String password, String confirmPassword, String mcpKey, String baseUrl,
                                String storeId, String storeAbbreviation,

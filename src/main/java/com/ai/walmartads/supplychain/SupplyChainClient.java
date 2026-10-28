@@ -21,6 +21,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
@@ -336,8 +337,18 @@ public class SupplyChainClient {
         JsonNode code = response.get("code");
         if (code != null && !code.isNull() && code.asInt(200) != 200) {
             String message = response.path("msg").asText(response.path("message").asText("未知错误"));
+            if (code.asInt() == 401 || isAuthenticationFailure(message)) {
+                connectorSessions.requireLogin(WorkspaceContext.requireId(), ConnectorSystem.SUPPLY_CHAIN,
+                        "供应链登录会话已失效", true);
+            }
             throw new IllegalStateException("供应链接口失败：" + message + " (" + path + ")");
         }
+    }
+
+    private static boolean isAuthenticationFailure(String message) {
+        String value = message == null ? "" : message.toLowerCase(Locale.ROOT);
+        return value.contains("认证") || value.contains("登录") || value.contains("unauthorized")
+                || value.contains("无法访问系统资源") || value.contains("token") || value.contains("令牌");
     }
 
     private List<Map<String, Object>> extractRows(JsonNode response) {

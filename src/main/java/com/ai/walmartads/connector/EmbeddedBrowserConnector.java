@@ -65,7 +65,7 @@ public class EmbeddedBrowserConnector {
         try (BrowserHandle handle = open(state, true)) {
             CapturedTemplate captured = captureTemplate(handle.context(), spec, properties.captureTimeout());
             JsonNode payload = readAllPages(captured.frame(), captured.template(), source,
-                    principal.storeAbbreviation());
+                    principal.storeAbbreviation(), properties.captureTimeout());
             sessions.save(principal.workspaceId(), ConnectorSystem.LINGXING,
                     handle.context().storageState(), null, false, "领星会话验证成功");
             return new LingxingSnapshot(captured.template().url(), payload, LocalDateTime.now());
@@ -163,10 +163,12 @@ public class EmbeddedBrowserConnector {
 
     private CapturedTemplate captureTemplate(BrowserContext context, SourceSpec source, Duration timeout) {
         Page page = context.newPage();
-        AtomicReference<CapturedTemplate> captured = new AtomicReference<>();
+        AtomicReference<Request> captured = new AtomicReference<>();
         page.onRequest(request -> {
             if (captured.get() != null || !matchesPath(request.url(), source.apiPath())) return;
-            captured.compareAndSet(null, new CapturedTemplate(request.frame(), template(request)));
+            // Playwright 的网络事件回调运行在协议派发线程上。这里不能调用 allHeaders() 等
+            // 需要再次请求浏览器协议的方法，否则派发线程会等待自己并永久死锁。
+            captured.compareAndSet(null, request);
         });
         try {
             page.navigate(source.pageUrl(), new Page.NavigateOptions()
@@ -198,7 +200,8 @@ public class EmbeddedBrowserConnector {
             safeClose(page);
             throw new ConnectorLoginRequiredException("领星页面没有发出目标数据请求" + suffix);
         }
-        return captured.get();
+        Request request = captured.get();
+        return new CapturedTemplate(request.frame(), template(request));
     }
 
     private String captureSupplyAuthorization(BrowserContext context, Duration timeout) {
@@ -209,7 +212,9 @@ public class EmbeddedBrowserConnector {
                 URI uri = URI.create(request.url());
                 if (!"czyxgyl.shangyiku.top".equalsIgnoreCase(uri.getHost())
                         || !uri.getPath().startsWith("/prod-api/")) return;
-                String value = request.allHeaders().get("authorization");
+                // headers() 是请求对象的本地快照；allHeaders() 会再次访问浏览器协议，
+                // 在事件回调内使用会造成协议线程等待自己，令任务永久卡住。
+                String value = request.headers().get("authorization");
                 if (value != null && value.matches("(?i)^Bearer\\s+\\S+")) authorization.set(value.trim());
             } catch (RuntimeException ignored) {
                 // 非业务请求忽略。
@@ -222,7 +227,11 @@ public class EmbeddedBrowserConnector {
         } catch (RuntimeException ignored) {
             // 登录窗口继续等待用户完成登录。
         }
-        waitFor(page, timeout, () -> StringUtils.hasText(authorization.get()));
+        long deadline = System.nanoTime() + timeout.toNanos();
+        while (!StringUtils.hasText(authorization.get()) && System.nanoTime() < deadline) {
+            ensurePageOpen(page);
+            waitBriefly(page);
+        }
         if (!StringUtils.hasText(authorization.get())) {
             String suffix = looksLikeLogin(page.url()) ? "，当前登录已失效" : "";
             safeClose(page);
@@ -232,33 +241,26 @@ public class EmbeddedBrowserConnector {
     }
 
     private JsonNode readAllPages(Frame frame, RequestTemplate template, ConnectorSource source,
-                                  String storeAbbreviation) {
+                                  String storeAbbreviation, Duration timeout) {
         Map<String, Object> args = new LinkedHashMap<>();
         args.put("template", Map.of(
                 "url", template.url(), "method", template.method(),
                 "headers", template.headers(), "body", value(template.body())));
         args.put("kindName", source == ConnectorSource.LINGXING_INVENTORY ? "inventory" : "wfs");
         args.put("inventoryPrefix", value(storeAbbreviation).trim().toUpperCase(Locale.ROOT));
+        args.put("timeoutMs", Math.max(30_000, timeout.toMillis()));
         Object result = frame.evaluate(PAGED_FETCH_SCRIPT, args);
         return objectMapper.valueToTree(result);
     }
 
     private static RequestTemplate template(Request request) {
         Map<String, String> headers = new LinkedHashMap<>();
-        request.allHeaders().forEach((name, value) -> {
+        request.headers().forEach((name, value) -> {
             if (!name.matches("(?i)^(cookie|host|content-length|origin|referer|accept-encoding|connection|sec-.*|proxy-.*)$")) {
                 headers.put(name, value);
             }
         });
         return new RequestTemplate(request.url(), request.method(), headers, request.postData());
-    }
-
-    private static void waitFor(Page page, Duration timeout, Condition condition) {
-        long deadline = System.nanoTime() + timeout.toNanos();
-        while (!condition.done() && System.nanoTime() < deadline) {
-            ensurePageOpen(page);
-            waitBriefly(page);
-        }
     }
 
     private static void ensurePageOpen(Page page) {
@@ -319,11 +321,6 @@ public class EmbeddedBrowserConnector {
         }
     }
 
-    @FunctionalInterface
-    private interface Condition {
-        boolean done();
-    }
-
     private record SourceSpec(String pageUrl, String apiPath) {
     }
 
@@ -356,7 +353,8 @@ public class EmbeddedBrowserConnector {
     }
 
     private static final String PAGED_FETCH_SCRIPT = """
-            async ({template, kindName, inventoryPrefix}) => {
+            async ({template, kindName, inventoryPrefix, timeoutMs}) => {
+              const deadline=Date.now()+Math.max(30000,Number(timeoutMs)||75000);
               const firstArray = (payload) => [payload?.data?.list, payload?.data?.rows,
                 payload?.data?.records, payload?.data?.items, payload?.list, payload?.rows,
                 payload?.records, payload?.items].find(Array.isArray) || null;
@@ -397,7 +395,10 @@ public class EmbeddedBrowserConnector {
                   return {...source,body:json?JSON.stringify(next):new URLSearchParams(next).toString()}; }};
               };
               const fetchJson = async (source) => {
-                const controller=new AbortController(); const timer=setTimeout(()=>controller.abort(),60000);
+                const remaining=deadline-Date.now();
+                if (remaining<=0) throw new Error('分页读取超时，请稍后重试');
+                const controller=new AbortController();
+                const timer=setTimeout(()=>controller.abort(),Math.min(30000,remaining));
                 try {
                   const response=await fetch(source.url,{method:source.method,headers:source.headers,
                     body:['GET','HEAD'].includes(String(source.method).toUpperCase())?undefined:source.body,

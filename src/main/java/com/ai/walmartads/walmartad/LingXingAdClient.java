@@ -3,6 +3,7 @@ package com.ai.walmartads.walmartad;
 import com.ai.walmartads.config.LingXingProperties;
 import com.ai.walmartads.walmartlisting.LingXingClient;
 import com.ai.walmartads.workspace.WorkspaceLingXingConfigService;
+import com.ai.walmartads.workspace.LingXingMcpCoordinator;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -51,15 +52,18 @@ public class LingXingAdClient {
     private final LingXingProperties properties;
     private final ObjectMapper objectMapper;
     private final WorkspaceLingXingConfigService workspaceConfig;
+    private final LingXingMcpCoordinator mcpCoordinator;
 
     public LingXingAdClient(
             LingXingProperties properties,
             ObjectMapper objectMapper,
-            WorkspaceLingXingConfigService workspaceConfig
+            WorkspaceLingXingConfigService workspaceConfig,
+            LingXingMcpCoordinator mcpCoordinator
     ) {
         this.properties = properties;
         this.objectMapper = objectMapper;
         this.workspaceConfig = workspaceConfig;
+        this.mcpCoordinator = mcpCoordinator;
     }
 
     public boolean configured() {
@@ -73,7 +77,7 @@ public class LingXingAdClient {
         }
         WorkspaceLingXingConfigService.Config config = workspaceConfig.current();
         LingXingClient client = new LingXingClient(config.baseUrl(), config.apiKey(), config.pageSize(),
-                10, 180, objectMapper, config.advertiserIds());
+                10, 180, objectMapper, config.advertiserIds(), "ADS", mcpCoordinator);
         List<FetchedTool> results = new ArrayList<>(TOOLS.size());
         for (ToolSpec spec : TOOLS) {
             List<Map<String, Object>> rows = fetchPaged(client, config, spec, date);
@@ -180,6 +184,9 @@ public class LingXingAdClient {
                 return client.callTool(spec.toolId(), params);
             } catch (RuntimeException exception) {
                 last = exception;
+                if (exception instanceof LingXingClient.RateLimitedException) {
+                    throw exception;
+                }
                 if (attempt == 3) {
                     break;
                 }

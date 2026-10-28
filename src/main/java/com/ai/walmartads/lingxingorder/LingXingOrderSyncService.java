@@ -14,6 +14,7 @@ import com.ai.walmartads.lingxingorder.domain.LingXingOrderSyncLog;
 import com.ai.walmartads.lingxingorder.repository.LingXingOrderSyncLogRepository;
 import com.ai.walmartads.walmartlisting.LingXingClient;
 import com.ai.walmartads.workspace.WorkspaceLingXingConfigService;
+import com.ai.walmartads.workspace.LingXingMcpCoordinator;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
@@ -119,6 +120,8 @@ public class LingXingOrderSyncService {
     private final ObjectMapper objectMapper;
     @Autowired
     private WorkspaceLingXingConfigService workspaceConfig;
+    @Autowired
+    private LingXingMcpCoordinator mcpCoordinator;
 
     public LingXingOrderSyncService(
             LingXingProperties properties,
@@ -211,7 +214,7 @@ public class LingXingOrderSyncService {
             throw new IllegalStateException("领星 MCP 未配置，无法同步销量/订单数据");
         }
         LingXingClient client = new LingXingClient(config.baseUrl(), config.apiKey(), config.pageSize(),
-                10, 120, objectMapper, List.of());
+                10, 120, objectMapper, List.of(), "SALES", mcpCoordinator);
         LocalDate end = requestedEnd == null ? UsBusinessDate.usToday() : requestedEnd;
         LocalDate start = requestedStart == null
                 ? end.minusDays(properties.resolvedOrderWindowDays() - 1L)
@@ -231,6 +234,11 @@ public class LingXingOrderSyncService {
         long begin = System.currentTimeMillis();
         try {
             FetchResult fetched = fetch(client, config.storeId(), start, end);
+            if (fetched.skuCount() == 0
+                    && fileRepository.findMaxActiveReportDate(ImportFileType.LINGXING_ORDER) != null) {
+                throw new IllegalStateException(
+                        "领星销量本次返回 0 个 SKU，已按异常空结果处理并保留原订单数据");
+            }
             WriteResult written = persist(fetched);
             long duration = System.currentTimeMillis() - begin;
             record.setStatus("SUCCESS");

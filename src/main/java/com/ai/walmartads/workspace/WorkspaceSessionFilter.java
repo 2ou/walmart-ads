@@ -84,6 +84,7 @@ public class WorkspaceSessionFilter extends OncePerRequestFilter {
     }
 
     private boolean isPublic(String path) {
+        if (path.startsWith("/api/browser-bridge/")) return true;
         if (path.equals("/login.html") || path.equals("/auth.css") || path.equals("/auth.js")
                 || path.equals("/pinksir-reset.html") || path.equals("/pinksir-reset.js")
                 || path.startsWith("/favicon") || path.startsWith("/error")) return true;

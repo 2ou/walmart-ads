@@ -18,11 +18,14 @@ public class DataConnectorController {
 
     private final DataConnectorOrchestrator orchestrator;
     private final DataConnectorProperties properties;
+    private final CurrentBrowserBridgeService browserBridge;
 
     public DataConnectorController(DataConnectorOrchestrator orchestrator,
-                                   DataConnectorProperties properties) {
+                                   DataConnectorProperties properties,
+                                   CurrentBrowserBridgeService browserBridge) {
         this.orchestrator = orchestrator;
         this.properties = properties;
+        this.browserBridge = browserBridge;
     }
 
     @GetMapping("/status")
@@ -31,15 +34,18 @@ public class DataConnectorController {
         result.put("enabled", properties.enabled());
         result.put("schedule", "每日 08:00");
         result.put("zone", properties.resolvedZone());
-        try {
-            result.put("chrome", orchestrator.chromeExecutable().toString());
-            result.put("chromeReady", true);
-        } catch (RuntimeException exception) {
-            result.put("chromeReady", false);
-            result.put("chromeError", exception.getMessage());
-        }
+        result.put("mode", "CURRENT_CHROME");
+        result.put("chrome", "当前工作台所在 Chrome");
         result.put("workspaces", orchestrator.visibleStatus(WorkspaceContext.requirePrincipal()));
         return ApiResponse.ok(result);
+    }
+
+    @PostMapping("/browser-bridge/bootstrap")
+    public ApiResponse<CurrentBrowserBridgeService.Bootstrap> bootstrap(
+            @RequestBody(required = false) BridgeBootstrapRequest request) {
+        Long workspaceId = request == null ? null : request.workspaceId();
+        var target = orchestrator.bridgeTarget(WorkspaceContext.requirePrincipal(), workspaceId);
+        return ApiResponse.ok(browserBridge.bootstrap(target));
     }
 
     @PostMapping("/sync")
@@ -62,5 +68,8 @@ public class DataConnectorController {
     }
 
     public record LoginRequest(Long workspaceId, String system) {
+    }
+
+    public record BridgeBootstrapRequest(Long workspaceId) {
     }
 }

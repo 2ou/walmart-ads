@@ -59,6 +59,28 @@ class ProductWorkbookParserTest {
                 .doesNotContain("\"price\"");
     }
 
+    @Test
+    void preservesExactSkuTextAndWorkbookRowNumber() throws Exception {
+        Path path = temp.resolve("exact-sku-upload.xlsx");
+        try (Workbook workbook = new XSSFWorkbook()) {
+            Sheet sheet = workbook.createSheet("Product Content And Site Exp");
+            writeRow(sheet.createRow(0), List.of("sku", "productName"));
+            writeRow(sheet.createRow(1), List.of(" PNK100-Blue-M ", "Exact identifier"));
+            try (OutputStream output = Files.newOutputStream(path)) {
+                workbook.write(output);
+            }
+        }
+        ImportFile importFile = new ImportFile(new ImportBatch(temp.toString()), ImportFileType.PRODUCT, null,
+                path.getFileName().toString(), path.toString(), "0".repeat(64), Files.size(path),
+                LocalDateTime.now(), null, null);
+
+        ProductRecord record = new ProductWorkbookParser(new JsonPayloadWriter(new ObjectMapper()))
+                .parse(Files.readAllBytes(path), importFile).rows().getFirst();
+
+        assertThat(record.getSku()).isEqualTo(" PNK100-Blue-M ");
+        assertThat(record.getSourceRowNumber()).isEqualTo(2);
+    }
+
     private static void writeRow(Row row, List<String> values) {
         for (int column = 0; column < values.size(); column++) {
             row.createCell(column).setCellValue(values.get(column));

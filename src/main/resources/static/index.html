@@ -8,7 +8,7 @@
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%232f90ff'/%3E%3Cpath d='M14 18h9l4 25 5-17h7l5 17 4-25h9L50 49H39l-4-13-4 13H20z' fill='%23edf4ff'/%3E%3C/svg%3E">
   <title>沃尔玛工作台</title>
 
-  <link rel="stylesheet" href="app.css?v=20261028-data-center-sync">
+  <link rel="stylesheet" href="app.css?v=20261029-inv-nobtn2">
 </head>
 <body>
   <a href="#main" class="skip-link">跳到主要内容</a>
@@ -659,45 +659,13 @@
                   <th class="num bystyle-sortable" data-sort="productionSuggest" title="数值由「需求分析 60 天计划」回写覆盖（裁床取整后）；未覆盖款号回落本地快捷算法">裁床建议做货<span class="bystyle-sort-ind"></span></th>
                   <th class="num bystyle-sortable" data-sort="production" title="数值由「需求分析 60 天计划」回写覆盖（裁床取整后做货量）；未覆盖款号回落本地快捷算法">做货<span class="bystyle-sort-ind"></span></th>
                   <th class="num bystyle-sortable" data-sort="cumulativeRefundRate" title="来自退款率分析的累计款号退款率：退款导入时间窗内 已退款件数 ÷ 订单销量（无退款记录=0%，无退款数据=—）">累计退款率<span class="bystyle-sort-ind"></span></th>
-                  <th>操作</th>
                 </tr></thead>
                 <tbody id="inventoryByStyleBody"></tbody>
               </table>
             </div>
           </section>
           </div>
-          <section class="inventory-style-dashboard-screen" id="inventoryStyleDashboardScreen" aria-labelledby="inventoryStyleDashboardTitle" hidden>
-            <header class="product-dashboard-header inventory-style-dashboard-header">
-              <div class="product-dashboard-heading">
-                <button class="product-dashboard-back" id="inventoryStyleDashboardBack" type="button" aria-label="返回库存总览">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
-                  <span>库存总览</span>
-                </button>
-                <div class="product-dashboard-title-wrap">
-                  <div class="product-dashboard-eyebrow"><span>库存款号仪表盘</span><strong id="inventoryStyleDashboardSku">正在读取</strong></div>
-                  <h2 id="inventoryStyleDashboardTitle" tabindex="-1">正在汇总款号库存</h2>
-                  <p id="inventoryStyleDashboardMeta">正在关联 WFS、国内仓、做货、路途和需求预测</p>
-                </div>
-              </div>
-              <div class="product-dashboard-actions">
-                <button class="secondary-button" id="inventoryStyleDashboardRefresh" type="button">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M20 7v5h-5"/><path d="M4 17v-5h5"/><path d="M18.5 9A7 7 0 0 0 6 6.5L4 9M5.5 15A7 7 0 0 0 18 17.5l2-2.5"/></svg>
-                  <span>刷新库存</span>
-                </button>
-                <button class="primary-button" id="inventoryStyleDashboardForecast" type="button">打开需求预测</button>
-              </div>
-            </header>
-            <nav class="product-dashboard-nav inventory-style-dashboard-nav" aria-label="库存款号仪表盘章节">
-              <a href="#inventoryStyleDashboardOverview">风险总览</a>
-              <a href="#inventoryStyleDashboardStructure">库存结构</a>
-              <a href="#inventoryStyleDashboardRisk">SKU 风险</a>
-              <a href="#inventoryStyleDashboardVariants">SKU 明细</a>
-            </nav>
-            <div class="product-dashboard-body inventory-style-dashboard-body" id="inventoryStyleDashboardBody" aria-live="polite">
-              <div class="empty-state inventory-style-dashboard-loading"><strong>正在生成库存驾驶舱</strong>正在关联该款全部 SKU 的库存、销量和补货数据。</div>
-            </div>
-          </section>
-          <!-- 需求预测面板已拆为独立子视图 #view-demand-forecast -->
+          <!-- 库存款号仪表盘已改为弹窗 #inventoryStyleDialog，不再占用整页子视图 -->
         </section>
 
         <section class="view" id="view-supply-chain" aria-labelledby="pageTitle">
@@ -1459,7 +1427,7 @@
                     <ul class="import-help-paths">
                       <li><span>产品资料</span><code>一次上传一个完整清单；新增 / 修改 / 停用预览后确认</code></li>
                       <li><span>月度退款</span><code>上传 Customer returns-YYYYMM.xlsx</code></li>
-                      <li><span>生产订单</span><code>项目内置连接器为主；仅页面上传兜底</code></li>
+                      <li><span>生产订单</span><code>供应链自动同步为主；更新的上传文件可临时接管补货计算</code></li>
                       <li><span>WFS 货件</span><code>领星自动同步为主；仅页面上传兜底</code></li>
                       <li><span>国内仓库存</span><code>领星自动同步为主；仅页面上传兜底</code></li>
                     </ul>
@@ -1698,6 +1666,29 @@
         <button class="dialog-close" id="scSheetClose" type="button" aria-label="关闭发货单仪表盘">×</button>
       </header>
       <div class="sc-order-body" id="scSheetBody"></div>
+    </div>
+  </dialog>
+  <dialog class="inv-style-dialog" id="inventoryStyleDialog" aria-labelledby="inventoryStyleDialogTitle">
+    <div class="inv-style-shell">
+      <header class="inv-style-head">
+        <div class="inv-style-head-copy">
+          <span class="inv-style-eyebrow">库存款号仪表盘 · <strong id="inventoryStyleDialogSku">—</strong></span>
+          <div class="inv-style-title-row">
+            <h2 id="inventoryStyleDialogTitle" tabindex="-1">—</h2>
+            <span class="sc-order-chip" id="inventoryStyleDialogRisk">—</span>
+          </div>
+          <p class="inv-style-meta" id="inventoryStyleDialogMeta">—</p>
+        </div>
+        <div class="inv-style-head-actions">
+          <button class="secondary-button" id="inventoryStyleDialogRefresh" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M20 7v5h-5"/><path d="M4 17v-5h5"/><path d="M18.5 9A7 7 0 0 0 6 6.5L4 9M5.5 15A7 7 0 0 0 18 17.5l2-2.5"/></svg>
+            <span>刷新库存</span>
+          </button>
+          <button class="primary-button" id="inventoryStyleDialogForecast" type="button">打开需求预测</button>
+          <button class="dialog-close" id="inventoryStyleDialogClose" type="button" aria-label="关闭库存款号仪表盘">×</button>
+        </div>
+      </header>
+      <div class="inv-style-body" id="inventoryStyleDialogBody" aria-live="polite"></div>
     </div>
   </dialog>
   <dialog class="product-drawer" id="forecastDetailDrawer" aria-labelledby="forecastDetailDrawerTitle">
@@ -2171,7 +2162,7 @@
         label: "库存与产品",
         sources: [
           { key: "PRODUCT", label: "产品资料", hint: "选择产品上传表" },
-          { key: "PRODUCTION_ORDER", label: "生产订单（上传兜底）", hint: "供应链自动同步为主", defaultChecked: false },
+          { key: "PRODUCTION_ORDER", label: "生产订单（上传兜底）", hint: "同步异常时用于补货计算，下一次自动成功后切回", defaultChecked: false },
           { key: "SHIPMENT", label: "WFS 货件（上传兜底）", hint: "领星自动同步为主", defaultChecked: false },
           /* 物流信息登记已换源：改由项目内置连接器每日同步，
              货代与渠道以「供应链生产订单 › 物流信息登记」页签为准，不再读取表格。 */
@@ -2325,7 +2316,7 @@
       inventoryPage: 0,
       inventoryPageSize: 50,
       inventoryByStyleSort: { key: "parentSku", dir: "asc" },
-      inventoryByStyleDetailSort: { key: "availableUnits", dir: "desc" },
+      inventoryByStyleDetailSort: { key: "totalStock", dir: "desc" },
       inventoryStyleDashboardSku: null,
       inventoryStyleDashboardTrigger: null,
       supplyChain: null,
@@ -6747,7 +6738,7 @@
         } else {
           emptyHint = "当前仅展示产品库中已经匹配的款号，其余款号不展示。";
         }
-        body.innerHTML = emptyRow(13, emptyTitle, emptyHint);
+        body.innerHTML = emptyRow(12, emptyTitle, emptyHint);
         updateByStyleSortIndicators();
         updateInventorySearchCount(0);
         return;
@@ -6776,7 +6767,7 @@
       const risks = state.inventoryRisk === "all" ? null : state.inventoryRisk.split(",");
       const visible = risks ? aggregates.filter((g) => risks.includes(g.systemRisk)) : aggregates;
       if (!visible.length) {
-        body.innerHTML = emptyRow(13, "没有匹配的款号", "当前筛选条件下没有款号，换个风险类型或清除搜索试试。");
+        body.innerHTML = emptyRow(12, "没有匹配的款号", "当前筛选条件下没有款号，换个风险类型或清除搜索试试。");
         updateByStyleSortIndicators();
         updateInventorySearchCount(0);
         return;
@@ -6801,7 +6792,7 @@
           ? thumbTag("inventory-thumb", rep.imageUrl, parentSku || rep.sku)
           : `<span class="inventory-thumb" aria-hidden="true"></span>`;
         return `<tr class="bystyle-row" data-parent="${escapeHtml(parentSku)}">
-          <td><button class="inventory-product inventory-style-open" type="button" data-inventory-style="${escapeHtml(parentSku)}" aria-label="打开 ${escapeHtml(parentSku)} 库存数据仪表盘">${image}<div><span class="inventory-sku" title="${escapeHtml(parentSku)}">${escapeHtml(parentSku)}</span><span class="inventory-item-name" title="${escapeHtml(rep.itemName || "")}">${escapeHtml(rep.itemName || rep.itemId || "")} · ${integer(skus.length)} 个 SKU · 建议国内仓发货 ${integer(domesticShipment)}</span></div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></button></td>
+          <td><button class="inventory-product inventory-style-open" type="button" data-inventory-style="${escapeHtml(parentSku)}" aria-label="打开 ${escapeHtml(parentSku)} 库存数据仪表盘">${image}<div><span class="inventory-sku" title="${escapeHtml(parentSku)}">${escapeHtml(parentSku)}</span><span class="inventory-item-name" title="${escapeHtml(rep.itemName || "")}">${escapeHtml(rep.itemName || rep.itemId || "")} · ${integer(skus.length)} 个 SKU · 建议国内仓发货 ${integer(domesticShipment)}</span></div></button></td>
           <td><span class="status-badge ${risk.badge}" title="系统按款号总库存与预测日均计算">${risk.label}</span>${outOfStockSkuCount ? `<span class="sub-id">${integer(outOfStockSkuCount)}/${integer(skus.length)} SKU 无可售</span>` : ""}</td>
           <td class="num">${integer(totalStock)}</td>
           <td class="num">${integer(totalAvailable)}</td>
@@ -6813,7 +6804,6 @@
           <td class="num">${integer(productionSuggest)}</td>
           <td class="num">${integer(production)}</td>
           <td class="num" title="累计款号退款率（退款率分析口径：退款导入时间窗内 已退款件数 ÷ 订单销量；无退款记录=0%，无退款数据=—）">${cumulativeRefundRate != null ? (cumulativeRefundRate * 100).toFixed(1) + "%" : "—"}</td>
-          <td><button class="table-link inventory-style-open-button" type="button" data-inventory-style="${escapeHtml(parentSku)}">打开仪表盘</button></td>
         </tr>`;
       }).join("");
       body.innerHTML = html;
@@ -6904,10 +6894,10 @@
         ? parts.map((part) => `<span class="${part.className}" style="width:${Math.max(0, part.value) / total * 100}%" title="${part.label} ${integer(part.value)} 件"></span>`).join("")
         : `<span class="empty" style="width:100%"></span>`;
       return `<div class="inventory-style-stock-structure" id="inventoryStyleDashboardStructure">
-        <div class="inventory-style-stock-head"><div><h3>库存结构</h3><p>总库存口径为 WFS 可售 + 做货 + 路途，国内仓单独列示。</p></div><strong>${integer(total)} 件</strong></div>
+        <div class="inventory-style-stock-head"><div><h3>库存结构</h3></div><strong>${integer(total)} 件</strong></div>
         <div class="inventory-style-stock-bar" role="img" aria-label="WFS 可售 ${integer(snapshot.totalAvailable)} 件，做货 ${integer(snapshot.production)} 件，路途 ${integer(snapshot.totalTransit)} 件">${segments}</div>
         <dl class="inventory-style-stock-legend">${parts.map((part) => `<div><dt><i class="${part.className}" aria-hidden="true"></i>${part.label}</dt><dd>${integer(part.value)} 件</dd><small>${total > 0 ? (part.value / total * 100).toFixed(1) : "0.0"}%</small></div>`).join("")}</dl>
-        <div class="inventory-style-domestic-note"><span>国内仓可用</span><strong>${integer(snapshot.domesticUnits)} 件</strong><small>不并入上述总库存与风险判定；系统建议发货 ${integer(snapshot.domesticShipment)} 件。</small></div>
+        <div class="inventory-style-domestic-note" title="口径：总库存 = WFS 可售 + 做货 + 路途；国内仓单独列示，不并入总库存与风险判定"><span>国内仓可用</span><strong>${integer(snapshot.domesticUnits)} 件</strong><small>建议发货 ${integer(snapshot.domesticShipment)} 件</small></div>
       </div>`;
     }
 
@@ -6916,7 +6906,7 @@
       const counts = new Map(riskOrder.map((risk) => [risk, snapshot.skus.filter((row) => row.risk === risk).length]));
       const max = Math.max(...counts.values(), 1);
       return `<section class="inventory-style-risk-panel" id="inventoryStyleDashboardRisk" aria-labelledby="inventoryStyleRiskTitle">
-        <div class="product-dashboard-panel-head"><div><h3 id="inventoryStyleRiskTitle">SKU 风险分布</h3><p>每个 SKU 按自身可售、需求和预测覆盖计算，颜色同时配有文字标签。</p></div><span>${integer(snapshot.skus.length)} 个 SKU</span></div>
+        <div class="product-dashboard-panel-head"><div><h3 id="inventoryStyleRiskTitle">SKU 风险分布</h3></div><span>${integer(snapshot.skus.length)} 个 SKU</span></div>
         <div class="inventory-style-risk-bars">${riskOrder.filter((risk) => counts.get(risk) > 0).map((risk) => {
           const copy = inventoryRiskCopy[risk] || inventoryRiskCopy.HEALTHY;
           const count = counts.get(risk);
@@ -6925,43 +6915,124 @@
       </section>`;
     }
 
-    function inventoryStyleSkuTable(snapshot) {
+    const INVENTORY_SIZE_RANK = {
+      "XS": 0, "S": 1, "M": 2, "L": 3, "XL": 4,
+      "1X": 5, "XXS": 0.5, "XXL": 5, "2XL": 5, "2X": 5,
+      "3XL": 6, "XXXL": 6, "3X": 6,
+      "4XL": 7, "4X": 7,
+      "5XL": 8, "5X": 8,
+      "6XL": 9, "6X": 9,
+    };
+    function inventorySizeRank(size) {
+      const key = String(size || "").trim().toUpperCase();
+      const rank = INVENTORY_SIZE_RANK[key];
+      return rank == null ? 90 : rank;
+    }
+
+    // SKC = 款号 + 颜色；把该颜色下所有 SKU 的尺码、库存、销量聚合成一行。
+    function inventoryStyleSkcRows(snapshot) {
       const riskOrder = ["OUT_OF_STOCK", "URGENT", "LOW", "WATCH", "REPLENISH", "OVERSTOCK", "NO_DEMAND", "NOT_LAUNCHED", "HEALTHY"];
-      const rows = snapshot.skus.slice();
+      const riskRank = (risk) => { const index = riskOrder.indexOf(risk); return index < 0 ? riskOrder.length : index; };
+      const groups = new Map();
+      for (const row of snapshot.skus) {
+        const color = String(row.color || "").trim() || "未标注颜色";
+        let group = groups.get(color);
+        if (!group) {
+          group = {
+            color,
+            imageUrl: row.imageUrl || "",
+            skus: [],
+            sizes: new Map(),
+            risk: row.risk,
+            recentUnits: 0,
+            forecastDailyUnits: 0,
+            availableUnits: 0,
+            domesticUnits: 0,
+            productionUnits: 0,
+            transitUnits: 0,
+            totalStock: 0,
+            forecastSuggestedUnits: 0,
+            productionSuggestedUnits: 0,
+          };
+          groups.set(color, group);
+        }
+        group.skus.push(row);
+        if (riskRank(row.risk) < riskRank(group.risk)) group.risk = row.risk;
+        const available = number(row.availableUnits);
+        const production = number(row.productionUnits);
+        const transit = number(row.transitUnits);
+        const domestic = number(snapshot.domesticBySku.get(row.sku) || 0);
+        group.recentUnits += number(row.recentUnits);
+        group.forecastDailyUnits += number(row.forecastDailyUnits);
+        group.availableUnits += available;
+        group.productionUnits += production;
+        group.transitUnits += transit;
+        group.domesticUnits += domestic;
+        group.forecastSuggestedUnits += number(row.forecastSuggestedUnits);
+        group.productionSuggestedUnits += number(row.productionSuggestedUnits);
+        const sizeKey = String(row.size || "").trim() || "—";
+        let size = group.sizes.get(sizeKey);
+        if (!size) {
+          size = { size: sizeKey, available: 0, production: 0, transit: 0, domestic: 0, totalStock: 0 };
+          group.sizes.set(sizeKey, size);
+        }
+        size.available += available;
+        size.production += production;
+        size.transit += transit;
+        size.domestic += domestic;
+        size.totalStock = size.available + size.production + size.transit;
+      }
+      for (const group of groups.values()) {
+        group.totalStock = group.availableUnits + group.productionUnits + group.transitUnits;
+        group.projectedDaysSupply = group.forecastDailyUnits > 0 ? group.totalStock / group.forecastDailyUnits : null;
+        group.outOfStockSizes = group.skus.filter((row) => number(row.availableUnits) <= 0).length;
+        group.sizesSorted = [...group.sizes.values()].sort((a, b) => inventorySizeRank(a.size) - inventorySizeRank(b.size) || String(a.size).localeCompare(String(b.size), "zh-CN"));
+      }
+      return [...groups.values()];
+    }
+
+    function inventoryStyleSkcTable(snapshot) {
+      const riskOrder = ["OUT_OF_STOCK", "URGENT", "LOW", "WATCH", "REPLENISH", "OVERSTOCK", "NO_DEMAND", "NOT_LAUNCHED", "HEALTHY"];
+      const rows = inventoryStyleSkcRows(snapshot);
       const { key, dir } = state.inventoryByStyleDetailSort;
       rows.sort((a, b) => {
         let av, bv;
+        if (key === "color") { return dir === "asc" ? a.color.localeCompare(b.color, "zh-CN") : b.color.localeCompare(a.color, "zh-CN"); }
         if (key === "risk") { av = riskOrder.indexOf(a.risk); bv = riskOrder.indexOf(b.risk); }
-        else if (key === "sku") { av = String(a.sku || ""); bv = String(b.sku || ""); return dir === "asc" ? av.localeCompare(bv) : bv.localeCompare(av); }
-        else if (key === "domesticUnits") { av = snapshot.domesticBySku.get(a.sku) || 0; bv = snapshot.domesticBySku.get(b.sku) || 0; }
-        else { av = number(a[key]); bv = number(b[key]); }
+        else { av = a[key] == null ? -1 : number(a[key]); bv = b[key] == null ? -1 : number(b[key]); }
         return dir === "asc" ? av - bv : bv - av;
       });
       const sortable = (label, sortKey, extra = "") => `<button class="inventory-dashboard-sort ${key === sortKey ? "active" : ""}" type="button" data-inventory-dashboard-sort="${sortKey}" aria-label="按${label}${key === sortKey ? (dir === "asc" ? "降序" : "升序") : "排序"}" ${extra}>${label}<span aria-hidden="true">${key === sortKey ? (dir === "asc" ? "▲" : "▼") : ""}</span></button>`;
-      const body = rows.map((row) => {
-        const risk = inventoryRiskCopy[row.risk] || inventoryRiskCopy.HEALTHY;
-        const image = row.imageUrl ? thumbTag("inventory-thumb", row.imageUrl, row.parentSku || row.sku) : `<span class="inventory-thumb" aria-hidden="true"></span>`;
+      const body = rows.map((group) => {
+        const risk = inventoryRiskCopy[group.risk] || inventoryRiskCopy.HEALTHY;
+        const image = group.imageUrl ? thumbTag("inventory-thumb", group.imageUrl, group.color) : `<span class="inventory-thumb" aria-hidden="true"></span>`;
+        const sizeBlocks = group.sizesSorted.map((size) => {
+          const tip = `${size.size}｜WFS 可售 ${integer(size.available)} · 做货 ${integer(size.production)} · 路途 ${integer(size.transit)} · 国内仓 ${integer(size.domestic)}`;
+          return `<span class="skc-size${number(size.available) > 0 ? "" : " is-empty"}" title="${escapeHtml(tip)}"><i>${escapeHtml(size.size)}</i><b>${integer(size.available)}</b></span>`;
+        }).join("");
         return `<tr>
-          <td><div class="inventory-product">${image}<div><span class="inventory-sku" title="${escapeHtml(row.sku)}">${escapeHtml(row.sku)}</span><span class="inventory-item-name" title="${escapeHtml(row.itemName || "")}">${escapeHtml(row.itemName || row.itemId || "")}</span></div></div></td>
-          <td><span class="status-badge ${risk.badge}">${risk.label}</span><span class="sub-id">${confidenceCopy[row.confidence] || row.confidence || "—"}</span></td>
-          <td class="num">${integer(row.recentUnits)}</td>
-          <td class="num">${number(row.forecastDailyUnits).toFixed(2)}</td>
-          <td class="num">${integer(row.availableUnits)}</td>
-          <td class="num">${integer(snapshot.domesticBySku.get(row.sku) || 0)}</td>
-          <td class="num">${integer(row.productionUnits)}</td>
-          <td class="num">${integer(row.transitUnits)}</td>
-          <td class="num" title="${escapeHtml([row.formula, row.productionNote].filter(Boolean).join("\n"))}">${integer(row.forecastSuggestedUnits)}</td>
-          <td class="num">${integer(row.productionSuggestedUnits)}</td>
-          <td class="num">${daysText(row.projectedDaysSupply)}</td>
+          <td><div class="inventory-product">${image}<div><span class="inventory-sku" title="${escapeHtml(group.color)}">${escapeHtml(group.color)}</span><span class="inventory-item-name">${integer(group.sizes.size)} 码 · ${integer(group.skus.length)} 个 SKU</span></div></div></td>
+          <td><span class="status-badge ${risk.badge}">${risk.label}</span>${group.outOfStockSizes ? `<span class="sub-id">${integer(group.outOfStockSizes)}/${integer(group.skus.length)} 码无可售</span>` : ""}</td>
+          <td><div class="skc-size-row">${sizeBlocks}</div></td>
+          <td class="num">${integer(group.recentUnits)}</td>
+          <td class="num">${integer(group.availableUnits)}</td>
+          <td class="num" title="该颜色国内仓可用合计（快照；不并入总库存）">${integer(group.domesticUnits)}</td>
+          <td class="num">${integer(group.productionUnits)}</td>
+          <td class="num">${integer(group.transitUnits)}</td>
+          <td class="num">${integer(group.totalStock)}</td>
+          <td class="num">${integer(group.forecastSuggestedUnits)}</td>
+          <td class="num">${integer(group.productionSuggestedUnits)}</td>
+          <td class="num">${daysText(group.projectedDaysSupply)}</td>
         </tr>`;
       }).join("");
       return `<section class="product-detail-section inventory-style-variants" id="inventoryStyleDashboardVariants">
-        <div class="section-title-row"><div><h3>SKU 库存与补货明细</h3><p>按变体核对风险、三段库存与需求预测建议。</p></div><span>${integer(rows.length)} 个 SKU</span></div>
         <div class="table-scroll"><table class="inventory-table inventory-style-dashboard-table"><thead><tr>
-          <th>${sortable("SKU / 商品", "sku")}</th><th>${sortable("风险", "risk")}</th>
-          <th class="num">${sortable("近期销量", "recentUnits")}</th><th class="num">${sortable("预测日均", "forecastDailyUnits")}</th>
+          <th>${sortable("SKC / 颜色", "color")}</th><th>${sortable("风险", "risk")}</th>
+          <th class="skc-size-head">尺码分配 <span class="skc-size-head-note">WFS 可售</span></th>
+          <th class="num">${sortable("近期销量", "recentUnits")}</th>
           <th class="num">${sortable("WFS 可售", "availableUnits")}</th><th class="num">${sortable("国内仓", "domesticUnits")}</th>
           <th class="num">${sortable("做货", "productionUnits")}</th><th class="num">${sortable("路途", "transitUnits")}</th>
+          <th class="num">${sortable("总库存", "totalStock")}</th>
           <th class="num">${sortable("建议补货", "forecastSuggestedUnits")}</th><th class="num">${sortable("建议做货", "productionSuggestedUnits")}</th>
           <th class="num">${sortable("覆盖天数", "projectedDaysSupply")}</th>
         </tr></thead><tbody>${body}</tbody></table></div>
@@ -6970,29 +7041,36 @@
 
     function renderInventoryStyleDashboard(parentSku) {
       const snapshot = inventoryStyleSnapshot(parentSku);
-      const body = $("#inventoryStyleDashboardBody");
+      const body = $("#inventoryStyleDialogBody");
       if (!snapshot) {
-        $("#inventoryStyleDashboardSku").textContent = parentSku;
-        $("#inventoryStyleDashboardTitle").textContent = "没有找到该款号的库存数据";
-        $("#inventoryStyleDashboardTitle").removeAttribute("title");
-        $("#inventoryStyleDashboardMeta").textContent = "返回库存总览后可选择其他款号";
-        body.innerHTML = `<div class="empty-state"><strong>款号库存不存在</strong>该款号可能已退出产品库，或当前库存快照没有匹配到 SKU。</div>`;
+        $("#inventoryStyleDialogSku").textContent = parentSku;
+        $("#inventoryStyleDialogTitle").textContent = "没有找到该款号的库存数据";
+        $("#inventoryStyleDialogTitle").removeAttribute("title");
+        $("#inventoryStyleDialogMeta").textContent = "该款号可能已退出产品库，或当前库存快照没有匹配到 SKU";
+        const emptyChip = $("#inventoryStyleDialogRisk");
+        emptyChip.textContent = "—";
+        emptyChip.removeAttribute("data-tone");
+        body.innerHTML = `<div class="empty-state"><strong>款号库存不存在</strong>请关闭弹窗后从库存总览选择其他款号。</div>`;
         return null;
       }
       const inventory = state.inventory;
       const risk = inventoryRiskCopy[snapshot.systemRisk] || inventoryRiskCopy.HEALTHY;
       const [insightTone, insightTitle, insightDetail] = inventoryStyleRiskInsight(snapshot);
       const title = snapshot.representative.itemName || snapshot.parentSku;
-      $("#inventoryStyleDashboardSku").textContent = snapshot.parentSku;
-      $("#inventoryStyleDashboardTitle").textContent = title;
-      $("#inventoryStyleDashboardTitle").title = title;
-      $("#inventoryStyleDashboardMeta").textContent = `${integer(snapshot.skus.length)} 个 SKU · 库存快照 ${inventory.meta?.snapshotAt ? new Date(inventory.meta.snapshotAt).toLocaleString("zh-CN") : "—"} · 目标覆盖 ${integer(inventory.meta?.targetDays || state.inventoryTargetDays)} 天`;
+      $("#inventoryStyleDialogSku").textContent = snapshot.parentSku;
+      $("#inventoryStyleDialogTitle").textContent = title;
+      $("#inventoryStyleDialogTitle").title = title;
+      const riskChip = $("#inventoryStyleDialogRisk");
+      riskChip.textContent = risk.label;
+      const chipTone = { critical: "rework", warning: "wip", healthy: "done" }[risk.group];
+      if (chipTone) riskChip.dataset.tone = chipTone;
+      else riskChip.removeAttribute("data-tone");
+      $("#inventoryStyleDialogMeta").textContent = `${integer(snapshot.skus.length)} 个 SKU · 库存快照 ${inventory.meta?.snapshotAt ? new Date(inventory.meta.snapshotAt).toLocaleString("zh-CN") : "—"} · 目标覆盖 ${integer(inventory.meta?.targetDays || state.inventoryTargetDays)} 天`;
       const replenishTitle = snapshot.fcSuggest > 0 ? `建议补货 ${integer(snapshot.fcSuggest)} 件` : snapshot.productionSuggest > 0 ? `建议做货 ${integer(snapshot.productionSuggest)} 件` : "当前无需新增补货";
       const replenishDetail = snapshot.fcSuggest > 0 || snapshot.productionSuggest > 0
         ? `需求预测建议补货 ${integer(snapshot.fcSuggest)} 件，裁床建议做货 ${integer(snapshot.productionSuggest)} 件。`
         : `当前库存与预测需求未形成新增缺口，继续观察销量和到货变化。`;
-      body.innerHTML = `<section class="product-dashboard-overview" id="inventoryStyleDashboardOverview">
-        <div class="product-dashboard-section-head"><div><span>INVENTORY CONTROL</span><h3>风险总览</h3><p>库存、需求和供应按同一款号聚合，国内仓保持独立口径。</p></div><div class="product-dashboard-freshness-list" aria-label="库存数据更新时间"><span class="product-dashboard-freshness"><i aria-hidden="true"></i>库存 ${escapeHtml(inventory.meta?.snapshotAt ? new Date(inventory.meta.snapshotAt).toLocaleDateString("zh-CN") : "—")}</span><span class="product-dashboard-freshness"><i aria-hidden="true"></i>目标 ${integer(inventory.meta?.targetDays || state.inventoryTargetDays)} 天</span></div></div>
+      body.innerHTML = `<section class="inventory-style-overview" id="inventoryStyleDashboardOverview">
         <div class="inventory-style-kpi-grid">
           ${inventoryStyleMetric("款号风险", `<span class="status-badge ${risk.badge}">${risk.label}</span>`, `${integer(snapshot.outOfStockSkuCount)} / ${integer(snapshot.skus.length)} SKU 无可售`, `risk-${snapshot.systemRisk.toLowerCase()}`)}
           ${inventoryStyleMetric("总库存", `${integer(snapshot.totalStock)} 件`, "WFS + 做货 + 路途", "primary")}
@@ -7008,14 +7086,16 @@
           <section class="inventory-style-action-card" aria-labelledby="inventoryStyleActionTitle"><div><span>建议动作</span><h3 id="inventoryStyleActionTitle">${replenishTitle}</h3><p>${replenishDetail}</p></div><div class="inventory-style-action-metrics"><div><span>预测补货</span><strong>${integer(snapshot.fcSuggest)}</strong></div><div><span>裁床做货</span><strong>${integer(snapshot.productionSuggest)}</strong></div><div><span>国内仓发货</span><strong>${integer(snapshot.domesticShipment)}</strong></div></div><div class="inventory-style-action-buttons">${snapshot.totalTransit > 0 ? `<button class="secondary-button" type="button" data-inventory-dashboard-transit="${escapeHtml(snapshot.parentSku)}">查看路途货件</button>` : ""}<button class="primary-button" type="button" data-inventory-dashboard-forecast="${escapeHtml(snapshot.parentSku)}">进入需求预测</button></div></section>
         </div>
       </section>
-      ${inventoryStyleStructure(snapshot)}
-      ${inventoryStyleRiskDistribution(snapshot)}
-      ${inventoryStyleSkuTable(snapshot)}`;
+      <div class="inventory-style-detail-grid">
+        ${inventoryStyleStructure(snapshot)}
+        ${inventoryStyleRiskDistribution(snapshot)}
+      </div>
+      ${inventoryStyleSkcTable(snapshot)}`;
       body.querySelectorAll("[data-inventory-dashboard-sort]").forEach((button) => button.addEventListener("click", () => {
         const sortKey = button.dataset.inventoryDashboardSort;
         const current = state.inventoryByStyleDetailSort;
         if (current.key === sortKey) current.dir = current.dir === "asc" ? "desc" : "asc";
-        else { current.key = sortKey; current.dir = sortKey === "risk" || sortKey === "sku" ? "asc" : "desc"; }
+        else { current.key = sortKey; current.dir = sortKey === "risk" || sortKey === "color" ? "asc" : "desc"; }
         renderInventoryStyleDashboard(parentSku);
       }));
       return snapshot;
@@ -7024,37 +7104,40 @@
     async function openInventoryStyleDashboard(parentSku, options = {}) {
       if (!parentSku) return;
       if (state.view !== "inventory") switchView("inventory", { preserveHistory: true, keepInventoryStyleDashboard: true });
-      if (!state.inventory) {
-        $("#inventoryOverviewScreen").hidden = true;
-        $("#inventoryStyleDashboardScreen").hidden = false;
-        $("#inventoryStyleDashboardSku").textContent = parentSku;
-        $("#inventoryStyleDashboardTitle").textContent = "正在汇总款号库存";
-        $("#inventoryStyleDashboardTitle").removeAttribute("title");
-        $("#inventoryStyleDashboardMeta").textContent = "正在关联 WFS、国内仓、做货、路途和需求预测";
-        $("#inventoryStyleDashboardBody").innerHTML = `<div class="empty-state inventory-style-dashboard-loading"><strong>正在生成库存驾驶舱</strong>正在关联该款全部 SKU 的库存、销量和补货数据。</div>`;
-        const loaded = await loadInventory();
-        if (!loaded) return;
-      }
+      const dialog = $("#inventoryStyleDialog");
       if (options.trigger) state.inventoryStyleDashboardTrigger = options.trigger;
       state.inventoryStyleDashboardSku = parentSku;
-      $("#inventoryOverviewScreen").hidden = true;
-      $("#inventoryStyleDashboardScreen").hidden = false;
-      if (options.pushHistory !== false && location.hash !== `#inventory/${encodeURIComponent(parentSku)}`) {
-        history.pushState({ view: "inventory", parentSku }, "", `#inventory/${encodeURIComponent(parentSku)}`);
+      if (!dialog.open) {
+        $("#inventoryStyleDialogSku").textContent = parentSku;
+        $("#inventoryStyleDialogTitle").textContent = "正在汇总款号库存";
+        $("#inventoryStyleDialogTitle").removeAttribute("title");
+        $("#inventoryStyleDialogMeta").textContent = "正在关联 WFS、国内仓、做货、路途和需求预测";
+        const loadingChip = $("#inventoryStyleDialogRisk");
+        loadingChip.textContent = "读取中";
+        loadingChip.removeAttribute("data-tone");
+        $("#inventoryStyleDialogBody").innerHTML = `<div class="empty-state inv-style-loading"><strong>正在生成库存驾驶舱</strong>正在关联该款全部 SKU 的库存、销量和补货数据。</div>`;
+        dialog.showModal();
+        requestAnimationFrame(() => $("#inventoryStyleDialogTitle").focus());
+      }
+      if (!state.inventory) {
+        const loaded = await loadInventory();
+        if (!loaded) {
+          $("#inventoryStyleDialogBody").innerHTML = `<div class="empty-state"><strong>库存数据读取失败</strong>可关闭后重试，或在弹窗内点「刷新库存」。</div>`;
+          return;
+        }
+        if (!state.inventoryStyleDashboardSku) return;
       }
       renderInventoryStyleDashboard(parentSku);
-      window.scrollTo({ top: 0, behavior: "auto" });
-      if (options.moveFocus !== false) requestAnimationFrame(() => $("#inventoryStyleDashboardTitle").focus());
+      $("#inventoryStyleDialogBody").scrollTop = 0;
     }
 
     function closeInventoryStyleDashboard(options = {}) {
-      if (!state.inventoryStyleDashboardSku) return;
+      const dialog = $("#inventoryStyleDialog");
+      if (!state.inventoryStyleDashboardSku && !dialog.open) return;
       const trigger = state.inventoryStyleDashboardTrigger;
       state.inventoryStyleDashboardSku = null;
-      $("#inventoryStyleDashboardScreen").hidden = true;
-      $("#inventoryOverviewScreen").hidden = false;
+      if (dialog.open) dialog.close();
       if (options.updateHistory !== false && location.hash.startsWith("#inventory/")) history.replaceState({ view: "inventory" }, "", "#inventory");
-      window.scrollTo({ top: 0, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
       if (options.restoreFocus !== false && trigger?.isConnected) requestAnimationFrame(() => trigger.focus());
     }
 
@@ -7979,7 +8062,7 @@
     async function loadInventory() {
       if (state.inventoryPromise) return state.inventoryPromise;
       state.inventoryLoading = true;
-      $("#inventoryByStyleBody").innerHTML = emptyRow(13, "正在读取库存与销量", "请稍候。");
+      $("#inventoryByStyleBody").innerHTML = emptyRow(12, "正在读取库存与销量", "请稍候。");
       state.inventoryPromise = (async () => {
         try {
           await fetchInventoryData();
@@ -7988,7 +8071,7 @@
         } catch (error) {
           $("#inventoryStatusHeadline").textContent = "库存读取失败";
           $("#inventoryStatusDetail").textContent = error.message;
-          $("#inventoryByStyleBody").innerHTML = emptyRow(13, "库存读取失败", escapeHtml(error.message));
+          $("#inventoryByStyleBody").innerHTML = emptyRow(12, "库存读取失败", escapeHtml(error.message));
           return null;
         } finally {
           state.inventoryLoading = false;
@@ -15545,10 +15628,22 @@
         return;
       }
       const trigger = event.target.closest("[data-inventory-style]");
-      if (trigger) openInventoryStyleDashboard(trigger.dataset.inventoryStyle, { trigger });
+      if (trigger) {
+        openInventoryStyleDashboard(trigger.dataset.inventoryStyle, { trigger });
+        return;
+      }
+      // 款号与商品整格可点（含图片左侧留白），不必精确点到款号文字
+      const row = event.target.closest("tr.bystyle-row");
+      if (row && event.target.closest("td") === row.cells[0]) {
+        openInventoryStyleDashboard(row.dataset.parent, { trigger: row.cells[0].querySelector("[data-inventory-style]") || row.cells[0] });
+      }
     });
-    $("#inventoryStyleDashboardBack").addEventListener("click", () => closeInventoryStyleDashboard());
-    $("#inventoryStyleDashboardRefresh").addEventListener("click", async (event) => {
+    $("#inventoryStyleDialogClose").addEventListener("click", () => closeInventoryStyleDashboard());
+    $("#inventoryStyleDialog").addEventListener("click", (event) => {
+      if (event.target === $("#inventoryStyleDialog")) closeInventoryStyleDashboard();
+    });
+    $("#inventoryStyleDialog").addEventListener("close", () => { state.inventoryStyleDashboardSku = null; });
+    $("#inventoryStyleDialogRefresh").addEventListener("click", async (event) => {
       const button = event.currentTarget;
       const parentSku = state.inventoryStyleDashboardSku;
       if (!parentSku) return;
@@ -15568,24 +15663,26 @@
         button.classList.remove("is-loading");
       }
     });
-    $("#inventoryStyleDashboardForecast").addEventListener("click", () => openDemandForecastForParent(state.inventoryStyleDashboardSku));
-    $("#inventoryStyleDashboardScreen .inventory-style-dashboard-nav").addEventListener("click", (event) => {
-      const link = event.target.closest("a[href^='#inventoryStyleDashboard']");
-      if (!link) return;
-      event.preventDefault();
-      document.querySelector(link.getAttribute("href"))?.scrollIntoView({
-        behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
-        block: "start",
-      });
+    $("#inventoryStyleDialogForecast").addEventListener("click", () => {
+      const parentSku = state.inventoryStyleDashboardSku;
+      if (!parentSku) return;
+      closeInventoryStyleDashboard({ restoreFocus: false });
+      openDemandForecastForParent(parentSku);
     });
-    $("#inventoryStyleDashboardBody").addEventListener("click", (event) => {
+    $("#inventoryStyleDialogBody").addEventListener("click", (event) => {
       const transitButton = event.target.closest("[data-inventory-dashboard-transit]");
       if (transitButton) {
-        openTransitInventoryDetails(transitButton.dataset.inventoryDashboardTransit);
+        const parentSku = transitButton.dataset.inventoryDashboardTransit;
+        closeInventoryStyleDashboard({ restoreFocus: false });
+        openTransitInventoryDetails(parentSku);
         return;
       }
       const forecastButton = event.target.closest("[data-inventory-dashboard-forecast]");
-      if (forecastButton) openDemandForecastForParent(forecastButton.dataset.inventoryDashboardForecast);
+      if (forecastButton) {
+        const parentSku = forecastButton.dataset.inventoryDashboardForecast;
+        closeInventoryStyleDashboard({ restoreFocus: false });
+        openDemandForecastForParent(parentSku);
+      }
     });
     $("#toggleTransitChannelLeadTime").addEventListener("click", () => {
       setTransitChannelLeadTimeCollapsed(!$("#transitChannelLeadTimeContent").hidden);

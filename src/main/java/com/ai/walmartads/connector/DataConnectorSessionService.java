@@ -3,6 +3,9 @@ package com.ai.walmartads.connector;
 import com.ai.walmartads.workspace.WorkspaceContext;
 import org.springframework.stereotype.Service;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+
 @Service
 public class DataConnectorSessionService {
 
@@ -21,7 +24,8 @@ public class DataConnectorSessionService {
 
     public String credential(long workspaceId, ConnectorSystem system) {
         DataConnectorStore.SessionRow row = store.session(workspaceId, system);
-        return row == null ? null : crypto.decrypt(row.encryptedCredential());
+        return row == null || !"CONNECTED".equals(row.status())
+                ? null : crypto.decrypt(row.encryptedCredential());
     }
 
     public String currentSupplyAuthorization() {
@@ -31,6 +35,27 @@ public class DataConnectorSessionService {
     public boolean currentSupplyConfigured() {
         String credential = currentSupplyAuthorization();
         return credential != null && !credential.isBlank();
+    }
+
+    /**
+     * 接口明确拒绝过的供应链凭证继续加密保留，但会话状态为 LOGIN_REQUIRED。
+     * 旧版扩展重复提交同一枚失效 token 时直接忽略；重新登录产生新 token 后正常覆盖。
+     */
+    public boolean rejectedCredentialMatches(long workspaceId, ConnectorSystem system, String candidate) {
+        DataConnectorStore.SessionRow row = store.session(workspaceId, system);
+        if (row == null || !"LOGIN_REQUIRED".equals(row.status())
+                || row.encryptedCredential() == null || candidate == null) {
+            return false;
+        }
+        String rejected = crypto.decrypt(row.encryptedCredential());
+        return rejected != null && MessageDigest.isEqual(
+                rejected.getBytes(StandardCharsets.UTF_8), candidate.getBytes(StandardCharsets.UTF_8));
+    }
+
+    public boolean hasRejectedCredential(long workspaceId, ConnectorSystem system) {
+        DataConnectorStore.SessionRow row = store.session(workspaceId, system);
+        return row != null && "LOGIN_REQUIRED".equals(row.status())
+                && row.encryptedCredential() != null && !row.encryptedCredential().isBlank();
     }
 
     public void save(long workspaceId, ConnectorSystem system, String storageState,

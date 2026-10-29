@@ -155,6 +155,15 @@ public class DataConnectorStore {
         return count != null && count > 0;
     }
 
+    public boolean succeededSince(long workspaceId, ConnectorSource source, LocalDateTime cutoff) {
+        Integer count = jdbc.queryForObject("""
+                select count(*) from wm_ads_connector_source_state
+                 where workspace_id=? and source_code=? and enabled=1
+                   and last_success_at>=?
+                """, Integer.class, workspaceId, source.name(), cutoff);
+        return count != null && count > 0;
+    }
+
     public List<SourceState> sourceStates(long workspaceId) {
         return jdbc.query("""
                 select source_code,enabled,status,last_started_at,last_success_at,last_failure_at,
@@ -165,6 +174,35 @@ public class DataConnectorStore {
                 time(rs.getTimestamp("last_started_at")), time(rs.getTimestamp("last_success_at")),
                 time(rs.getTimestamp("last_failure_at")), rs.getString("last_message"),
                 rs.getInt("last_record_count"), rs.getString("last_triggered_by")), workspaceId);
+    }
+
+    public List<String> pendingBrowserSources(long workspaceId) {
+        return jdbc.queryForList("""
+                select source_code
+                  from wm_ads_connector_source_state
+                 where workspace_id=? and enabled=1 and status='WAITING_BROWSER'
+                 order by source_code
+                """, String.class, workspaceId);
+    }
+
+    public int expireStaleBrowserRequests(long workspaceId, long timeoutMinutes) {
+        long safeMinutes = Math.max(2, timeoutMinutes);
+        String message = "等待当前 Chrome 超过 " + safeMinutes
+                + " 分钟，请确认扩展已更新并刷新对应业务页面后重试";
+        return jdbc.update("""
+                update wm_ads_connector_source_state
+                   set status='FAILED',last_failure_at=now(6),last_message=?
+                 where workspace_id=? and status='WAITING_BROWSER'
+                   and last_started_at<?
+                """, message, workspaceId, LocalDateTime.now().minusMinutes(safeMinutes));
+    }
+
+    public void markLoginRequired(long workspaceId, ConnectorSource source, String message) {
+        jdbc.update("""
+                update wm_ads_connector_source_state
+                   set status='LOGIN_REQUIRED',last_failure_at=now(6),last_message=?
+                 where workspace_id=? and source_code=?
+                """, truncate(message, 1000), workspaceId, source.name());
     }
 
     public List<RunRow> recentRuns(long workspaceId, int limit) {

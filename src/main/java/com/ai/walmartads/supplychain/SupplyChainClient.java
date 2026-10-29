@@ -272,7 +272,7 @@ public class SupplyChainClient {
             return executeGet(path, params, pathVariables);
         } catch (HttpClientErrorException.Unauthorized exception) {
             connectorSessions.requireLogin(WorkspaceContext.requireId(), ConnectorSystem.SUPPLY_CHAIN,
-                    "供应链登录会话已失效", true);
+                    "供应链登录会话已失效", false);
             if (!StringUtils.hasText(properties.username())) {
                 throw exception;
             }
@@ -339,7 +339,7 @@ public class SupplyChainClient {
             String message = response.path("msg").asText(response.path("message").asText("未知错误"));
             if (code.asInt() == 401 || isAuthenticationFailure(message)) {
                 connectorSessions.requireLogin(WorkspaceContext.requireId(), ConnectorSystem.SUPPLY_CHAIN,
-                        "供应链登录会话已失效", true);
+                        "供应链登录会话已失效", false);
             }
             throw new IllegalStateException("供应链接口失败：" + message + " (" + path + ")");
         }

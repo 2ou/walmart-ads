@@ -157,4 +157,48 @@ class LingxingDomesticInventoryServiceTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("只接受");
     }
+
+    @Test
+    void incompleteSnapshotCannotReplaceHistoricalFullSnapshot() throws Exception {
+        jdbc.update("""
+                insert into wm_ads_lx_domestic_inventory(
+                    workspace_id, sku, available_units, source_url, raw_payload,
+                    synced_at, created_at, updated_at
+                ) values (7, 'PNK-KEEP', 8, ?, '{}', now(), now(), now())
+                """, "https://czyx.lingxing.com/api/storage/lists");
+        jdbc.update("""
+                insert into wm_ads_lx_domestic_inventory_sync_log(
+                    workspace_id,started_at,finished_at,status,source_row_count,
+                    imported_sku_count,skipped_row_count,available_units,source_url,message
+                ) values (7,now(),now(),'SUCCESS',1130,970,23,139,?, 'historical full snapshot')
+                """, "https://czyx.lingxing.com/api/storage/lists");
+        var rows = objectMapper.createArrayNode();
+        for (int index = 0; index < 468; index++) {
+            rows.addObject().put("sku", "PNK-" + index).put("available_num", 0);
+        }
+        var response = objectMapper.createObjectNode();
+        response.put("code", 1).putObject("data").put("total", 468).set("list", rows);
+
+        assertThatThrownBy(() -> service.replaceFromConnector(
+                "https://czyx.lingxing.com/api/storage/lists", response, LocalDateTime.now()))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("疑似不完整")
+                .hasMessageContaining("已保留原库存");
+        assertThat(jdbc.queryForObject(
+                "select count(*) from wm_ads_lx_domestic_inventory where workspace_id=7", Integer.class))
+                .isEqualTo(1);
+    }
+
+    @Test
+    void declaredTotalMustBeFullyPresent() throws Exception {
+        var response = objectMapper.readTree("""
+                {"code":1,"data":{"list":[{"sku":"PNK-A","available_num":1}],"total":2}}
+                """);
+
+        assertThatThrownBy(() -> service.replaceFromConnector(
+                "https://czyx.lingxing.com/api/storage/lists", response, LocalDateTime.now()))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("1/2")
+                .hasMessageContaining("已保留原库存");
+    }
 }

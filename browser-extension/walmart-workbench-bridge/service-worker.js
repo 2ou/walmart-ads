@@ -2,8 +2,6 @@ const SETTINGS_KEY = "walmartWorkbenchCurrentBrowserBridge";
 const SUPPLY_CREDENTIAL_KEY = "supplyChainCredential";
 const TEMPLATE_PREFIX = "lingxingRequestTemplate:";
 const HEARTBEAT_ALARM = "workbench-current-chrome-heartbeat";
-const SYNC_ALARM = "workbench-current-chrome-hourly-lingxing";
-const SUPPLY_SYNC_ALARM = "workbench-current-chrome-daily-supply";
 
 const SOURCES = {
   LINGXING_INVENTORY: {
@@ -14,6 +12,7 @@ const SOURCES = {
   },
   LINGXING_WFS: {
     origin: "https://czyx.lingxing.com",
+    origins: ["https://czyx.lingxing.com", "https://gw.lingxingerp.com"],
     path: "/mp-platform-warehouse-api/api/cargo/list",
     page: "https://czyx.lingxing.com/erp/mmulti/pwShipment",
     endpoint: "/lingxing-wfs-shipments"
@@ -26,7 +25,9 @@ const SOURCES = {
 
 const pendingBodies = new Map();
 const syncing = new Map();
+const scheduledSyncs = new Map();
 const watchedTabs = new Set();
+let scheduledSupplySync = null;
 
 /** 单次重放的合法总量上限：超过说明页面筛选条件丢了（抓到全库），必须报错而不是硬翻页。 */
 const MAX_FETCH_ROWS = { LINGXING_INVENTORY: 5000, LINGXING_WFS: 20000, DEFAULT: 20000 };
@@ -75,6 +76,10 @@ async function heartbeat() {
   const data = await api("/heartbeat");
   await saveSettings({ ...current, online: true, lastSeenAt: new Date().toISOString(), lastError: null });
   await refreshBadge();
+  for (const source of (data?.pendingSources || [])) {
+    if (source === "SUPPLY_CHAIN") syncSupply().catch(() => {});
+    else if (SOURCES[source]) scheduleLingxingSync(source);
+  }
   return data;
 }
 
@@ -114,7 +119,8 @@ function sourceForUrl(url) {
   try {
     const parsed = new URL(url);
     return Object.entries(SOURCES).find(([, source]) => source.path
-      && parsed.origin === source.origin && parsed.pathname === source.path)?.[0] || null;
+      && (source.origins || [source.origin]).includes(parsed.origin)
+      && parsed.pathname === source.path)?.[0] || null;
   } catch {
     return null;
   }
@@ -137,15 +143,20 @@ function totalOf(payload) {
 }
 
 function canonicalWfs(template) {
-  if (!template.body) return template;
-  try {
-    const value = JSON.parse(template.body);
-    return { ...template, body: JSON.stringify({ ...value, queryValues: [], queryValue: "",
+  return transformBody(template, (value) => ({ ...value, queryValues: [], queryValue: "",
       cargoStatusList: [], cargoLocalStatusList: [], shipStatus: null, hasShippingList: null,
       shippingListStatuses: [], diffOfDeclareAndShip: null, diffOfDeclareAndSign: null,
-      diffOfSignAndDeclare: null, startTime: null, endTime: null, offset: 0, length: 500 }) };
+      diffOfSignAndDeclare: null, startTime: null, endTime: null, offset: 0, length: 500 }));
+}
+
+function transformBody(template, transform) {
+  if (!template.body) throw new Error("没有捕获到领星列表请求体，请刷新对应页面后重试");
+  try {
+    return { ...template, body: JSON.stringify(transform(JSON.parse(template.body))) };
   } catch {
-    return template;
+    const params = new URLSearchParams(template.body);
+    if (![...params.keys()].length) throw new Error("领星列表请求体无法识别，请刷新对应页面后重试");
+    return { ...template, body: new URLSearchParams(transform(Object.fromEntries(params.entries()))).toString() };
   }
 }
 
@@ -156,19 +167,13 @@ function canonicalWfs(template) {
  * 所以重放前统一：按店铺 SKU 前缀搜索 + 关闭隐藏零库存 + 分页归零交给 pagination 翻页。
  */
 function canonicalInventory(template, skuPrefix) {
-  if (!template.body) return template;
-  try {
-    const value = JSON.parse(template.body);
-    if (!Object.hasOwn(value, "offset") && !Object.hasOwn(value, "length")) return template;
+  if (!skuPrefix) throw new Error("工作台店铺缩写为空，无法限定领星库存范围");
+  return transformBody(template, (value) => {
     const next = { ...value, offset: 0, length: 500, is_hide_zero_stock: 0 };
-    if (skuPrefix) {
-      next.search_field = "sku";
-      next.search_value = skuPrefix;
-    }
-    return { ...template, body: JSON.stringify(next) };
-  } catch {
-    return template;
-  }
+    next.search_field = "sku";
+    next.search_value = skuPrefix;
+    return next;
+  });
 }
 
 function canonicalTemplate(template, sourceCode, skuPrefix) {
@@ -237,8 +242,7 @@ async function fetchTemplate(template, sourceCode) {
   return payload;
 }
 
-async function fetchAll(template, sourceCode, skuPrefix = "") {
-  const normalized = canonicalTemplate(template, sourceCode, skuPrefix);
+async function fetchAll(normalized, sourceCode) {
   const paging = pagination(normalized, sourceCode);
   const first = await fetchTemplate(paging ? paging.apply(1) : normalized, sourceCode);
   const firstRows = firstArray(first);
@@ -247,18 +251,32 @@ async function fetchAll(template, sourceCode, skuPrefix = "") {
   if (total != null && total > limit) {
     throw new Error(`领星返回总量 ${total} 行，超过单次上限 ${limit}，疑似页面筛选条件丢失（未选中本店铺），已保留原数据`);
   }
-  if (!firstRows || total == null || firstRows.length >= total || !paging || paging.size <= 0) return first;
+  if (!firstRows) throw new Error("领星列表响应结构无法识别，已保留原数据");
+  if (!paging || paging.size <= 0) {
+    if (total != null && firstRows.length < total) {
+      throw new Error(`领星只读取到 ${firstRows.length}/${total} 行且无法分页，已保留原数据`);
+    }
+    return first;
+  }
+  if (total != null && firstRows.length >= total) return first;
   const rows = [...firstRows];
-  const pageCount = Math.min(100, Math.ceil(total / paging.size));
+  const pageCount = total == null
+    ? Math.min(100, Math.ceil(limit / paging.size))
+    : Math.min(100, Math.ceil(total / paging.size));
   for (let page = 2; page <= pageCount; page += 1) {
     const payload = await fetchTemplate(paging.apply(page), sourceCode);
     const pageRows = firstArray(payload);
     if (!pageRows) throw new Error(`领星第 ${page} 页结构无法识别，已保留原数据`);
     rows.push(...pageRows);
-    if (!pageRows.length || rows.length >= total) break;
+    if (!pageRows.length || pageRows.length < paging.size || (total != null && rows.length >= total)) break;
+    if (rows.length >= limit) throw new Error(`领星读取已达到安全上限 ${limit} 行，已保留原数据`);
   }
-  if (rows.length < total) throw new Error(`领星只读取到 ${rows.length}/${total} 行，已保留原数据`);
-  return { ...first, data: { ...(first.data || {}), list: rows, total } };
+  if (total != null && rows.length < total) throw new Error(`领星只读取到 ${rows.length}/${total} 行，已保留原数据`);
+  if (total == null && rows.length > 0 && rows.length % paging.size === 0) {
+    throw new Error(`领星分页没有返回总数，读取到 ${rows.length} 行后仍未结束，已保留原数据`);
+  }
+  const resolvedTotal = total == null ? rows.length : total;
+  return { ...first, data: { ...(first.data || {}), list: rows, total: resolvedTotal } };
 }
 
 async function reportFailure(source, error) {
@@ -285,13 +303,14 @@ async function syncLingxing(sourceCode) {
     }
     try {
       const current = await settings();
-      const response = await fetchAll(template, sourceCode, current?.storeAbbreviation || "");
+      const normalized = canonicalTemplate(template, sourceCode, current?.storeAbbreviation || "");
+      const response = await fetchAll(normalized, sourceCode);
       const result = await api(SOURCES[sourceCode].endpoint, "POST", {
-        sourceUrl: template.url,
+        sourceUrl: normalized.url,
         response,
         capturedAt: new Date().toISOString(),
         // 重放用的真实请求体：工作台据此判断筛选条件是否被页面改动过（只做诊断，不入库）。
-        requestBody: typeof template.body === "string" ? template.body.slice(0, 20000) : null
+        requestBody: typeof normalized.body === "string" ? normalized.body.slice(0, 20000) : null
       });
       if (current) await saveSettings({ ...current, lastSyncAt: new Date().toISOString(), lastError: null });
       return result;
@@ -308,18 +327,51 @@ async function syncLingxing(sourceCode) {
   return task;
 }
 
+function scheduleLingxingSync(source) {
+  const previous = scheduledSyncs.get(source);
+  if (previous) clearTimeout(previous);
+  const timer = setTimeout(() => {
+    scheduledSyncs.delete(source);
+    syncLingxing(source).catch(() => {});
+  }, 800);
+  scheduledSyncs.set(source, timer);
+}
+
 function bearer(headers = []) {
   const value = headers.find((header) => String(header.name).toLowerCase() === "authorization")?.value || "";
   const match = value.match(/^Bearer\s+(.+)$/i);
   return match ? match[1].trim() : "";
 }
 
+async function fingerprint(value) {
+  const bytes = new TextEncoder().encode(String(value || ""));
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function scheduleSupplySync() {
+  if (scheduledSupplySync) clearTimeout(scheduledSupplySync);
+  scheduledSupplySync = setTimeout(() => {
+    scheduledSupplySync = null;
+    syncSupply().catch(() => {});
+  }, 1000);
+}
+
 async function saveSupplyToken(token) {
   if (!token) return;
+  const tokenHash = await fingerprint(token);
+  const current = await settings();
+  if (current?.rejectedSupplyTokenHash === tokenHash) return;
   const stored = await chrome.storage.session.get(SUPPLY_CREDENTIAL_KEY);
   if (stored[SUPPLY_CREDENTIAL_KEY]?.token === token) return;
   await chrome.storage.session.set({ [SUPPLY_CREDENTIAL_KEY]: { token, capturedAt: new Date().toISOString() } });
-  try { await api("/credential", "POST", { value: `Bearer ${token}` }); } catch { /* bootstrap may arrive later */ }
+  if (current) {
+    await saveSettings({ ...current, rejectedSupplyTokenHash: null, lastError: null });
+  }
+  try {
+    await api("/credential", "POST", { value: `Bearer ${token}` });
+    scheduleSupplySync();
+  } catch { /* bootstrap may arrive later */ }
 }
 
 async function syncSupply() {
@@ -336,11 +388,22 @@ async function syncSupply() {
     if (current) await saveSettings({ ...current, lastSupplySyncAt: new Date().toISOString(), lastError: null });
     return result;
   } catch (error) {
-    if (error.status === 401 || error.status === 403 || /登录|凭证|令牌/.test(error.message || "")) {
+    if (error.status === 401 || error.status === 403
+        || /登录|凭证|令牌|认证|无法访问系统资源/.test(error.message || "")) {
       error.loginRequired = true;
+      const current = await settings();
+      if (current && token) {
+        await saveSettings({
+          ...current,
+          rejectedSupplyTokenHash: await fingerprint(token),
+          lastError: error?.message || "供应链登录已失效"
+        });
+      }
+      await chrome.storage.session.remove(SUPPLY_CREDENTIAL_KEY);
       await ensurePage("SUPPLY_CHAIN", true);
     }
-    await reportFailure("SUPPLY_CHAIN", error);
+    // /supply-sync 已在服务端写入运行结果；只有请求根本没有到达工作台时才补报失败，避免一轮记两条。
+    if (!error.status) await reportFailure("SUPPLY_CHAIN", error);
     throw error;
   }
 }
@@ -441,7 +504,8 @@ chrome.webRequest.onBeforeRequest.addListener((details) => {
   pendingBodies.set(details.requestId, bodyFrom(details));
 }, { urls: [
   "https://czyx.lingxing.com/api/storage/lists*",
-  "https://czyx.lingxing.com/mp-platform-warehouse-api/api/cargo/list*"
+  "https://czyx.lingxing.com/mp-platform-warehouse-api/api/cargo/list*",
+  "https://gw.lingxingerp.com/mp-platform-warehouse-api/api/cargo/list*"
 ] }, ["requestBody"]);
 
 chrome.webRequest.onBeforeSendHeaders.addListener((details) => {
@@ -460,11 +524,12 @@ chrome.webRequest.onBeforeSendHeaders.addListener((details) => {
   };
   pendingBodies.delete(details.requestId);
   chrome.storage.session.set({ [TEMPLATE_PREFIX + source]: template })
-    .then(() => syncLingxing(source)).catch(() => {});
+    .then(() => scheduleLingxingSync(source)).catch(() => {});
 }, { urls: [
   "https://czyxgyl.shangyiku.top/prod-api/*",
   "https://czyx.lingxing.com/api/storage/lists*",
-  "https://czyx.lingxing.com/mp-platform-warehouse-api/api/cargo/list*"
+  "https://czyx.lingxing.com/mp-platform-warehouse-api/api/cargo/list*",
+  "https://gw.lingxingerp.com/mp-platform-warehouse-api/api/cargo/list*"
 ] }, ["requestHeaders", "extraHeaders"]);
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
@@ -475,32 +540,16 @@ chrome.tabs.onRemoved.addListener((tabId) => watchedTabs.delete(tabId));
 
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === HEARTBEAT_ALARM) heartbeat().catch(() => {});
-  if (alarm.name === SYNC_ALARM) {
-    syncLingxing("LINGXING_INVENTORY").catch(() => {});
-    syncLingxing("LINGXING_WFS").catch(() => {});
-  }
-  if (alarm.name === SUPPLY_SYNC_ALARM) syncSupply().catch(() => {});
 });
 
-function minutesUntilNextEight() {
-  const now = new Date();
-  const next = new Date(now);
-  next.setHours(8, 0, 0, 0);
-  if (next <= now) next.setDate(next.getDate() + 1);
-  return Math.max(1, Math.ceil((next.getTime() - now.getTime()) / 60000));
-}
-
 async function bootstrap() {
-  await chrome.alarms.create(HEARTBEAT_ALARM, { delayInMinutes: 1, periodInMinutes: 1 });
-  await chrome.alarms.create(SYNC_ALARM, { delayInMinutes: 5, periodInMinutes: 60 });
-  await chrome.alarms.create(SUPPLY_SYNC_ALARM, { delayInMinutes: minutesUntilNextEight(), periodInMinutes: 1440 });
+  // 同名 alarm 再次 create 会取消并重建；Service Worker 每次唤醒都执行 bootstrap，
+  // 因此必须只补建缺失 alarm，不能把下一次心跳永远向后推。
+  if (!await chrome.alarms.get(HEARTBEAT_ALARM)) {
+    await chrome.alarms.create(HEARTBEAT_ALARM, { delayInMinutes: 1, periodInMinutes: 1 });
+  }
   const tabs = await chrome.tabs.query({ url: ["http://localhost/*", "http://127.0.0.1/*"] });
   for (const tab of tabs) chrome.tabs.sendMessage(tab.id, { type: "REQUEST_BRIDGE_BOOTSTRAP" }).catch(() => {});
-  const current = await settings();
-  const lastSupplyDay = current?.lastSupplySyncAt ? new Date(current.lastSupplySyncAt).toDateString() : "";
-  if (current?.key && new Date().getHours() >= 8 && lastSupplyDay !== new Date().toDateString()) {
-    syncSupply().catch(() => {});
-  }
   await refreshBadge();
 }
 

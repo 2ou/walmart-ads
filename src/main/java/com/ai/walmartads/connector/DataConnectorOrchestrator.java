@@ -99,6 +99,25 @@ public class DataConnectorOrchestrator {
         workspaces.connectorWorkspaces().forEach(principal -> startDue(principal, "CRON"));
     }
 
+    /**
+     * 领星网页库存和 WFS 货件按小时由项目统一发任务，扩展只负责通过心跳领取。
+     * 这样不会受 Manifest V3 Service Worker 重启、alarm 重建或浏览器标签页状态影响。
+     */
+    @Scheduled(cron = "0 5 * * * *", zone = "${walmart.ads.data-connector.zone:Asia/Shanghai}")
+    public void scheduledHourlyLingxingSync() {
+        if (!properties.enabled()) return;
+        ensureAllWorkspaces();
+        LocalDateTime cutoff = LocalDateTime.now(zone()).minusMinutes(50);
+        for (WorkspacePrincipal principal : workspaces.connectorWorkspaces()) {
+            EnumSet<ConnectorSource> due = EnumSet.of(
+                    ConnectorSource.LINGXING_INVENTORY, ConnectorSource.LINGXING_WFS);
+            due.removeIf(source -> store.succeededSince(principal.workspaceId(), source, cutoff));
+            if (!due.isEmpty()) {
+                store.requestBrowserSync(principal.workspaceId(), due, "HOURLY_CRON");
+            }
+        }
+    }
+
     @Scheduled(cron = "0 30 2 * * *", zone = "${walmart.ads.data-connector.zone:Asia/Shanghai}")
     public void cleanupAudit() {
         store.cleanupRuns(properties.resolvedLogRetentionDays());
@@ -137,6 +156,7 @@ public class DataConnectorOrchestrator {
         List<WorkspaceStatus> result = new ArrayList<>();
         for (WorkspacePrincipal target : targets) {
             store.ensureWorkspace(target);
+            store.expireStaleBrowserRequests(target.workspaceId(), properties.loginTimeout().toMinutes());
             List<SystemStatus> systems = Arrays.stream(ConnectorSystem.values())
                     .filter(system -> system != ConnectorSystem.SUPPLY_CHAIN || target.supplyChainEnabled())
                     .map(system -> toSystemStatus(target.workspaceId(), system))

@@ -41,6 +41,8 @@ public class LingxingDomesticInventoryService {
 
     private static final Logger log = LoggerFactory.getLogger(LingxingDomesticInventoryService.class);
     private static final DateTimeFormatter DUMP_STAMP = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss");
+    private static final int MIN_REFERENCE_SKUS_FOR_COMPLETENESS_CHECK = 100;
+    private static final double MIN_ACCEPTED_SNAPSHOT_RATIO = 0.70d;
 
     public static final String SOURCE_HOST = "czyx.lingxing.com";
     public static final String SOURCE_PATH = "/api/storage/lists";
@@ -92,6 +94,11 @@ public class LingxingDomesticInventoryService {
         ArrayNode rows = findInventoryRows(response);
         if (rows == null || rows.isEmpty()) {
             throw new IllegalArgumentException("领星库存接口没有返回可识别的 SKU 行，已保留原库存");
+        }
+        int declaredTotal = declaredTotal(response);
+        if (declaredTotal > rows.size()) {
+            throw new IllegalArgumentException("领星库存分页未读取完整（仅收到 " + rows.size()
+                    + "/" + declaredTotal + " 行），已保留原库存");
         }
 
         WorkspacePrincipal principal = WorkspaceContext.requirePrincipal();
@@ -148,6 +155,7 @@ public class LingxingDomesticInventoryService {
         }
 
         long workspaceId = principal.workspaceId();
+        assertSnapshotComplete(workspaceId, bySku.size());
         jdbc.update("delete from wm_ads_lx_domestic_inventory where workspace_id=?", workspaceId);
         List<Object[]> args = new ArrayList<>(bySku.size());
         for (Accumulator value : bySku.values()) {
@@ -182,6 +190,50 @@ public class LingxingDomesticInventoryService {
                 """, workspaceId, syncedAt, LocalDateTime.now(), rows.size(), bySku.size(), skipped,
                 units, sourceUrl, "领星库存明细已替换当前国内仓库存");
         return new ImportSummary(rows.size(), bySku.size(), skipped, units, syncedAt, "PROJECT_CONNECTOR");
+    }
+
+    private void assertSnapshotComplete(long workspaceId, int incomingSkuCount) {
+        Integer currentCount = jdbc.queryForObject(
+                "select count(*) from wm_ads_lx_domestic_inventory where workspace_id=?",
+                Integer.class, workspaceId);
+        Integer historicalHighWater = jdbc.queryForObject("""
+                select max(imported_sku_count)
+                  from wm_ads_lx_domestic_inventory_sync_log
+                 where workspace_id=? and status='SUCCESS'
+                """, Integer.class, workspaceId);
+        int reference = Math.max(currentCount == null ? 0 : currentCount,
+                historicalHighWater == null ? 0 : historicalHighWater);
+        if (reference < MIN_REFERENCE_SKUS_FOR_COMPLETENESS_CHECK) return;
+        int minimum = (int) Math.ceil(reference * MIN_ACCEPTED_SNAPSHOT_RATIO);
+        if (incomingSkuCount < minimum) {
+            throw new IllegalArgumentException("领星库存快照疑似不完整：本次仅 " + incomingSkuCount
+                    + " 个 SKU，历史完整快照为 " + reference + " 个，低于安全下限 " + minimum
+                    + " 个；已保留原库存，请刷新领星库存明细页面后重试");
+        }
+    }
+
+    private static int declaredTotal(JsonNode response) {
+        List<JsonNode> candidates = List.of(
+                response.path("data").path("total"),
+                response.path("data").path("total_count"),
+                response.path("data").path("totalCount"),
+                response.path("total"),
+                response.path("total_count"),
+                response.path("totalCount")
+        );
+        for (JsonNode candidate : candidates) {
+            if (!candidate.isMissingNode() && !candidate.isNull() && candidate.canConvertToInt()) {
+                return Math.max(0, candidate.asInt());
+            }
+            if (candidate.isTextual()) {
+                try {
+                    return Math.max(0, Integer.parseInt(candidate.asText().trim()));
+                } catch (NumberFormatException ignored) {
+                    // Try the next documented alias.
+                }
+            }
+        }
+        return -1;
     }
 
     @Transactional(readOnly = true)

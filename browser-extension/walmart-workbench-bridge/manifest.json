@@ -1,12 +1,13 @@
 {
   "manifest_version": 3,
   "name": "沃尔玛工作台 · 当前浏览器数据连接",
-  "version": "2.0.0",
+  "version": "2.0.3",
   "description": "复用当前 Chrome 的领星与供应链登录状态，按工作台店铺隔离同步数据。",
   "permissions": ["alarms", "storage", "tabs", "webRequest"],
   "host_permissions": [
     "https://czyxgyl.shangyiku.top/*",
     "https://czyx.lingxing.com/*",
+    "https://gw.lingxingerp.com/*",
     "http://localhost/*",
     "http://127.0.0.1/*"
   ],

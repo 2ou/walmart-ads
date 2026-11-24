@@ -503,17 +503,18 @@ public class WorkspaceAccountService {
     private void seedSyncSettings(long workspaceId, boolean adsConfigured) {
         int minute = (int) Math.floorMod(workspaceId * 7, 50) + 5;
         for (String category : List.of("PRODUCTS", "SALES", "INVENTORY")) {
-            jdbc.update("insert into wm_ads_workspace_sync_setting (workspace_id,sync_category,enabled,cadence,stagger_minute) values (?,?,1,'SIX_HOURLY',?)",
-                    workspaceId, category, minute);
+            int staggerMinute = "SALES".equals(category) ? (minute + 15) % 60 : minute;
+            jdbc.update("insert into wm_ads_workspace_sync_setting (workspace_id,sync_category,enabled,cadence,stagger_minute) values (?,?,1,'HOURLY',?)",
+                    workspaceId, category, staggerMinute);
         }
         jdbc.update("""
                 insert into wm_ads_workspace_sync_setting
                     (workspace_id,sync_category,enabled,cadence,stagger_minute,last_status,last_message)
                 values (?,'ADS',?,'HOURLY',?,?,?)
-                """, workspaceId, adsConfigured, minute,
+                """, workspaceId, adsConfigured, (minute + 30) % 60,
                 adsConfigured ? null : "UNCONFIGURED", adsConfigured ? null : "待填写广告账号 ID");
         jdbc.update("insert into wm_ads_workspace_sync_setting (workspace_id,sync_category,enabled,cadence,stagger_minute) values (?,?,1,'DAILY',?)",
-                workspaceId, "REVIEWS", minute);
+                workspaceId, "REVIEWS", (minute + 40) % 60);
         jdbc.update("insert into wm_ads_workspace_sync_setting (workspace_id,sync_category,enabled,cadence,stagger_minute) values (?,?,1,'BACKGROUND',?)",
                 workspaceId, "HISTORY", minute);
     }

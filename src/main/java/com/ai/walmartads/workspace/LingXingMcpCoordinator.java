@@ -15,7 +15,7 @@ import java.util.List;
 
 /**
  * Database-backed request coordinator shared by every LingXing business category and app instance.
- * It enforces the official QPS=1 rule with a conservative two-second interval and persists 429
+ * It uses a conservative two-second interval and persists observed 429
  * cooldowns so neither a restart nor another category can bypass the server-provided Retry-After.
  */
 @Service
@@ -44,10 +44,10 @@ public class LingXingMcpCoordinator {
     /**
      * 预约一个全账号共享的请求时槽，同时识别「本类目」与「全账号」两种冷却。
      *
-     * <p>限速槽必须按账号共享 —— 领星的配额是「每用户 1 分钟 100 次」，各类目各自排队
-     * 会叠乘上去。但冷却要分两层看：
+     * <p>各类目共享排队时槽，避免多任务同时请求；这是工作台的保护策略，不代表官方配额。
+     * 冷却分两层处理：
      * <ul>
-     *   <li>账号级：服务端明确回 {@code Retry-After}，说明整个 key 被封，所有类目都得等；</li>
+     *   <li>账号级：服务端返回 {@code Retry-After} 时，保守地让所有类目等待；</li>
      *   <li>类目级：只是本地兜底冷却（一次没有 Retry-After 的 429），只停这一个类目，
      *       不要把商品、订单、库存一起拖下水。</li>
      * </ul>

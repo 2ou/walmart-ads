@@ -17,7 +17,7 @@ async function render() {
 async function sync(source) {
   message.textContent = "正在调用当前 Chrome 登录会话…";
   const result = await send({ type: "POPUP_SYNC", source });
-  message.textContent = result?.ok ? "已触发同步；需要登录时会自动打开标签页。" : (result?.error || "同步失败");
+  message.textContent = result?.ok ? "已触发同步。需要登录时，请在工作台数据中心手动打开登录页面。" : (result?.error || "同步失败");
   await render();
 }
 

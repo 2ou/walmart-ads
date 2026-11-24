@@ -87,6 +87,8 @@ public class FileImportProcessor {
     private final ShipmentLogisticsRepository shipmentLogisticsRepository;
     private final TransitInventoryService transitInventoryService;
     private final ReplenishmentPlanCache replenishmentPlanCache;
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.ai.walmartads.returns.application.ReturnAnalyticsService returnAnalyticsService;
     private final Map<ImportFileType, DocumentImportTool> tools;
     private final Map<ImportFileType, String> toolVersions;
 
@@ -316,9 +318,13 @@ public class FileImportProcessor {
                         ));
         plan.resolvedRecords().forEach(record -> applyCuttingYield(record, null, manualCuttingYields));
 
-        // A confirmed product workbook is a complete catalog snapshot for the current workspace.
-        // Rows missing from the workbook are soft-retired; all history remains queryable.
-        productRepository.deactivateAllCurrentVersions();
+        // Only replace styles present in this workbook; unrelated styles remain current.
+        if (parentSkus.isEmpty()) {
+            throw new IllegalArgumentException("产品表没有可识别的款号");
+        }
+        if (!plan.replacedIds().isEmpty()) {
+            productRepository.deactivateCurrentVersionsById(plan.replacedIds());
+        }
         productRepository.saveAll(plan.resolvedRecords());
 
         String operator = WorkspaceContext.requirePrincipal().username();
@@ -425,6 +431,9 @@ public class FileImportProcessor {
     ) {
         deleteSupersededReturnMonthRows(file);
         returnOrderRepository.saveAll(parsed.rows());
+        if (returnAnalyticsService != null) {
+            returnAnalyticsService.invalidate();
+        }
         return new DocumentImportTool.ImportOutcome(parsed.sourceRowCount(), parsed.rows().size());
     }
 

@@ -100,8 +100,8 @@ public class SalesOrderFlowService {
                        o.sku               as sku,
                        o.item_description  as item_description,
                        o.quantity          as quantity,
-                       o.item_cost         as unit_price,
-                       (o.quantity * o.item_cost) as amount
+                       coalesce(nullif(o.original_price, 0), nullif(o.item_cost, 0), 0) as unit_price,
+                       (o.quantity * coalesce(nullif(o.original_price, 0), nullif(o.item_cost, 0), 0)) as amount
                   from wm_ads_order_record_valid o
                   join wm_ads_import_file f
                     on f.id = o.import_file_id and f.active = true
@@ -126,8 +126,8 @@ public class SalesOrderFlowService {
     private static String resolveOrderColumn(String sort) {
         String key = sort == null ? "" : sort.trim();
         return switch (key) {
-            case "unitPrice" -> "o.item_cost";
-            case "amount" -> "(o.quantity * o.item_cost)";
+            case "unitPrice" -> "coalesce(nullif(o.original_price, 0), nullif(o.item_cost, 0), 0)";
+            case "amount" -> "(o.quantity * coalesce(nullif(o.original_price, 0), nullif(o.item_cost, 0), 0))";
             default -> "o.order_date";
         };
     }

@@ -80,7 +80,7 @@ public class BrowserBridgeController {
         }
         bridge.recordFailure(principal, source,
                 body.message() == null || body.message().isBlank() ? "当前 Chrome 同步失败" : body.message(),
-                body.loginRequired());
+                body.loginRequired(), body.pageRequired());
         return ApiResponse.ok(null);
     }
 
@@ -123,6 +123,6 @@ public class BrowserBridgeController {
     public record SnapshotRequest(String sourceUrl, JsonNode response, String capturedAt, String requestBody) {
     }
 
-    public record FailureRequest(String source, String message, boolean loginRequired) {
+    public record FailureRequest(String source, String message, boolean loginRequired, boolean pageRequired) {
     }
 }

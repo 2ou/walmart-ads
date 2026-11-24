@@ -9,6 +9,7 @@ import com.ai.walmartads.importing.repository.ProductRecordRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -49,20 +50,30 @@ class ProductImportPlannerTest {
     }
 
     @Test
-    void plansNewRowsAndSoftRetiresRowsMissingFromFullSnapshot() {
+    void replacesOnlyUploadedStylesAndLeavesOtherStylesUntouched() {
         ProductRecord existing = product("PNK100-Blue-M", "Old", "Blue",
                 "{\"sku\":\"PNK100-Blue-M\",\"productName\":\"Old\",\"color\":\"Blue\"}", 1);
-        ProductRecord added = product("PNK200-Red-S", "New", "Red",
-                "{\"sku\":\"PNK200-Red-S\",\"productName\":\"New\",\"color\":\"Red\"}", 2);
+        ProductRecord missingSize = product("PNK100-Blue-L", "Old", "Blue",
+                "{\"sku\":\"PNK100-Blue-L\"}", 2);
+        ProductRecord unrelated = product("PNK200-Red-S", "Other", "Red",
+                "{\"sku\":\"PNK200-Red-S\"}", 3);
+        ReflectionTestUtils.setField(existing, "id", 1L);
+        ReflectionTestUtils.setField(missingSize, "id", 2L);
+        ReflectionTestUtils.setField(unrelated, "id", 3L);
+        ProductRecord updated = product("PNK100-Blue-M", "New", "Blue",
+                "{\"sku\":\"PNK100-Blue-M\",\"productName\":\"New\"}", 4);
+        ProductRecord added = product("PNK100-Red-S", "New", "Red",
+                "{\"sku\":\"PNK100-Red-S\",\"productName\":\"New\"}", 5);
 
         ProductImportPlanner.Plan plan = planner.plan(
-                new ParsedRows<>(1, List.of(added)), List.of(existing), List.of());
+                new ParsedRows<>(2, List.of(updated, added)), List.of(existing, missingSize, unrelated), List.of());
 
         assertThat(plan.count(ProductImportPlanner.ChangeType.ADD)).isEqualTo(1);
+        assertThat(plan.count(ProductImportPlanner.ChangeType.UPDATE)).isEqualTo(1);
         assertThat(plan.count(ProductImportPlanner.ChangeType.RETIRE)).isEqualTo(1);
-        assertThat(plan.changes()).filteredOn(ProductImportPlanner.PlannedChange::wholeStyle)
-                .singleElement().extracting(ProductImportPlanner.PlannedChange::sku)
-                .isEqualTo("PNK100-Blue-M");
+        assertThat(plan.changes()).filteredOn(change -> change.type() == ProductImportPlanner.ChangeType.RETIRE)
+                .singleElement().extracting(ProductImportPlanner.PlannedChange::sku).isEqualTo("PNK100-Blue-L");
+        assertThat(plan.replacedIds()).containsExactlyInAnyOrder(1L, 2L).doesNotContain(3L);
     }
 
     @Test
@@ -97,7 +108,7 @@ class ProductImportPlannerTest {
                 new ParsedRows<>(1, List.of(differentlyCased)), List.of(current), List.of());
 
         assertThat(plan.count(ProductImportPlanner.ChangeType.ADD)).isEqualTo(1);
-        assertThat(plan.count(ProductImportPlanner.ChangeType.RETIRE)).isEqualTo(1);
+        assertThat(plan.count(ProductImportPlanner.ChangeType.RETIRE)).isZero();
     }
 
     private static ProductRecord product(

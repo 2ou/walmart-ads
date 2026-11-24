@@ -40,6 +40,51 @@ public class InventoryController {
         return ApiResponse.ok(inventoryDataService.load(days, effectiveTargetDays, startDate, endDate));
     }
 
+    @GetMapping("/coverage")
+    public ApiResponse<InventoryDataService.InventoryCoveragePayload> coverage(
+            @RequestParam(defaultValue = "7") int days,
+            @RequestParam(required = false) Integer targetDays
+    ) {
+        return ApiResponse.ok(inventoryDataService.loadCoverage(days, forecastSettingService.resolve(targetDays)));
+    }
+
+    @GetMapping("/window")
+    public ApiResponse<InventoryDataService.InventoryWindowPayload> window(
+            @RequestParam(defaultValue = "7") int days,
+            @RequestParam(required = false) Integer targetDays,
+            @RequestParam(required = false) LocalDate startDate,
+            @RequestParam(required = false) LocalDate endDate,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "12") int size,
+            @RequestParam(defaultValue = "") String search,
+            @RequestParam(defaultValue = "all") String risk,
+            @RequestParam(defaultValue = "parentSku") String sort,
+            @RequestParam(defaultValue = "asc") String direction
+    ) {
+        int effectiveTargetDays = forecastSettingService.resolve(targetDays);
+        return ApiResponse.ok(inventoryDataService.loadWindow(
+                days, effectiveTargetDays, startDate, endDate,
+                page, size, search, risk, sort, direction));
+    }
+
+    @GetMapping("/style")
+    public ApiResponse<InventoryDataService.InventoryStylePayload> style(
+            @RequestParam String parentSku,
+            @RequestParam(defaultValue = "7") int days,
+            @RequestParam(required = false) Integer targetDays,
+            @RequestParam(required = false) LocalDate startDate,
+            @RequestParam(required = false) LocalDate endDate
+    ) {
+        int effectiveTargetDays = forecastSettingService.resolve(targetDays);
+        return ApiResponse.ok(inventoryDataService.loadStyle(
+                days, effectiveTargetDays, startDate, endDate, parentSku));
+    }
+
+    @GetMapping("/trend")
+    public ApiResponse<List<InventoryDataService.TrendRow>> trend() {
+        return ApiResponse.ok(inventoryDataService.trend());
+    }
+
     @GetMapping("/production-orders")
     public ApiResponse<List<InventoryDataService.ProductionOrderView>> productionOrders() {
         return ApiResponse.ok(inventoryDataService.productionOrders());

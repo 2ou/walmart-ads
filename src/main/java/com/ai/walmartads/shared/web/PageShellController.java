@@ -12,7 +12,7 @@ import java.nio.charset.StandardCharsets;
 public class PageShellController {
 
     private static final String STYLE_TAG = "<link rel=\"stylesheet\" href=\"/returns.css\">";
-    private static final String SCRIPT_TAG = "<script src=\"/returns.js\" defer></script>";
+    private static final String SCRIPT_TAG = "<script src=\"/returns.js?v=20261106-zero-refunds\" defer></script>";
     private volatile String page;
 
     @GetMapping(value = {"/", "/index.html"}, produces = MediaType.TEXT_HTML_VALUE)

@@ -142,7 +142,8 @@ public class DataConnectorStore {
                        set status='WAITING_BROWSER',last_started_at=now(6),
                            last_message='等待当前 Chrome 读取登录会话',last_triggered_by=?
                      where workspace_id=? and source_code=? and enabled=1
-                    """, triggeredBy, workspaceId, source.name());
+                       and (? = 'MANUAL' or status not in ('LOGIN_REQUIRED', 'WAITING_PAGE'))
+                    """, triggeredBy, workspaceId, source.name(), triggeredBy);
         }
     }
 
@@ -181,6 +182,7 @@ public class DataConnectorStore {
                 select source_code
                   from wm_ads_connector_source_state
                  where workspace_id=? and enabled=1 and status='WAITING_BROWSER'
+                   and source_code <> 'LINGXING_INVENTORY'
                  order by source_code
                 """, String.class, workspaceId);
     }

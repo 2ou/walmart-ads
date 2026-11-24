@@ -4,12 +4,6 @@ const TEMPLATE_PREFIX = "lingxingRequestTemplate:";
 const HEARTBEAT_ALARM = "workbench-current-chrome-heartbeat";
 
 const SOURCES = {
-  LINGXING_INVENTORY: {
-    origin: "https://czyx.lingxing.com",
-    path: "/api/storage/lists",
-    page: "https://czyx.lingxing.com/erp/msupply/warehouseDetail",
-    endpoint: "/lingxing-inventory"
-  },
   LINGXING_WFS: {
     origin: "https://czyx.lingxing.com",
     origins: ["https://czyx.lingxing.com", "https://gw.lingxingerp.com"],
@@ -26,11 +20,10 @@ const SOURCES = {
 const pendingBodies = new Map();
 const syncing = new Map();
 const scheduledSyncs = new Map();
-const watchedTabs = new Set();
 let scheduledSupplySync = null;
 
 /** 单次重放的合法总量上限：超过说明页面筛选条件丢了（抓到全库），必须报错而不是硬翻页。 */
-const MAX_FETCH_ROWS = { LINGXING_INVENTORY: 5000, LINGXING_WFS: 20000, DEFAULT: 20000 };
+const MAX_FETCH_ROWS = { LINGXING_WFS: 20000, DEFAULT: 20000 };
 
 async function settings() {
   const stored = await chrome.storage.local.get(SETTINGS_KEY);
@@ -160,25 +153,8 @@ function transformBody(template, transform) {
   }
 }
 
-/**
- * 国内仓库存：这个接口的「仓库明细」是所有店铺/所有仓库混装的列表（本账号全库 63.5 万行），
- * 实测 sid_list（店铺筛选）传了本店铺 store_id 也不生效，**只有 search_value 的 SKU 搜索能真正收窄范围**。
- * 另外页面「隐藏零库存」一开，缺货 SKU 会整行消失（970 → 97），等于把"没货"记成"没这个 SKU"。
- * 所以重放前统一：按店铺 SKU 前缀搜索 + 关闭隐藏零库存 + 分页归零交给 pagination 翻页。
- */
-function canonicalInventory(template, skuPrefix) {
-  if (!skuPrefix) throw new Error("工作台店铺缩写为空，无法限定领星库存范围");
-  return transformBody(template, (value) => {
-    const next = { ...value, offset: 0, length: 500, is_hide_zero_stock: 0 };
-    next.search_field = "sku";
-    next.search_value = skuPrefix;
-    return next;
-  });
-}
-
-function canonicalTemplate(template, sourceCode, skuPrefix) {
+function canonicalTemplate(template, sourceCode) {
   if (sourceCode === "LINGXING_WFS") return canonicalWfs(template);
-  if (sourceCode === "LINGXING_INVENTORY") return canonicalInventory(template, skuPrefix);
   return template;
 }
 
@@ -189,7 +165,7 @@ function pagination(template, sourceCode) {
     try {
       const value = JSON.parse(template.body);
       if (Object.hasOwn(value, "offset") && Object.hasOwn(value, "length")
-          && (sourceCode === "LINGXING_WFS" || sourceCode === "LINGXING_INVENTORY")) {
+          && sourceCode === "LINGXING_WFS") {
         const size = Number(value.length);
         return { size, apply(page) { return { ...template, body: JSON.stringify({ ...value, offset: (page - 1) * size }) }; } };
       }
@@ -284,7 +260,8 @@ async function reportFailure(source, error) {
     await api("/failure", "POST", {
       source,
       message: error instanceof Error ? error.message : "当前 Chrome 同步失败",
-      loginRequired: Boolean(error?.loginRequired)
+      loginRequired: Boolean(error?.loginRequired),
+      pageRequired: Boolean(error?.pageRequired)
     });
   } catch { /* keep the original error */ }
   const current = await settings();
@@ -295,28 +272,27 @@ async function reportFailure(source, error) {
 async function syncLingxing(sourceCode) {
   if (syncing.has(sourceCode)) return syncing.get(sourceCode);
   const task = (async () => {
-    const stored = await chrome.storage.session.get(TEMPLATE_PREFIX + sourceCode);
-    const template = stored[TEMPLATE_PREFIX + sourceCode];
-    if (!template) {
-      await ensurePage(sourceCode, false);
-      return { waitingForPage: true };
-    }
     try {
+      const stored = await chrome.storage.session.get(TEMPLATE_PREFIX + sourceCode);
+      const template = stored[TEMPLATE_PREFIX + sourceCode];
+      if (!template) {
+        const error = new Error("尚未读取领星 WFS 货件页面，请点击“打开页面”并刷新，读取后自动同步");
+        error.pageRequired = true;
+        throw error;
+      }
       const current = await settings();
-      const normalized = canonicalTemplate(template, sourceCode, current?.storeAbbreviation || "");
+      const normalized = canonicalTemplate(template, sourceCode);
       const response = await fetchAll(normalized, sourceCode);
       const result = await api(SOURCES[sourceCode].endpoint, "POST", {
         sourceUrl: normalized.url,
         response,
-        capturedAt: new Date().toISOString(),
-        // 重放用的真实请求体：工作台据此判断筛选条件是否被页面改动过（只做诊断，不入库）。
-        requestBody: typeof normalized.body === "string" ? normalized.body.slice(0, 20000) : null
+        capturedAt: new Date().toISOString()
       });
       if (current) await saveSettings({ ...current, lastSyncAt: new Date().toISOString(), lastError: null });
       return result;
     } catch (error) {
+      if (error?.loginRequired) await chrome.storage.session.remove(TEMPLATE_PREFIX + sourceCode);
       await reportFailure(sourceCode, error);
-      if (error?.loginRequired) await ensurePage(sourceCode, true);
       throw error;
     } finally {
       syncing.delete(sourceCode);
@@ -375,11 +351,24 @@ async function saveSupplyToken(token) {
 }
 
 async function syncSupply() {
+  if (syncing.has("SUPPLY_CHAIN")) return syncing.get("SUPPLY_CHAIN");
+  const task = syncSupplyOnce();
+  syncing.set("SUPPLY_CHAIN", task);
+  try {
+    return await task;
+  } finally {
+    syncing.delete("SUPPLY_CHAIN");
+  }
+}
+
+async function syncSupplyOnce() {
   const stored = await chrome.storage.session.get(SUPPLY_CREDENTIAL_KEY);
   const token = stored[SUPPLY_CREDENTIAL_KEY]?.token;
   if (!token) {
-    await ensurePage("SUPPLY_CHAIN", false);
-    return { waitingForPage: true };
+    const error = new Error("等待供应链登录；自动同步已暂停，请在数据中心手动登录");
+    error.loginRequired = true;
+    await reportFailure("SUPPLY_CHAIN", error);
+    throw error;
   }
   try {
     await api("/credential", "POST", { value: `Bearer ${token}` });
@@ -400,7 +389,6 @@ async function syncSupply() {
         });
       }
       await chrome.storage.session.remove(SUPPLY_CREDENTIAL_KEY);
-      await ensurePage("SUPPLY_CHAIN", true);
     }
     // /supply-sync 已在服务端写入运行结果；只有请求根本没有到达工作台时才补报失败，避免一轮记两条。
     if (!error.status) await reportFailure("SUPPLY_CHAIN", error);
@@ -408,45 +396,36 @@ async function syncSupply() {
   }
 }
 
-async function ensurePage(sourceCode, activeForLogin) {
+async function ensurePage(sourceCode, activeForLogin, refreshExisting = false) {
   const source = SOURCES[sourceCode];
   const exact = await chrome.tabs.query({ url: `${source.origin}${new URL(source.page).pathname}*` });
   if (exact.length) {
     const tab = exact[0];
-    watchedTabs.add(tab.id);
-    await chrome.tabs.reload(tab.id);
+    if (refreshExisting) await chrome.tabs.reload(tab.id);
     if (activeForLogin) await chrome.tabs.update(tab.id, { active: true });
     return tab;
   }
   const tab = await chrome.tabs.create({ url: source.page, active: Boolean(activeForLogin) });
-  watchedTabs.add(tab.id);
   return tab;
 }
 
 async function runCommand(command) {
   if (!command?.action) return heartbeat();
+  if (command.action === "OPEN_PAGE") {
+    if (!SOURCES[command.source]) throw new Error("未知的数据源");
+    return ensurePage(command.source, true, true);
+  }
   if (command.action === "LOGIN") {
     if (command.system === "SUPPLY_CHAIN") {
-      const stored = await chrome.storage.session.get(SUPPLY_CREDENTIAL_KEY);
-      if (stored[SUPPLY_CREDENTIAL_KEY]?.token) return syncSupply();
       return ensurePage("SUPPLY_CHAIN", true);
     }
-    const stored = await chrome.storage.session.get([
-      TEMPLATE_PREFIX + "LINGXING_INVENTORY", TEMPLATE_PREFIX + "LINGXING_WFS"
-    ]);
-    if (stored[TEMPLATE_PREFIX + "LINGXING_INVENTORY"] || stored[TEMPLATE_PREFIX + "LINGXING_WFS"]) {
-      const results = [];
-      if (stored[TEMPLATE_PREFIX + "LINGXING_INVENTORY"]) results.push(await syncLingxing("LINGXING_INVENTORY"));
-      if (stored[TEMPLATE_PREFIX + "LINGXING_WFS"]) results.push(await syncLingxing("LINGXING_WFS"));
-      return results;
-    }
-    return ensurePage("LINGXING_INVENTORY", true);
+    return ensurePage("LINGXING_WFS", true);
   }
   if (command.action !== "SYNC") throw new Error("未知的浏览器连接指令");
   const requested = command.source || "ALL";
   const current = await settings();
   const targets = requested === "ALL"
-    ? (current?.sources || ["LINGXING_INVENTORY", "LINGXING_WFS"]) : [requested];
+    ? (current?.sources || ["LINGXING_WFS"]) : [requested];
   const results = [];
   for (const source of targets) {
     if (!SOURCES[source]) continue;
@@ -503,7 +482,6 @@ chrome.webRequest.onBeforeRequest.addListener((details) => {
   if (!source || ownRequest(details) || details.method === "OPTIONS") return;
   pendingBodies.set(details.requestId, bodyFrom(details));
 }, { urls: [
-  "https://czyx.lingxing.com/api/storage/lists*",
   "https://czyx.lingxing.com/mp-platform-warehouse-api/api/cargo/list*",
   "https://gw.lingxingerp.com/mp-platform-warehouse-api/api/cargo/list*"
 ] }, ["requestBody"]);
@@ -527,22 +505,17 @@ chrome.webRequest.onBeforeSendHeaders.addListener((details) => {
     .then(() => scheduleLingxingSync(source)).catch(() => {});
 }, { urls: [
   "https://czyxgyl.shangyiku.top/prod-api/*",
-  "https://czyx.lingxing.com/api/storage/lists*",
   "https://czyx.lingxing.com/mp-platform-warehouse-api/api/cargo/list*",
   "https://gw.lingxingerp.com/mp-platform-warehouse-api/api/cargo/list*"
 ] }, ["requestHeaders", "extraHeaders"]);
-
-chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
-  if (!watchedTabs.has(tabId) || !changeInfo.url) return;
-  if (/\/login|login\.|passport|sso/i.test(changeInfo.url)) chrome.tabs.update(tabId, { active: true }).catch(() => {});
-});
-chrome.tabs.onRemoved.addListener((tabId) => watchedTabs.delete(tabId));
 
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === HEARTBEAT_ALARM) heartbeat().catch(() => {});
 });
 
 async function bootstrap() {
+  // 国内仓库存已由 MCP 接管，不再保存旧版插件捕获的请求模板。
+  await chrome.storage.session.remove(TEMPLATE_PREFIX + "LINGXING_INVENTORY");
   // 同名 alarm 再次 create 会取消并重建；Service Worker 每次唤醒都执行 bootstrap，
   // 因此必须只补建缺失 alarm，不能把下一次心跳永远向后推。
   if (!await chrome.alarms.get(HEARTBEAT_ALARM)) {

@@ -62,12 +62,11 @@ public class ProductCatalogService {
     private final ProductDashboardService productDashboardService;
 
     /**
-     * 产品库列表快照。列表接口的整条链路（主查询 + 退款率 + 生命周期 + 28 款 summary + searchTerms 拼装
-     * + 序列化）每次都要从头重算，而这是一次「打开就要等」的交互。故按数据指纹缓存整份 payload：
+     * 产品库列表快照（按工作空间隔离）。列表接口的整条链路（主查询 + 退款率 + 生命周期 + 28 款 summary + searchTerms 拼装
+     * + 序列化）每次都要从头重算，而这是一次「打开就要等」的交互。故按工作空间 + 数据指纹缓存整份 payload：
      * 指纹不变直接复用，指纹变化（导入、改裁床数/退款率/配送费、领星回写价格等）或超时即重算。
-     * volatile 保证可见性；并发首次请求最多多算一次，结果等价。
      */
-    private volatile CatalogSnapshot catalogSnapshot;
+    private final Map<Long, CatalogSnapshot> catalogSnapshots = new java.util.concurrent.ConcurrentHashMap<>();
 
     public ProductCatalogService(
             NamedParameterJdbcTemplate jdbc,
@@ -95,17 +94,24 @@ public class ProductCatalogService {
      */
     @Transactional(readOnly = true)
     public CatalogResult loadWithVersion() {
+        long workspaceId = currentWorkspaceId();
         String fingerprint = fingerprint();
         long now = System.nanoTime();
-        CatalogSnapshot current = catalogSnapshot;
+        CatalogSnapshot current = catalogSnapshots.get(workspaceId);
         if (current != null
                 && current.fingerprint().equals(fingerprint)
                 && current.expiresAtNanos() > now) {
             return new CatalogResult(fingerprint, current.payload());
         }
         CatalogPayload payload = computeCatalog();
-        catalogSnapshot = new CatalogSnapshot(fingerprint, payload, now + CATALOG_CACHE_TTL_NANOS);
+        catalogSnapshots.put(workspaceId, new CatalogSnapshot(fingerprint, payload, now + CATALOG_CACHE_TTL_NANOS));
         return new CatalogResult(fingerprint, payload);
+    }
+
+    private static long currentWorkspaceId() {
+        return WorkspaceContext.current()
+                .map(com.ai.walmartads.workspace.WorkspacePrincipal::workspaceId)
+                .orElse(1L);
     }
 
     @Transactional(readOnly = true)
@@ -158,7 +164,9 @@ public class ProductCatalogService {
 
     /** 供数据变更路径显式失效（非必需 —— 指纹机制已覆盖）。 */
     public void invalidate() {
-        catalogSnapshot = null;
+        WorkspaceContext.current()
+                .map(com.ai.walmartads.workspace.WorkspacePrincipal::workspaceId)
+                .ifPresentOrElse(catalogSnapshots::remove, catalogSnapshots::clear);
     }
 
     /** 单个父款详情的版本：全局指纹 + 父款号，父款被删/数据变更都会改变它。 */

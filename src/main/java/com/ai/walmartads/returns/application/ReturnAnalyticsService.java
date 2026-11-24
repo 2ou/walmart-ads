@@ -2,6 +2,7 @@ package com.ai.walmartads.returns.application;
 
 import com.ai.walmartads.common.WalmartImageUrl;
 import com.ai.walmartads.product.application.ProfitAssumptionRepository;
+import com.ai.walmartads.workspace.WorkspaceContext;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -10,6 +11,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.sql.Date;
 import java.sql.Timestamp;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
@@ -20,9 +22,12 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 public class ReturnAnalyticsService {
+
+    private static final long CACHE_TTL_NANOS = Duration.ofMinutes(5).toNanos();
 
     private static final String RETURN_CTE = ReturnQuerySupport.ACTIVE_RETURN_CTE + """
             , current_mapping as (
@@ -61,6 +66,17 @@ public class ReturnAnalyticsService {
 
     private final NamedParameterJdbcTemplate jdbc;
     private final ProfitAssumptionRepository profitAssumptionRepository;
+    private final Map<PayloadCacheKey, PayloadCacheEntry> payloadCache = new ConcurrentHashMap<>();
+    private final Map<Long, CumulativeCacheEntry> cumulativeCache = new ConcurrentHashMap<>();
+
+    private record PayloadCacheKey(long workspaceId, String month) {
+    }
+
+    private record PayloadCacheEntry(ReturnPayload payload, long expiresAtNanos) {
+    }
+
+    private record CumulativeCacheEntry(Map<String, Double> rates, boolean hasData, long expiresAtNanos) {
+    }
 
     public ReturnAnalyticsService(
             NamedParameterJdbcTemplate jdbc,
@@ -70,12 +86,45 @@ public class ReturnAnalyticsService {
         this.profitAssumptionRepository = profitAssumptionRepository;
     }
 
+    public void invalidate() {
+        WorkspaceContext.current()
+                .map(com.ai.walmartads.workspace.WorkspacePrincipal::workspaceId)
+                .ifPresentOrElse(workspaceId -> {
+                    payloadCache.keySet().removeIf(key -> key.workspaceId() == workspaceId);
+                    cumulativeCache.remove(workspaceId);
+                }, () -> {
+                    payloadCache.clear();
+                    cumulativeCache.clear();
+                });
+    }
+
+    private static long currentWorkspaceId() {
+        return WorkspaceContext.current()
+                .map(com.ai.walmartads.workspace.WorkspacePrincipal::workspaceId)
+                .orElse(1L);
+    }
+
     public ReturnPayload load(String requestedMonth) {
+        long workspaceId = currentWorkspaceId();
+        String normalizedMonth = requestedMonth == null ? "" : requestedMonth.trim();
+        PayloadCacheKey cacheKey = new PayloadCacheKey(workspaceId, normalizedMonth);
+        long now = System.nanoTime();
+        PayloadCacheEntry cached = payloadCache.get(cacheKey);
+        if (cached != null && cached.expiresAtNanos() > now) {
+            return cached.payload();
+        }
         Bounds bounds = loadBounds();
         if (bounds == null) {
-            return emptyPayload();
+            ReturnPayload empty = emptyPayload();
+            payloadCache.put(cacheKey, new PayloadCacheEntry(empty, now + CACHE_TTL_NANOS));
+            return empty;
         }
         YearMonth selected = parseMonth(requestedMonth, bounds.latestReportMonth());
+        PayloadCacheKey resolvedKey = new PayloadCacheKey(workspaceId, selected.toString());
+        PayloadCacheEntry resolvedCached = payloadCache.get(resolvedKey);
+        if (resolvedCached != null && resolvedCached.expiresAtNanos() > now) {
+            return resolvedCached.payload();
+        }
         LocalDate start = selected.atDay(1);
         LocalDate end = selected.atEndOfMonth();
         MapSqlParameterSource window = new MapSqlParameterSource()
@@ -105,7 +154,7 @@ public class ReturnAnalyticsService {
         AccountSummary accountSummary = loadAccountSummary(bounds);
         Map<String, BigDecimal> manualRefundRates = manualRefundRates();
 
-        return new ReturnPayload(
+        ReturnPayload payload = new ReturnPayload(
                 new Meta(
                         bounds.firstMonth().toString(),
                         bounds.latestMonth().toString(),
@@ -134,6 +183,10 @@ public class ReturnAnalyticsService {
                 details,
                 manualRefundRates
         );
+        PayloadCacheEntry entry = new PayloadCacheEntry(payload, now + CACHE_TTL_NANOS);
+        payloadCache.put(cacheKey, entry);
+        payloadCache.put(resolvedKey, entry);
+        return payload;
     }
 
     /**
@@ -278,13 +331,19 @@ public class ReturnAnalyticsService {
                              where orders.order_date between :reportStart and :reportEnd
                                and nullif(trim(product.parent_sku), '') is not null
                              group by product.parent_sku
+                        ),
+                        parent_universe as (
+                            select parent_sku from return_by_parent
+                            union
+                            select parent_sku from sales_by_parent
                         )
-                        select returned.parent_sku,
+                        select universe.parent_sku,
                                coalesce(returned.completed_units, 0) as completed_units,
                                coalesce(sales.sold_units, 0) as sold_units
-                          from return_by_parent returned
-                          left join sales_by_parent sales on sales.parent_sku = returned.parent_sku
-                         where nullif(trim(returned.parent_sku), '') is not null
+                          from parent_universe universe
+                          left join return_by_parent returned on returned.parent_sku = universe.parent_sku
+                          left join sales_by_parent sales on sales.parent_sku = universe.parent_sku
+                         where nullif(trim(universe.parent_sku), '') is not null
                         """,
                 period
         ).forEach(row -> {
@@ -397,14 +456,23 @@ public class ReturnAnalyticsService {
      * 系统完全没有退款数据时返回 null（用于前端区分「无数据」与「0%」）。
      */
     public Map<String, Double> cumulativeRefundRateByParent() {
+        long workspaceId = currentWorkspaceId();
+        long now = System.nanoTime();
+        CumulativeCacheEntry cached = cumulativeCache.get(workspaceId);
+        if (cached != null && cached.expiresAtNanos() > now) {
+            return cached.hasData() ? cached.rates() : null;
+        }
         Bounds bounds = loadBounds();
         if (bounds == null) {
+            cumulativeCache.put(workspaceId, new CumulativeCacheEntry(Map.of(), false, now + CACHE_TTL_NANOS));
             return null;
         }
         Map<String, Double> result = new LinkedHashMap<>();
         loadParentTotals(bounds).forEach((parentSku, total) ->
                 result.put(parentSku, total.completedRate()));
-        return result;
+        Map<String, Double> copy = Map.copyOf(result);
+        cumulativeCache.put(workspaceId, new CumulativeCacheEntry(copy, true, now + CACHE_TTL_NANOS));
+        return copy;
     }
 
     private Summary loadSummary(MapSqlParameterSource window) {
@@ -678,22 +746,15 @@ public class ReturnAnalyticsService {
                              where orders.order_date between :start and :end
                               group by orders.sku
                         ),
-                        affected_parents as (
-                            select distinct coalesce(returned.resolved_parent_sku, product.parent_sku) as parent_sku
-                              from return_by_sku returned
-                              left join current_products product on product.sku = returned.sku
-                             where coalesce(returned.resolved_parent_sku, product.parent_sku) is not null
-                        ),
                         sku_universe as (
                             select returned.group_key,
                                    returned.sku
                               from return_by_sku returned
                             union
-                            select sales.sku as group_key,
-                                   sales.sku
-                              from monthly_sales sales
-                              join current_products product on product.sku = sales.sku
-                              join affected_parents affected on affected.parent_sku = product.parent_sku
+                            select product.sku as group_key,
+                                   product.sku
+                              from current_products product
+                             where nullif(trim(product.parent_sku), '') is not null
                         )
                         select universe.group_key,
                                coalesce(returned.sku, universe.sku) as sku,
@@ -876,7 +937,7 @@ public class ReturnAnalyticsService {
                 .toList();
     }
 
-    private static List<ParentBreakdown> parentBreakdowns(List<SkuRow> rows) {
+    static List<ParentBreakdown> parentBreakdowns(List<SkuRow> rows) {
         Map<String, List<SkuRow>> groups = new LinkedHashMap<>();
         rows.forEach(row -> {
             String key = firstText(row.parentSku(), row.sku(), row.itemId(), "未映射");
@@ -896,7 +957,6 @@ public class ReturnAnalyticsService {
                             dimensionRows(entry.getValue(), false)
                     );
                 })
-                .filter(item -> item.completedUnits() > 0)
                 .sorted(Comparator.comparingDouble(ParentBreakdown::completedUnits).reversed()
                         .thenComparing(ParentBreakdown::parentSku))
                 .toList();

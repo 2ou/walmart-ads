@@ -46,6 +46,7 @@ public class LingxingDomesticInventoryService {
 
     public static final String SOURCE_HOST = "czyx.lingxing.com";
     public static final String SOURCE_PATH = "/api/storage/lists";
+    public static final String MCP_SOURCE = "lingxing-mcp://inventory_detail_list";
 
     private static final List<String> SKU_KEYS = List.of(
             "sku", "seller_sku", "sellerSku", "product_sku", "productSku",
@@ -88,6 +89,20 @@ public class LingxingDomesticInventoryService {
     @Transactional
     public ImportSummary replaceFromConnector(String sourceUrl, JsonNode response, LocalDateTime capturedAt) {
         validateSourceUrl(sourceUrl);
+        return replaceSnapshot(sourceUrl, response, capturedAt, "PROJECT_CONNECTOR");
+    }
+
+    @Transactional
+    public ImportSummary replaceFromMcp(JsonNode response, LocalDateTime capturedAt) {
+        return replaceSnapshot(MCP_SOURCE, response, capturedAt, "LINGXING_MCP");
+    }
+
+    public boolean hasMcpSnapshot() {
+        return jdbc.query("select source_url from wm_ads_lx_domestic_inventory where workspace_id=? order by synced_at desc limit 1",
+                rs -> rs.next() && MCP_SOURCE.equals(rs.getString(1)), WorkspaceContext.requireId());
+    }
+
+    private ImportSummary replaceSnapshot(String sourceUrl, JsonNode response, LocalDateTime capturedAt, String source) {
         if (response == null || response.isNull() || response.isMissingNode()) {
             throw new IllegalArgumentException("领星库存接口响应为空，已保留原库存");
         }
@@ -149,7 +164,7 @@ public class LingxingDomesticInventoryService {
                     "共读入 %d 行：无 SKU %d、无可识别可用库存 %d、负库存 %d、前缀不符 %d%s",
                     rows.size(), noSku, noAvailable, negative, prefixMismatch,
                     foreignSamples.isEmpty() ? "" : "；不符示例 " + String.join(" / ", foreignSamples));
-            dumpFailure(sourceUrl, response, detail, prefix);
+            if ("PROJECT_CONNECTOR".equals(source)) dumpFailure(sourceUrl, response, detail, prefix);
             throw new IllegalArgumentException("领星库存响应未包含当前店铺前缀 "
                     + (StringUtils.hasText(prefix) ? prefix : "对应") + " 的 SKU（" + detail + "），已保留原库存");
         }
@@ -189,7 +204,7 @@ public class LingxingDomesticInventoryService {
                 ) values (?, ?, ?, 'SUCCESS', ?, ?, ?, ?, ?, ?)
                 """, workspaceId, syncedAt, LocalDateTime.now(), rows.size(), bySku.size(), skipped,
                 units, sourceUrl, "领星库存明细已替换当前国内仓库存");
-        return new ImportSummary(rows.size(), bySku.size(), skipped, units, syncedAt, "PROJECT_CONNECTOR");
+        return new ImportSummary(rows.size(), bySku.size(), skipped, units, syncedAt, source);
     }
 
     private void assertSnapshotComplete(long workspaceId, int incomingSkuCount) {
@@ -246,7 +261,11 @@ public class LingxingDomesticInventoryService {
                   join wm_ads_import_file file on file.id=domestic.import_file_id and file.active=true
                 """, LocalDateTime.class);
         boolean automaticActive = LingxingSourcePolicy.preferAutomatic(automaticAt, uploadAt);
-        String activeSource = automaticActive ? "PROJECT_CONNECTOR" : uploadAt == null ? "NONE" : "FILE_UPLOAD";
+        String automaticSource = automaticAt == null ? null : jdbc.query("""
+                select source_url from wm_ads_lx_domestic_inventory where workspace_id=? order by synced_at desc limit 1
+                """, rs -> rs.next() ? rs.getString(1) : null, WorkspaceContext.requireId());
+        String activeSource = automaticActive ? (MCP_SOURCE.equals(automaticSource) ? "LINGXING_MCP" : "PROJECT_CONNECTOR")
+                : uploadAt == null ? "NONE" : "FILE_UPLOAD";
         Integer skuCount = automaticActive
                 ? jdbc.queryForObject("select count(*) from wm_ads_lx_domestic_inventory", Integer.class)
                 : jdbc.queryForObject("""

@@ -27,6 +27,9 @@ public interface WalmartCommentRepository extends JpaRepository<WalmartComment, 
     /** 全部评价（按日期倒序），供口碑模块聚合 —— 全表约千行量级，直接内存聚合。 */
     List<WalmartComment> findByPlatformOrderByCommentDateDesc(String platform);
 
+    /** 指定款号的全部评价（按日期倒序），供单款下钻抽屉按需查询，避免拉取全表。 */
+    List<WalmartComment> findByPlatformAndParentSkuIgnoreCaseOrderByCommentDateDesc(String platform, String parentSku);
+
     /** 全部未归款的评价 —— 款号映射表重导后回填 parentSku 用。 */
     List<WalmartComment> findByPlatformAndParentSkuIsNull(String platform);
 

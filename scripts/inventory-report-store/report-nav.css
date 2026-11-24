@@ -1,0 +1,36 @@
+.inventory-report-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 16px;
+  font: 600 14px/1.35 system-ui, "Microsoft YaHei", sans-serif;
+}
+
+.inventory-report-nav--item, .inventory-report-nav--brand {
+  max-width: 1180px;
+  margin-inline: auto;
+}
+
+.inventory-report-nav--brand {
+  box-sizing: border-box;
+  padding-inline: 20px;
+  margin-block: 16px 0;
+}
+
+.inventory-report-nav a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 44px;
+  min-width: 68px;
+  padding-inline: 12px;
+  border: 1px solid #94bac8;
+  border-radius: 9px;
+  background: #f3f9fb;
+  color: #174e62;
+  text-decoration: none;
+}
+
+.inventory-report-nav a:hover { background: #e0f1f6; color: #123c4d; }
+.inventory-report-nav a:focus-visible { outline: 3px solid #2791b1; outline-offset: 3px; }

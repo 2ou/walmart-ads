@@ -21,17 +21,8 @@ public class WorkspaceSyncScheduler {
 
     private static final Logger log = LoggerFactory.getLogger(WorkspaceSyncScheduler.class);
 
-    /**
-     * 每 6 小时同步一轮的类目。每个类目按自己的 {@code stagger_minute} 独立触发，
-     * 不再「任一命中就全跑」——那会让 4 类请求在同一分钟齐发。
-     *
-     * <p>2026-10-27 起由 HOURLY 改为 SIX_HOURLY：领星官方限流是「每用户 1 分钟 100 次
-     * MCP TOOL」，而广告单次同步就有 288 次调用，叠加其他类目必然超限，触发网关 WAF
-     * 后惩罚长达数小时。降到 6 小时一轮，配合客户端 80 次/分钟的限速，才有足够余量。
-     *
-     * <p>{@code INVENTORY} 与 {@code PRODUCTS} 复用同一份在线商品拉取，同分钟时只跑一次。
-     */
-    private static final String[] SIX_HOURLY_CATEGORIES = {"PRODUCTS", "INVENTORY", "SALES"};
+    /** 商品与 WFS 库存复用在线商品拉取；兼容每小时和旧版六小时计划。 */
+    private static final String[] PERIODIC_CATEGORIES = {"PRODUCTS", "INVENTORY", "SALES"};
 
     /** 同步周期（小时）。0/6/12/18 点各一轮。 */
     private static final int SYNC_INTERVAL_HOURS = 6;
@@ -86,14 +77,19 @@ public class WorkspaceSyncScheduler {
     /** One scheduler fans out into tenant-bound work; no sync runs without an explicit WorkspaceContext. */
     @Scheduled(cron = "0 * * * * *", zone = "Asia/Shanghai")
     public void tick() {
-        LocalDateTime now = LocalDateTime.now();
+        tickAt(LocalDateTime.now());
+    }
+
+    void tickAt(LocalDateTime now) {
         int minute = now.getMinute();
         recycleStaleRunning();
 
         Set<Long> listingsDoneThisMinute = new HashSet<>();
-        if (now.getHour() % SYNC_INTERVAL_HOURS == 0) {
-            for (String category : SIX_HOURLY_CATEGORIES) {
-                List<WorkspacePrincipal> due = configs.activeWorkspaces(category, "SIX_HOURLY", minute);
+        for (String category : PERIODIC_CATEGORIES) {
+            List<String> cadences = now.getHour() % SYNC_INTERVAL_HOURS == 0
+                    ? List.of("HOURLY", "SIX_HOURLY") : List.of("HOURLY");
+            for (String cadence : cadences) {
+                List<WorkspacePrincipal> due = configs.activeWorkspaces(category, cadence, minute);
                 for (WorkspacePrincipal principal : due) {
                     if ("INVENTORY".equals(category) && listingsDoneThisMinute.contains(principal.workspaceId())) {
                         continue;
@@ -182,10 +178,21 @@ public class WorkspaceSyncScheduler {
      * 从商品同步分支里拆出来，避免商品降到 6 小时一轮后涨价判断跟着变迟钝。
      */
     private void runPriceMonitor() {
-        try {
-            prices.monitorOnce();
-        } catch (Exception exception) {
-            log.warn("价格监控扫描失败：{}", exception.getMessage());
+        List<WorkspacePrincipal> workspaces = configs.connectorWorkspaces();
+        if (workspaces == null || workspaces.isEmpty()) {
+            try {
+                prices.monitorOnce();
+            } catch (Exception exception) {
+                log.warn("价格监控扫描失败：{}", exception.getMessage());
+            }
+            return;
+        }
+        for (WorkspacePrincipal principal : workspaces) {
+            try {
+                WorkspaceContext.runAs(principal, prices::monitorOnce);
+            } catch (Exception exception) {
+                log.warn("价格监控扫描失败 workspaceId={}：{}", principal.workspaceId(), exception.getMessage());
+            }
         }
     }
 
@@ -193,14 +200,69 @@ public class WorkspaceSyncScheduler {
         WorkspaceContext.runAs(principal, () -> runCategoryBound(principal, category, action));
     }
 
-    private Outcome runCategoryBound(WorkspacePrincipal principal, String category, SyncAction action) {
+    /** Manual runs use the same per-workspace lease and MCP rate limiter as scheduled runs. */
+    public void startManualSync(String category) {
+        if (!Set.of("PRODUCTS", "INVENTORY", "SALES", "ADS", "REVIEWS").contains(category)) {
+            throw new IllegalArgumentException("不支持手动同步此类数据");
+        }
+        WorkspacePrincipal principal = WorkspaceContext.requirePrincipal();
+        if (!principal.ready()) throw new IllegalArgumentException("请先完成店铺绑定");
         WorkspaceLingXingConfigService.Config config = configs.current();
+        if (!config.configured()) throw new IllegalArgumentException("请先配置领星 MCP 和店铺");
+        LingXingMcpCoordinator.RuntimeStatus runtime = mcpCoordinator.status(config.baseUrl(), config.apiKey(), category);
+        if (runtime.coolingDown()) throw new IllegalArgumentException("领星 MCP 正在限流冷却，请稍后重试");
+        WorkspaceLingXingConfigService.SyncLease lease = configs.tryStartSync(principal.workspaceId(), category, "MANUAL");
+        if (lease == null) throw new IllegalArgumentException("该项目正在同步，请稍后查看同步记录");
+        try {
+            Thread.startVirtualThread(() -> WorkspaceContext.runAs(principal, () -> {
+                try {
+                    runCategoryBound(principal, category, () -> manualAction(category), lease);
+                } catch (Exception exception) {
+                    log.error("Unable to execute manual sync workspaceId={}, category={}", principal.workspaceId(), category, exception);
+                    configs.finishSync(lease, "FAILED", exception.getMessage(), 0, 0, "FAILED", null);
+                }
+            }));
+        } catch (RuntimeException exception) {
+            configs.finishSync(lease, "FAILED", "无法启动手动同步", 0, 0, "FAILED", null);
+            throw exception;
+        }
+    }
+
+    private SyncResult manualAction(String category) {
+        return switch (category) {
+            case "PRODUCTS", "INVENTORY" -> {
+                var result = listings.syncNow("MANUAL");
+                yield new SyncResult(result.status(), result.fetchedCount(), result.updatedCount(), result.errorMessage());
+            }
+            case "SALES" -> {
+                var result = orders.syncNow("MANUAL");
+                yield new SyncResult(result.status(), result.fetchedSkuCount(), result.insertedCount(), result.errorMessage());
+            }
+            case "ADS" -> {
+                var result = ads.syncNow("MANUAL");
+                yield new SyncResult(result.status(), result.completedToolCalls(), result.reportRows() + result.sliceRows(), null);
+            }
+            case "REVIEWS" -> {
+                var result = comments.syncNow("MANUAL");
+                yield new SyncResult(result.status(), result.fetchedCount(), result.insertedCount() + result.updatedCount(), result.errorMessage());
+            }
+            default -> throw new IllegalArgumentException("不支持手动同步此类数据");
+        };
+    }
+
+    private Outcome runCategoryBound(WorkspacePrincipal principal, String category, SyncAction action) {
         WorkspaceLingXingConfigService.SyncLease lease =
                 configs.tryStartSync(principal.workspaceId(), category, "CRON");
         if (lease == null) {
             log.info("Workspace sync already leased workspaceId={}, category={}", principal.workspaceId(), category);
             return Outcome.DEFERRED;
         }
+        return runCategoryBound(principal, category, action, lease);
+    }
+
+    private Outcome runCategoryBound(WorkspacePrincipal principal, String category, SyncAction action,
+                                     WorkspaceLingXingConfigService.SyncLease lease) {
+        WorkspaceLingXingConfigService.Config config = configs.current();
         LingXingMcpCoordinator.RuntimeStatus runtime =
                 mcpCoordinator.status(config.baseUrl(), config.apiKey(), category);
         if (runtime.coolingDown()) {

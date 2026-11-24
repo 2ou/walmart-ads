@@ -1,6 +1,7 @@
 package com.ai.walmartads.analytics.application;
 
 import com.ai.walmartads.common.UsBusinessDate;
+import com.ai.walmartads.workspace.WorkspaceContext;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -43,6 +44,33 @@ public class DashboardDataService {
         return load(false);
     }
 
+    /** 轻量本地版本：仅查询同步状态与导入版本，不触发领星请求。 */
+    public Map<String, Object> version() {
+        long workspaceId = WorkspaceContext.requireId();
+        MapSqlParameterSource owner = new MapSqlParameterSource("workspaceId", workspaceId);
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("workspaceId", workspaceId);
+        result.put("visibleDate", UsBusinessDate.visibleSalesDate());
+        for (Map<String, Object> row : jdbc.queryForList("""
+                select sync_category, last_status, last_started_at, last_completed_at, last_valid_data_at
+                  from wm_ads_workspace_sync_setting
+                 where workspace_id=:workspaceId and sync_category in ('SALES','ADS')
+                 order by sync_category
+                """, owner)) {
+            Map<String, Object> source = new LinkedHashMap<>();
+            source.put("status", row.get("last_status"));
+            source.put("startedAt", row.get("last_started_at"));
+            source.put("completedAt", row.get("last_completed_at"));
+            source.put("validAt", row.get("last_valid_data_at"));
+            result.put(String.valueOf(row.get("sync_category")), source);
+        }
+        result.put("activeImportId", jdbc.queryForObject("""
+                select coalesce(max(id), 0) from wm_ads_import_file
+                 where workspace_id=:workspaceId and active=true and status='IMPORTED'
+                """, owner, Long.class));
+        return result;
+    }
+
     private DashboardPayload load(boolean includeCampaignDaily) {
         List<Map<String, Object>> orderDaily = jdbc.queryForList("""
                 select orders.order_date as report_date,
@@ -82,6 +110,7 @@ public class DashboardDataService {
             MutableDaily item = daily.computeIfAbsent(date(row, "report_date"), MutableDaily::new);
             item.orders = decimal(row, "orders");
             item.revenue = decimal(row, "revenue");
+            item.hasSales = true;
         });
         adDaily.forEach(row -> {
             MutableDaily item = daily.computeIfAbsent(date(row, "report_date"), MutableDaily::new);
@@ -90,6 +119,7 @@ public class DashboardDataService {
             item.spend = decimal(row, "spend");
             item.adOrders = decimal(row, "ad_orders");
             item.adSales = decimal(row, "ad_sales");
+            item.hasAds = true;
         });
 
         List<DailyRow> dailyRows = daily.values().stream().map(MutableDaily::toRow).toList();
@@ -108,7 +138,8 @@ public class DashboardDataService {
                 )
                 """);
 
-        LocalDate orderLatestDate = latestOrderDate();
+        LocalDate orderLatestDate = orderDaily.stream().map(row -> date(row, "report_date"))
+                .filter(Objects::nonNull).max(LocalDate::compareTo).orElse(null);
         Meta meta = new Meta(
                 latestDate,
                 firstDate,
@@ -118,7 +149,9 @@ public class DashboardDataService {
                 orderLatestDate,
                 adLatestDate,
                 adSettledDate,
-                comparableLatestDate(orderLatestDate, adLatestDate, UsBusinessDate.visibleSalesDate())
+                comparableLatestDate(orderLatestDate, adLatestDate, UsBusinessDate.visibleSalesDate()),
+                !orderDaily.isEmpty(), !adDaily.isEmpty(),
+                WorkspaceContext.current().map(principal -> principal.workspaceId()).orElse(null)
         );
         Defaults defaults = new Defaults(7, 5.0, 1.5, 20, 10.0, 10);
         return new DashboardPayload(meta, defaults, dailyRows, skuRows, campaignRows);
@@ -161,7 +194,8 @@ public class DashboardDataService {
         Meta meta = new Meta(latestDate, firstDate, 0,
                 new SourceRows(0, 0, 0, 0), "Bootstrap metadata only; no customer PII is exposed.",
                 orderLatestDate, latestDate, latestDate,
-                comparableLatestDate(orderLatestDate, latestDate, UsBusinessDate.visibleSalesDate()));
+                comparableLatestDate(orderLatestDate, latestDate, UsBusinessDate.visibleSalesDate()),
+                null, null, WorkspaceContext.current().map(principal -> principal.workspaceId()).orElse(null));
         Defaults defaults = new Defaults(7, 5.0, 1.5, 20, 10.0, 10);
         return new DashboardPayload(meta, defaults, List.of(), List.of(), List.of());
     }
@@ -256,6 +290,7 @@ public class DashboardDataService {
             MutableSku item = result.computeIfAbsent(key, MutableSku::new);
             item.orders = decimal(row, "orders");
             item.revenue = decimal(row, "revenue");
+            item.hasSales = true;
         });
         ads.forEach(row -> {
             String parentSku = text(row, "parent_sku");
@@ -269,6 +304,7 @@ public class DashboardDataService {
             item.spend = decimal(row, "spend");
             item.adOrders = decimal(row, "ad_orders");
             item.adSales = decimal(row, "ad_sales");
+            item.hasAds = true;
         });
         return result.values().stream()
                 .map(MutableSku::toRow)
@@ -403,7 +439,10 @@ public class DashboardDataService {
              */
             LocalDate adSettledDate,
             /** 订单、广告和美西当前日共同具备的最后可比业务日。 */
-            LocalDate analysisLatestDate
+            LocalDate analysisLatestDate,
+            Boolean hasSalesData,
+            Boolean hasAdData,
+            Long workspaceId
     ) {
     }
 
@@ -438,7 +477,9 @@ public class DashboardDataService {
             double spend,
             double adOrders,
             double naturalOrders,
-            double adSales
+            double adSales,
+            boolean hasSales,
+            boolean hasAds
     ) {
     }
 
@@ -452,7 +493,9 @@ public class DashboardDataService {
             double spend,
             double adOrders,
             double naturalOrders,
-            double adSales
+            double adSales,
+            boolean hasSales,
+            boolean hasAds
     ) {
     }
 
@@ -498,6 +541,8 @@ public class DashboardDataService {
         private BigDecimal spend = ZERO;
         private BigDecimal adOrders = ZERO;
         private BigDecimal adSales = ZERO;
+        private boolean hasSales;
+        private boolean hasAds;
 
         private MutableDaily(LocalDate date) {
             this.date = date;
@@ -513,7 +558,9 @@ public class DashboardDataService {
                     spend.doubleValue(),
                     adOrders.doubleValue(),
                     orders.subtract(adOrders).max(ZERO).doubleValue(),
-                    adSales.doubleValue()
+                    adSales.doubleValue(),
+                    hasSales,
+                    hasAds
             );
         }
     }
@@ -530,6 +577,8 @@ public class DashboardDataService {
         private BigDecimal spend = ZERO;
         private BigDecimal adOrders = ZERO;
         private BigDecimal adSales = ZERO;
+        private boolean hasSales;
+        private boolean hasAds;
 
         private MutableSku(SkuDate key) {
             this.key = key;
@@ -546,7 +595,9 @@ public class DashboardDataService {
                     spend.doubleValue(),
                     adOrders.doubleValue(),
                     orders.subtract(adOrders).max(ZERO).doubleValue(),
-                    adSales.doubleValue()
+                    adSales.doubleValue(),
+                    hasSales,
+                    hasAds
             );
         }
     }

@@ -13,6 +13,15 @@ public record CurrentProductionOrder(
         BigDecimal productionQty,
         BigDecimal wipQty,
         String factoryReturnDate,
-        String source
+        String source,
+        BigDecimal plannedShipQty,
+        BigDecimal unplannedShipQty,
+        String reconciliationStatus
 ) {
+    public CurrentProductionOrder(String orderNo, String styleNo, String sku, LocalDate orderDate,
+                                  BigDecimal cuttingQty, BigDecimal productionQty, BigDecimal wipQty,
+                                  String factoryReturnDate, String source) {
+        this(orderNo, styleNo, sku, orderDate, cuttingQty, productionQty, wipQty,
+                factoryReturnDate, source, null, null, "FILE_UPLOAD");
+    }
 }

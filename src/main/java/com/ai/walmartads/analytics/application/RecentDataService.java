@@ -33,11 +33,30 @@ public class RecentDataService {
     }
 
     public RecentDataPayload load(int days) {
-        int window = Math.max(1, Math.min(days, 365));
-        LocalDate orderLatest = latestOrderDate();
-        LocalDate adLatest = latestAdReportDate();
-        LocalDate end = comparableLatestDate(orderLatest, adLatest, UsBusinessDate.visibleSalesDate());
-        LocalDate start = end.minusDays(window - 1L);
+        return load(days, null, null);
+    }
+
+    public RecentDataPayload load(int days, LocalDate requestedStart, LocalDate requestedEnd) {
+        if ((requestedStart == null) != (requestedEnd == null)) {
+            throw new IllegalArgumentException("自定义时间范围必须同时提供开始日期和结束日期");
+        }
+        if (requestedStart != null && requestedStart.isAfter(requestedEnd)) {
+            throw new IllegalArgumentException("开始日期不能晚于结束日期");
+        }
+        final LocalDate start;
+        final LocalDate end;
+        final int window;
+        if (requestedStart != null) {
+            start = requestedStart;
+            end = requestedEnd;
+            window = Math.toIntExact(java.time.temporal.ChronoUnit.DAYS.between(start, end) + 1);
+        } else {
+            window = Math.max(1, Math.min(days, 365));
+            LocalDate orderLatest = latestOrderDate();
+            LocalDate adLatest = latestAdReportDate();
+            end = comparableLatestDate(orderLatest, adLatest, UsBusinessDate.visibleSalesDate());
+            start = end.minusDays(window - 1L);
+        }
 
         Map<String, Object> params = new java.util.HashMap<>();
         params.put("start", start);

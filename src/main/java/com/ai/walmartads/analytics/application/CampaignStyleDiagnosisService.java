@@ -49,6 +49,7 @@ public class CampaignStyleDiagnosisService {
     private final CampaignDecisionConfigRepository configRepository;
     private final Map<CacheKey, CacheEntry> cache = new ConcurrentHashMap<>();
     private final Map<HistoryCacheKey, HistoryCacheEntry> historyCache = new ConcurrentHashMap<>();
+    private final Map<Long, HistoricalConfigCacheEntry> historicalConfigCache = new ConcurrentHashMap<>();
 
     public CampaignStyleDiagnosisService(
             NamedParameterJdbcTemplate jdbc,
@@ -103,11 +104,13 @@ public class CampaignStyleDiagnosisService {
 
         Set<String> validParents = loadValidParentSkus();
         boolean filterByProductLibrary = !validParents.isEmpty();
+        Map<String, Integer> operationRecordCounts = loadOperationRecordCounts();
 
         List<StyleDiagnosis> rows = styles.entrySet().stream()
                 .filter(entry -> !filterByProductLibrary
                         || validParents.contains(entry.getKey().toUpperCase(Locale.ROOT)))
-                .map(entry -> entry.getValue().toRow())
+                .map(entry -> entry.getValue().toRow(
+                        operationRecordCounts.getOrDefault(entry.getKey().toUpperCase(Locale.ROOT), 0)))
                 .sorted(Comparator.comparing(StyleDiagnosis::parentSku, String.CASE_INSENSITIVE_ORDER))
                 .toList();
         DiagnosisResponse response = new DiagnosisResponse(
@@ -251,6 +254,12 @@ public class CampaignStyleDiagnosisService {
     }
 
     private Map<HistoryCampaignKey, HistoricalCampaignConfig> loadHistoricalCampaignConfigurations() {
+        long workspaceId = WorkspaceContext.requireId();
+        long now = System.nanoTime();
+        HistoricalConfigCacheEntry cached = historicalConfigCache.get(workspaceId);
+        if (cached != null && cached.expiresAtNanos() > now) {
+            return cached.configs();
+        }
         Map<HistoryCampaignKey, HistoricalCampaignConfig> result = new LinkedHashMap<>();
         jdbc.queryForList("""
                 select campaign.advertiser_id,
@@ -286,7 +295,9 @@ public class CampaignStyleDiagnosisService {
                     text(row, "bidding_strategy")
             ));
         });
-        return result;
+        Map<HistoryCampaignKey, HistoricalCampaignConfig> copy = Map.copyOf(result);
+        historicalConfigCache.put(workspaceId, new HistoricalConfigCacheEntry(copy, now + HISTORY_CACHE_TTL_NANOS));
+        return copy;
     }
 
     private List<HistoryItemRow> loadHistoricalItemRows(String parentSku) {
@@ -596,6 +607,25 @@ public class CampaignStyleDiagnosisService {
                         )
                 ));
         return result;
+    }
+
+    private Map<String, Integer> loadOperationRecordCounts() {
+        Map<String, Integer> counts = new HashMap<>();
+        try {
+            jdbc.queryForList("""
+                    select upper(trim(parent_sku)) as parent_sku, count(*) as total
+                      from wm_ads_operation_record
+                     where parent_sku is not null and trim(parent_sku) <> ''
+                     group by upper(trim(parent_sku))
+                    """, new MapSqlParameterSource()).forEach(row -> {
+                String parent = text(row, "parent_sku");
+                if (parent != null) {
+                    counts.put(parent, (int) Math.round(number(row, "total")));
+                }
+            });
+        } catch (Exception ignored) {
+        }
+        return counts;
     }
 
     /**
@@ -927,12 +957,30 @@ public class CampaignStyleDiagnosisService {
             double adSales,
             double adOrders,
             double clicks,
+            int operationRecordCount,
             List<CampaignDiagnosis> campaigns
     ) {
+        public StyleDiagnosis(
+                String parentSku,
+                int campaignCount,
+                int historicalCampaignCount,
+                int configuredItemCount,
+                int enabledItemCount,
+                int actualServingItemCount,
+                double spend,
+                double adSales,
+                double adOrders,
+                double clicks,
+                List<CampaignDiagnosis> campaigns
+        ) {
+            this(parentSku, campaignCount, historicalCampaignCount, configuredItemCount,
+                    enabledItemCount, actualServingItemCount, spend, adSales, adOrders, clicks, 0, campaigns);
+        }
+
         StyleDiagnosis withoutItemDetails() {
             return new StyleDiagnosis(parentSku, campaignCount, historicalCampaignCount,
                     configuredItemCount, enabledItemCount, actualServingItemCount,
-                    spend, adSales, adOrders, clicks,
+                    spend, adSales, adOrders, clicks, operationRecordCount,
                     campaigns.stream().map(CampaignDiagnosis::withoutItems).toList());
         }
     }
@@ -1196,6 +1244,12 @@ public class CampaignStyleDiagnosisService {
     private record HistoryCacheEntry(HistoryResponse response, long expiresAtNanos) {
     }
 
+    private record HistoricalConfigCacheEntry(
+            Map<HistoryCampaignKey, HistoricalCampaignConfig> configs,
+            long expiresAtNanos
+    ) {
+    }
+
     private record HistoricalCampaignConfig(
             long advertiserId,
             String campaignName,
@@ -1236,7 +1290,7 @@ public class CampaignStyleDiagnosisService {
             this.parentSku = parentSku;
         }
 
-        private StyleDiagnosis toRow() {
+        private StyleDiagnosis toRow(int operationRecordCount) {
             List<CampaignDiagnosis> rows = campaigns.values().stream()
                     .map(MutableCampaign::toRow)
                     .sorted(Comparator
@@ -1258,6 +1312,7 @@ public class CampaignStyleDiagnosisService {
                     currentRows.stream().mapToDouble(CampaignDiagnosis::adSales).sum(),
                     currentRows.stream().mapToDouble(CampaignDiagnosis::adOrders).sum(),
                     currentRows.stream().mapToDouble(CampaignDiagnosis::clicks).sum(),
+                    operationRecordCount,
                     rows
             );
         }

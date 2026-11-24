@@ -73,6 +73,21 @@ class LingxingDomesticInventoryServiceTest {
     }
 
     @Test
+    void mcpSnapshotUsesItsOwnSourceAndKeepsOtherWorkspaceData() throws Exception {
+        jdbc.update("""
+                insert into wm_ads_lx_domestic_inventory(workspace_id,sku,available_units,source_url,raw_payload,
+                    synced_at,created_at,updated_at) values (8,'OTHER-SKU',99,'other','{}',now(),now(),now())
+                """);
+        var response = objectMapper.readTree("""
+                {"data":{"total":1,"list":[{"sku":"PNK-A","available":2}]}}
+                """);
+        var result = service.replaceFromMcp(response, LocalDateTime.now());
+        assertThat(result.availableUnits()).isEqualByComparingTo("2");
+        assertThat(service.hasMcpSnapshot()).isTrue();
+        assertThat(jdbc.queryForObject("select count(*) from wm_ads_lx_domestic_inventory where workspace_id=8", Integer.class)).isEqualTo(1);
+    }
+
+    @Test
     void replacesCurrentSnapshotAndAggregatesDuplicateSkuRows() throws Exception {
         var response = objectMapper.readTree("""
                 {"code":1,"data":{"list":[

@@ -22,7 +22,7 @@ import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-/** Builds an exact-SKU, full-catalog product import plan shared by preview and commit. */
+/** Builds an exact-SKU import plan scoped to the styles present in the uploaded workbook. */
 @Component
 public class ProductImportPlanner {
 
@@ -106,6 +106,12 @@ public class ProductImportPlanner {
         }
 
         Set<String> incomingSkus = grouped.keySet();
+        Set<String> incomingParents = parsed.rows().stream().map(ProductRecord::getParentSku)
+                .filter(parent -> parent != null && !parent.isBlank())
+                .collect(Collectors.toSet());
+        if (parsed.rows().stream().anyMatch(row -> row.getParentSku() == null || row.getParentSku().isBlank())) {
+            throw new IllegalArgumentException("产品表包含无法识别款号的 SKU");
+        }
         List<PlannedChange> changes = new ArrayList<>();
         List<ProductRecord> resolved = new ArrayList<>();
         for (ProductRecord candidate : unique) {
@@ -127,6 +133,7 @@ public class ProductImportPlanner {
         }
 
         List<ProductRecord> retired = current.stream()
+                .filter(row -> row.getParentSku() != null && incomingParents.contains(row.getParentSku()))
                 .filter(row -> !incomingSkus.contains(row.getSku()))
                 .sorted(Comparator.comparing(ProductRecord::getSku))
                 .toList();
@@ -144,7 +151,10 @@ public class ProductImportPlanner {
 
         changes.sort(Comparator.comparing((PlannedChange item) -> item.type().ordinal())
                 .thenComparing(PlannedChange::sku));
-        return new Plan(parsed.sourceRowCount(), unique.size(), List.copyOf(resolved), List.copyOf(changes),
+        List<Long> replacedIds = current.stream()
+                .filter(row -> incomingParents.contains(row.getParentSku()) || incomingSkus.contains(row.getSku()))
+                .map(ProductRecord::getId).filter(Objects::nonNull).toList();
+        return new Plan(parsed.sourceRowCount(), unique.size(), List.copyOf(resolved), replacedIds, List.copyOf(changes),
                 List.copyOf(conflicts), catalogFingerprint(current));
     }
 
@@ -272,6 +282,7 @@ public class ProductImportPlanner {
             int sourceRows,
             int uniqueSkuCount,
             List<ProductRecord> resolvedRecords,
+            List<Long> replacedIds,
             List<PlannedChange> changes,
             List<Conflict> conflicts,
             String baselineFingerprint

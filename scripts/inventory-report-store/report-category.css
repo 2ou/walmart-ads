@@ -1,0 +1,66 @@
+.inventory-category-link, .inventory-category-toolbar a, .inventory-category-toolbar button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #194fa3;
+  font: inherit;
+  font-weight: 650;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.inventory-category-link { min-height: 24px; padding: 2px 5px; margin-inline-start: -5px; border-radius: 5px; }
+.inventory-category-link::after { content: "↓"; color: inherit; }
+.inventory-category-link:hover, .inventory-category-link[aria-current="true"] { background: #e6effd; color: #173e79; }
+.inventory-category-toolbar a:focus-visible, .inventory-category-toolbar button:focus-visible, .inventory-size-filters button:focus-visible,
+.inventory-category-link:focus-visible { outline: 2px solid #285eb7; outline-offset: 2px; }
+
+.inventory-category-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  margin: 4px 0 10px;
+  color: #344860;
+  font-size: 13px;
+}
+.inventory-category-status { font-weight: 700; }
+.inventory-category-toolbar button {
+  padding: 3px 8px;
+  border: 1px solid #a9c2e5;
+  border-radius: 5px;
+  background: #f2f6fe;
+  cursor: pointer;
+  text-decoration: none;
+}
+.inventory-category-toolbar button:hover { background: #e6effd; }
+.inventory-size-filters {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 10px 0;
+  color: #344860;
+  font-size: 13px;
+}
+.inventory-size-filters button {
+  min-height: 36px;
+  padding: 5px 12px;
+  border: 1px solid #a9c2e5;
+  border-radius: 6px;
+  background: #fff;
+  color: #173e79;
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+}
+.inventory-size-filters button:hover { background: #e6effd; }
+.inventory-size-filters button[aria-pressed="true"] { background: #194fa3; border-color: #194fa3; color: #fff; }
+.inventory-size-empty { padding: 12px 0; color: #344860; }
+.inventory-category-toolbar [hidden], #inventory-style-table[hidden], #inventory-style-table tr[hidden] { display: none !important; }
+#inventory-category-summary, #inventory-style-list { scroll-margin-top: 12px; }
+
+@media (pointer: coarse) {
+  .inventory-category-link, .inventory-category-toolbar a, .inventory-category-toolbar button,
+  .inventory-size-filters button { min-height: 44px; }
+}

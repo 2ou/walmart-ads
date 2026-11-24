@@ -1,0 +1,12 @@
+{
+  "manifest_version": 3,
+  "name": "Walmart 商品变体查看器",
+  "version": "1.4.0",
+  "description": "按需查看当前 Walmart 商品页已加载的变体摘要和单笔限购字段。",
+  "permissions": ["activeTab", "scripting", "storage", "alarms"],
+  "background": { "service_worker": "scanner.mjs", "type": "module" },
+  "action": {
+    "default_title": "查看当前 Item 可下单数量",
+    "default_popup": "popup.html"
+  }
+}

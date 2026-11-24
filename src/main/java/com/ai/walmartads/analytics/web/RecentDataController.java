@@ -9,6 +9,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.LocalDate;
+
 @RestController
 @RequestMapping("/api/recent")
 public class RecentDataController {
@@ -29,23 +31,29 @@ public class RecentDataController {
 
     @GetMapping("/daily")
     public ApiResponse<RecentDataService.RecentDataPayload> daily(
-            @RequestParam(defaultValue = "30") int days
+            @RequestParam(defaultValue = "30") int days,
+            @RequestParam(required = false) LocalDate startDate,
+            @RequestParam(required = false) LocalDate endDate
     ) {
-        return ApiResponse.ok(recentDataService.load(Math.max(1, Math.min(days, 365))));
+        return ApiResponse.ok(recentDataService.load(Math.max(1, Math.min(days, 365)), startDate, endDate));
     }
 
     @GetMapping("/styles")
     public ApiResponse<StyleSalesService.StyleSalesPayload> styles(
-            @RequestParam(defaultValue = "30") int days
+            @RequestParam(defaultValue = "30") int days,
+            @RequestParam(required = false) LocalDate startDate,
+            @RequestParam(required = false) LocalDate endDate
     ) {
-        return ApiResponse.ok(styleSalesService.load(Math.max(1, Math.min(days, 365))));
+        return ApiResponse.ok(styleSalesService.load(Math.max(1, Math.min(days, 365)), startDate, endDate));
     }
 
     @GetMapping("/ad-products")
     public ApiResponse<AdProductService.AdProductPayload> adProducts(
             @RequestParam(defaultValue = "30") int days,
-            @RequestParam(defaultValue = "false") boolean latest
+            @RequestParam(defaultValue = "false") boolean latest,
+            @RequestParam(required = false) LocalDate startDate,
+            @RequestParam(required = false) LocalDate endDate
     ) {
-        return ApiResponse.ok(adProductService.load(Math.max(1, Math.min(days, 365)), latest));
+        return ApiResponse.ok(adProductService.load(Math.max(1, Math.min(days, 365)), latest, startDate, endDate));
     }
 }

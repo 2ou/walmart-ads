@@ -126,8 +126,8 @@ public class ImportService {
             String sha256,
             ImportFileType replacementType
     ) {
-        // Product workbooks are confirmed full-catalog snapshots. Reusing an old hash would skip a valid
-        // restore/retire operation when the current catalog has changed since that file was last imported.
+        // Product workbooks replace the included styles. Reusing an old hash could skip a valid
+        // restore/retire operation when those styles have changed since the file was last imported.
         if (candidate.fileType() == ImportFileType.PRODUCT) {
             return false;
         }

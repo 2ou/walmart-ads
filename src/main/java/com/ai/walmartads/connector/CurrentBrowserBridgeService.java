@@ -89,9 +89,9 @@ public class CurrentBrowserBridgeService {
                    and bridge_key.created_at<date_sub(now(6),interval 7 day)
                 """, principal.workspaceId());
         List<String> sources = principal.supplyChainEnabled()
-                ? List.of(ConnectorSource.LINGXING_INVENTORY.name(), ConnectorSource.LINGXING_WFS.name(),
+                ? List.of(ConnectorSource.LINGXING_WFS.name(),
                 ConnectorSource.SUPPLY_CHAIN.name())
-                : List.of(ConnectorSource.LINGXING_INVENTORY.name(), ConnectorSource.LINGXING_WFS.name());
+                : List.of(ConnectorSource.LINGXING_WFS.name());
         return new Bootstrap(key, principal.workspaceId(), principal.storeName(),
                 principal.storeAbbreviation(), sources);
     }
@@ -206,24 +206,7 @@ public class CurrentBrowserBridgeService {
     public SyncResult importInventory(WorkspacePrincipal principal, String sourceUrl,
                                       JsonNode response, LocalDateTime capturedAt, String triggeredBy,
                                       String requestBody) {
-        dumpRequest("LX-INVENTORY", requestBody, sourceUrl);
-        assertInventoryScope(requestBody, principal.storeAbbreviation());
-        long runId = connectorStore.startRun(principal.workspaceId(), ConnectorSource.LINGXING_INVENTORY, triggeredBy);
-        try {
-            var summary = WorkspaceContext.callAs(principal,
-                    () -> inventory.replaceFromConnector(sourceUrl, response, capturedAt));
-            String message = "同步 " + summary.importedSkus() + " 个 SKU，可用库存 " + summary.availableUnits();
-            connectorStore.finishRun(runId, principal.workspaceId(), ConnectorSource.LINGXING_INVENTORY,
-                    "SUCCESS", summary.importedSkus(), message);
-            sessions.save(principal.workspaceId(), ConnectorSystem.LINGXING, null, null,
-                    true, "已识别当前 Chrome 的领星登录会话");
-            touch(principal.workspaceId(), "领星国内仓库存已从当前 Chrome 同步");
-            return new SyncResult(summary.importedSkus(), message);
-        } catch (RuntimeException exception) {
-            connectorStore.finishRun(runId, principal.workspaceId(), ConnectorSource.LINGXING_INVENTORY,
-                    "FAILED", 0, rootMessage(exception));
-            throw exception;
-        }
+        return new SyncResult(0, "国内仓库存已改由领星 MCP 同步，已忽略旧插件库存数据");
     }
 
     public SyncResult importWfs(WorkspacePrincipal principal, String sourceUrl,
@@ -247,11 +230,19 @@ public class CurrentBrowserBridgeService {
         }
     }
 
-    public void recordFailure(WorkspacePrincipal principal, ConnectorSource source, String message, boolean loginRequired) {
+    public void recordFailure(WorkspacePrincipal principal, ConnectorSource source, String message, boolean loginRequired,
+                              boolean pageRequired) {
+        if (source == ConnectorSource.LINGXING_INVENTORY) return;
         long runId = connectorStore.startRun(principal.workspaceId(), source, "CURRENT_CHROME");
-        String status = loginRequired ? "LOGIN_REQUIRED" : "FAILED";
+        // 2.0.4 reported a missing request template as a login failure; recognize that
+        // message until the user has reloaded the extension.
+        boolean legacyMissingPage = source.system() == ConnectorSystem.LINGXING
+                && message.startsWith("等待领星登录或刷新对应业务页面");
+        boolean needsPage = pageRequired || legacyMissingPage;
+        String status = needsPage ? "WAITING_PAGE" : loginRequired ? "LOGIN_REQUIRED" : "FAILED";
+        if (legacyMissingPage) message = "尚未读取对应领星业务页面，请点击打开页面并刷新";
         connectorStore.finishRun(runId, principal.workspaceId(), source, status, 0, message);
-        if (loginRequired) {
+        if (loginRequired && !needsPage) {
             sessions.requireLogin(principal.workspaceId(), source.system(), message,
                     source.system() == ConnectorSystem.SUPPLY_CHAIN);
         }

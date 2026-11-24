@@ -20,10 +20,13 @@ public class WorkspaceController {
 
     private final WorkspaceAccountService accounts;
     private final WorkspaceOwnershipService ownership;
+    private final WorkspaceSyncScheduler syncScheduler;
 
-    public WorkspaceController(WorkspaceAccountService accounts, WorkspaceOwnershipService ownership) {
+    public WorkspaceController(WorkspaceAccountService accounts, WorkspaceOwnershipService ownership,
+                               WorkspaceSyncScheduler syncScheduler) {
         this.accounts = accounts;
         this.ownership = ownership;
+        this.syncScheduler = syncScheduler;
     }
 
     @GetMapping("/me")
@@ -121,6 +124,12 @@ public class WorkspaceController {
     @GetMapping("/sync-runs")
     public ApiResponse<List<WorkspaceAccountService.SyncRunView>> syncRuns() {
         return ApiResponse.ok(accounts.syncRuns());
+    }
+
+    @PostMapping("/sync-runs/{category}")
+    public ApiResponse<Void> startSync(@PathVariable String category) {
+        syncScheduler.startManualSync(category);
+        return ApiResponse.ok("同步任务已启动，请查看同步状态", null);
     }
 
     @PatchMapping("/sync-settings/{category}")

@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Walmart 单品数量</title>
+  <link rel="stylesheet" href="popup.css">
+  <script type="module" src="popup.mjs"></script>
+</head>
+<body>
+  <main class="popup">
+    <header class="masthead">
+      <p class="eyebrow">WALMART · 商品页</p>
+      <h1>单品下单上限</h1>
+    </header>
+
+    <p id="status" class="notice" role="status" aria-live="polite">正在读取当前商品页…</p>
+
+    <section class="evidence variant-section" aria-label="自动查询任务">
+      <div class="variant-content">
+        <h2>逐个打开变体</h2>
+        <p class="quantity-note">手动启动后，在当前标签页顺序打开变体；设定随机等待 1～20 秒，浏览器可能延后。遇可识别验证或页面异常时停止。批量自动采集可能违反 Walmart 条款；随机间隔不保证合规或避免限制。</p>
+        <p id="scan-status" class="quantity-note" role="status" aria-live="polite">未开始。</p>
+        <button id="scan-start" type="button" disabled>开始逐个查询</button>
+        <button id="scan-pause" type="button" disabled>暂停</button>
+        <button id="scan-resume" type="button" disabled>继续</button>
+        <button id="scan-stop" type="button" disabled>停止</button>
+        <button id="scan-copy" type="button" disabled>复制已完成结果</button>
+      </div>
+    </section>
+
+    <section id="result" aria-labelledby="quantity-label" hidden>
+      <div class="quantity-panel">
+        <div class="quantity-header">
+          <h2 id="quantity-label">单笔可下单件数</h2>
+          <span id="availability" class="availability">—</span>
+        </div>
+        <p id="quantity" class="quantity">—</p>
+        <p id="quantity-note" class="quantity-note"></p>
+        <p class="quantity-note">前台限购不等于实际库存；结果受卖家与配送条件影响。</p>
+      </div>
+
+      <dl class="identity" aria-label="当前商品变体">
+        <div><dt>Item ID</dt><dd id="item-id" class="mono">—</dd></div>
+        <div><dt>Product ID</dt><dd id="product-id" class="mono">—</dd></div>
+        <div><dt>颜色</dt><dd id="color">—</dd></div>
+        <div><dt>尺码</dt><dd id="size">—</dd></div>
+        <div><dt>卖家</dt><dd id="seller">—</dd></div>
+        <div><dt>当前展示价</dt><dd id="price">—</dd></div>
+        <div><dt>读取时间</dt><dd id="observed-at">—</dd></div>
+      </dl>
+
+      <details class="evidence variant-section">
+        <summary>查看本页返回的全部变体</summary>
+        <div class="variant-content">
+          <p id="variant-count" class="quantity-note" role="status" aria-live="polite"></p>
+          <p class="quantity-note">其他变体如未返回数量，将显示「未取得」。</p>
+          <label for="historical-file">导入历史 CSV 对照（可选，仅本地处理）</label>
+          <input id="historical-file" type="file" accept=".csv,text/csv">
+          <p id="historical-status" class="quantity-note" role="status" aria-live="polite">历史数据不代表当前数量；不会自动上传。</p>
+          <label for="variant-search">搜索颜色、尺码或 ID</label>
+          <input id="variant-search" type="search" placeholder="例如 Black 或 2XL">
+          <label for="variant-status">筛选状态</label>
+          <select id="variant-status">
+            <option value="ALL">全部状态</option>
+            <option value="IN_STOCK">有货</option>
+            <option value="OUT_OF_STOCK">缺货</option>
+          </select>
+          <p id="variant-filter-count" class="quantity-note" role="status" aria-live="polite"></p>
+          <label for="variant-list">变体明细（制表符分列）</label>
+          <textarea id="variant-list" readonly rows="8" spellcheck="false"></textarea>
+          <button id="copy-variants" type="button">复制筛选后的变体</button>
+          <p id="variant-copy-status" class="copy-status" role="status" aria-live="polite"></p>
+        </div>
+      </details>
+
+      <details class="evidence">
+        <summary>查看页面原始字段</summary>
+        <dl class="fields" aria-label="页面返回的数量字段">
+          <div><dt>商品 <code>orderLimit</code></dt><dd id="top-order-limit" class="mono">—</dd></div>
+          <div><dt>发货 <code>orderLimit</code></dt><dd id="order-limit" class="mono">—</dd></div>
+          <div><dt><code>maxOrderQuantity</code></dt><dd id="max-order-quantity" class="mono">—</dd></div>
+          <div><dt><code>availableQuantity</code></dt><dd id="available-quantity" class="mono">—</dd></div>
+          <div><dt>商品状态</dt><dd id="page-status" class="mono">—</dd></div>
+          <div><dt>履约方式</dt><dd id="fulfillment" class="mono">—</dd></div>
+          <div><dt>卖家 ID</dt><dd id="seller-id" class="mono">—</dd></div>
+          <div><dt>Offer ID</dt><dd id="offer-id" class="mono">—</dd></div>
+          <div><dt>所选变体标记</dt><dd id="selected-tags" class="mono">—</dd></div>
+        </dl>
+      </details>
+
+      <div class="actions">
+        <button id="copy" type="button">复制本条结果</button>
+        <p id="copy-status" class="copy-status" role="status" aria-live="polite"></p>
+      </div>
+    </section>
+
+    <footer class="footnote">普通查看只读取当前页；自动查询由你启动并发送页面请求。前台限购不等于库存。</footer>
+  </main>
+</body>
+</html>

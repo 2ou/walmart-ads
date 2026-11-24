@@ -86,12 +86,21 @@ public class PriceMonitorService {
         }
         Map<String, SkuPrice> current = loadCurrentPrices();
         LocalDateTime now = LocalDateTime.now();
+        Map<String, PriceBaseline> baselinesBySku = new HashMap<>();
+        for (PriceBaseline existing : baselineRepository.findAll()) {
+            if (existing != null && existing.getSku() != null) {
+                baselinesBySku.put(existing.getSku(), existing);
+            }
+        }
         int changes = 0;
         int abnormalChanges = 0;
         for (Map.Entry<String, SkuPrice> entry : current.entrySet()) {
             String sku = entry.getKey();
             SkuPrice cp = entry.getValue();
-            PriceBaseline baseline = baselineRepository.findBySku(sku).orElse(null);
+            PriceBaseline baseline = baselinesBySku.get(sku);
+            if (baseline == null) {
+                baseline = baselineRepository.findBySku(sku).orElse(null);
+            }
             if (baseline == null) {
                 // 首见：写入基线，不记录变动。
                 baselineRepository.save(new PriceBaseline(
@@ -176,9 +185,26 @@ public class PriceMonitorService {
     /**
      * 读取当前有效款的价格，按 sku 去重（规避 current_version=1 多行污染）：
      * 同一 sku 取「非空价格且 sourceUpdatedAt 最新」的一行。
+     * 优先走轻量投影查询（不加载 raw_payload 4MB JSON 和历史版本），若单测仅桩了 findAll() 则平滑回退。
      */
     private Map<String, SkuPrice> loadCurrentPrices() {
         Map<String, SkuPrice> map = new HashMap<>();
+        var projections = productRecordRepository.findCurrentSkuPrices();
+        if (projections != null && !projections.isEmpty()) {
+            for (ProductRecordRepository.SkuPriceView view : projections) {
+                String sku = view.getSku();
+                BigDecimal price = view.getPrice();
+                if (sku == null || price == null || price.compareTo(BigDecimal.ZERO) <= 0) {
+                    continue;
+                }
+                SkuPrice current = map.get(sku);
+                if (current == null || isNewerTime(view.getSourceUpdatedAt(), current.sourceUpdatedAt())) {
+                    map.put(sku, new SkuPrice(view.getParentSku(), price, view.getSourceUpdatedAt()));
+                }
+            }
+            log.debug("loadCurrentPrices (projection): 去重后 {} 个有效 SKU 带价格", map.size());
+            return map;
+        }
         for (ProductRecord record : productRecordRepository.findAll()) {
             if (!record.isCurrentVersion()) {
                 continue;
@@ -189,8 +215,8 @@ public class PriceMonitorService {
                 continue;
             }
             SkuPrice current = map.get(sku);
-            if (current == null || isNewer(record, current)) {
-                map.put(sku, new SkuPrice(record.getParentSku(), price, record));
+            if (current == null || isNewerTime(record.getSourceUpdatedAt(), current.sourceUpdatedAt())) {
+                map.put(sku, new SkuPrice(record.getParentSku(), price, record.getSourceUpdatedAt()));
             }
         }
         log.debug("loadCurrentPrices: 去重后 {} 个有效 SKU 带价格", map.size());
@@ -198,9 +224,7 @@ public class PriceMonitorService {
     }
 
     /** 同 sku 多行时，取 sourceUpdatedAt 更新的一行。 */
-    private boolean isNewer(ProductRecord candidate, SkuPrice existing) {
-        LocalDateTime c = candidate.getSourceUpdatedAt();
-        LocalDateTime e = existing.record().getSourceUpdatedAt();
+    private boolean isNewerTime(LocalDateTime c, LocalDateTime e) {
         if (c != null && e != null) {
             return c.isAfter(e);
         }
@@ -208,6 +232,6 @@ public class PriceMonitorService {
     }
 
     /** 单个 SKU 的去重结果。 */
-    private record SkuPrice(String parentSku, BigDecimal price, ProductRecord record) {
+    private record SkuPrice(String parentSku, BigDecimal price, LocalDateTime sourceUpdatedAt) {
     }
 }

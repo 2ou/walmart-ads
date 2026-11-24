@@ -194,8 +194,9 @@ def _forecast_one(request: SeriesRequest, horizon: int) -> ForecastResult:
     train = history[:-holdout]
     actual = [item.y for item in history[-holdout:] if item.y is not None]
     try:
-        model_p50, model_p90 = _statsforecast_daily(train, horizon)
-        backtest_p50, _ = _statsforecast_daily(train, holdout)
+        combined_p50, combined_p90 = _statsforecast_daily(train, max(horizon, holdout))
+        model_p50, model_p90 = combined_p50[:horizon], combined_p90[:horizon]
+        backtest_p50 = combined_p50[:holdout]
         model_wmape = _wmape(actual, backtest_p50[: len(actual)])
         baseline_wmape = _wmape(actual, _baseline_daily(train, len(actual)))
         # Relax the strict "<" to a tolerance band so near-tie ETS fits are

@@ -25,8 +25,13 @@ public class WalmartAdQueryService {
     private static final Set<String> LEVELS = Set.of("CAMPAIGN", "AD_GROUP", "AD_ITEM", "KEYWORD");
     private static final Set<String> AD_TYPES = Set.of("SP", "SB", "SV");
     private static final Set<String> SLICE_TYPES = Set.of("PAGE_TYPE", "PLATFORM");
+    private static final long SOURCE_HISTORY_TTL_NANOS = java.time.Duration.ofMinutes(5).toNanos();
 
     private final NamedParameterJdbcTemplate jdbc;
+    private final Map<Long, SourceHistoryCacheEntry> sourceHistoryCache = new java.util.concurrent.ConcurrentHashMap<>();
+
+    private record SourceHistoryCacheEntry(List<Map<String, Object>> rows, long expiresAtNanos) {
+    }
 
     public WalmartAdQueryService(NamedParameterJdbcTemplate jdbc) {
         this.jdbc = jdbc;
@@ -47,7 +52,7 @@ public class WalmartAdQueryService {
                 select ad_type, report_level, count(*) as rows_count,
                        count(distinct report_date) as day_count,
                        max(report_date) as latest_date
-                  from wm_ads_lx_ad_report
+                  from wm_ads_lx_ad_report_raw
                  where report_date between :start and :end
                 """ + adFilter + " group by ad_type, report_level order by ad_type, report_level", params);
 
@@ -65,20 +70,11 @@ public class WalmartAdQueryService {
                        min(report_date) as first_date,
                        max(report_date) as latest_date,
                        count(distinct case when report_level = 'AD_ITEM' then item_id end) as item_count
-                  from wm_ads_lx_ad_report
+                  from wm_ads_lx_ad_report_raw
                  where report_date between :start and :end
                 """ + adFilter + " group by source order by first_date", params);
 
-        List<Map<String, Object>> sourceHistory = jdbc.getJdbcTemplate().queryForList("""
-                select source, count(*) as rows_count,
-                       count(distinct report_date) as day_count,
-                       min(report_date) as first_date,
-                       max(report_date) as latest_date,
-                       count(distinct case when report_level = 'AD_ITEM' then item_id end) as item_count
-                  from wm_ads_lx_ad_report
-                 group by source
-                 order by first_date
-                """);
+        List<Map<String, Object>> sourceHistory = loadCachedSourceHistory();
 
         Map<String, Object> dataQuality = jdbc.queryForMap("""
                 select count(*) as rows_count,
@@ -88,7 +84,8 @@ public class WalmartAdQueryService {
                        sum(case when report_level = 'AD_ITEM' and (sku is null or trim(sku) = '') then 1 else 0 end) as missing_sku_rows,
                        sum(case when report_level = 'AD_ITEM' and (parent_sku is null or trim(parent_sku) = '') then 1 else 0 end) as missing_parent_sku_rows,
                        max(synced_at) as latest_synced_at
-                  from wm_ads_lx_ad_report                 where report_date between :start and :end
+                  from wm_ads_lx_ad_report_raw
+                 where report_date between :start and :end
                 """ + adFilter, params);
 
         return new Overview(start, end, latest, adType == null ? "ALL" : adType,
@@ -124,8 +121,9 @@ public class WalmartAdQueryService {
         String filter = adFilter(adType);
         String searchFilter = searchFilter(requestedSearch);
 
+        String table = "AD_ITEM".equals(level) ? "wm_ads_lx_ad_report" : "wm_ads_lx_ad_report_raw";
         Long total = jdbc.queryForObject("""
-                select count(*) from wm_ads_lx_ad_report
+                select count(*) from """ + " " + table + """
                  where report_level = :level and report_date between :start and :end
                 """ + filter + searchFilter, params, Long.class);
         List<Map<String, Object>> rows = jdbc.queryForList("""
@@ -143,7 +141,7 @@ public class WalmartAdQueryService {
                        other_sku_sales, other_sku_units,
                        ntb_orders, ntb_revenue, ntb_units,
                        cpc, ctr, cvr, acos, roas, aov, cpa, synced_at
-                  from wm_ads_lx_ad_report
+                  from """ + " " + table + """
                  where report_level = :level and report_date between :start and :end
                 """ + filter + searchFilter
                 + " order by report_date desc, ad_spend desc, id desc limit :limit offset :offset", params);
@@ -392,9 +390,32 @@ public class WalmartAdQueryService {
             List<Map<String, Object>> campaigns
     ) { }
 
+    private List<Map<String, Object>> loadCachedSourceHistory() {
+        long workspaceId = com.ai.walmartads.workspace.WorkspaceContext.current()
+                .map(com.ai.walmartads.workspace.WorkspacePrincipal::workspaceId)
+                .orElse(1L);
+        long now = System.nanoTime();
+        SourceHistoryCacheEntry cached = sourceHistoryCache.get(workspaceId);
+        if (cached != null && cached.expiresAtNanos() > now) {
+            return cached.rows();
+        }
+        List<Map<String, Object>> rows = List.copyOf(jdbc.queryForList("""
+                select source, count(*) as rows_count,
+                       count(distinct report_date) as day_count,
+                       min(report_date) as first_date,
+                       max(report_date) as latest_date,
+                       count(distinct case when report_level = 'AD_ITEM' then item_id end) as item_count
+                  from wm_ads_lx_ad_report_raw
+                 group by source
+                 order by first_date
+                """, new MapSqlParameterSource()));
+        sourceHistoryCache.put(workspaceId, new SourceHistoryCacheEntry(rows, now + SOURCE_HISTORY_TTL_NANOS));
+        return rows;
+    }
+
     private LocalDate latestDate() {
         LocalDate latest = jdbc.getJdbcTemplate().queryForObject(
-                "select max(report_date) from wm_ads_lx_ad_report", LocalDate.class);
+                "select max(report_date) from wm_ads_lx_ad_report_raw", LocalDate.class);
         return latest == null ? UsBusinessDate.usToday() : latest;
     }
 

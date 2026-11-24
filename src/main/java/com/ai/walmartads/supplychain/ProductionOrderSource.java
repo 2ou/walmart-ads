@@ -38,7 +38,7 @@ public class ProductionOrderSource {
                            production_qty, unfinished_qty, factory_return_date
                       from wm_ads_supply_production_order
                      where workspace_id=:workspaceId and active = 1
-                     order by order_no, sku
+                     order by order_no, sku, source_key
                     """, new MapSqlParameterSource("workspaceId", workspaceId), (rs, rowNum) -> new CurrentProductionOrder(
                     rs.getString("order_no"),
                     rs.getString("style_no"),
@@ -73,6 +73,17 @@ public class ProductionOrderSource {
                 select sku from wm_ads_product_record
                  where workspace_id=:workspaceId and current_version=1 and sku is not null
                 """, new MapSqlParameterSource("workspaceId", workspaceId), String.class));
+        if (automatic) {
+            List<ProductionInventoryReconciler.Delivery> deliveries = jdbc.query("""
+                    select order_no, sku, plan_flag, sum(ship_qty) as ship_qty
+                      from wm_ads_supply_delivery_detail
+                     where workspace_id=:workspaceId and active=1
+                     group by order_no, sku, plan_flag
+                    """, new MapSqlParameterSource("workspaceId", workspaceId), (rs, rowNum) ->
+                    new ProductionInventoryReconciler.Delivery(rs.getString("order_no"), rs.getString("sku"),
+                            rs.getString("plan_flag"), rs.getBigDecimal("ship_qty")));
+            return ProductionInventoryReconciler.reconcile(rows, deliveries, canonicalizer);
+        }
         return rows.stream().map(row -> new CurrentProductionOrder(
                 row.orderNo(), row.styleNo(), canonicalizer.resolve(row.sku()), row.orderDate(),
                 row.cuttingQty(), row.productionQty(), row.wipQty(), row.factoryReturnDate(), row.source()

@@ -2,6 +2,7 @@ package com.ai.walmartads.connector;
 
 import com.ai.walmartads.config.DataConnectorProperties;
 import com.ai.walmartads.inventory.application.LingxingDomesticInventoryService;
+import com.ai.walmartads.inventory.application.LingxingDomesticMcpSyncService;
 import com.ai.walmartads.inventory.application.LingxingWfsShipmentService;
 import com.ai.walmartads.supplychain.SupplyChainSyncService;
 import com.ai.walmartads.workspace.WorkspaceContext;
@@ -42,6 +43,7 @@ public class DataConnectorOrchestrator {
     private final EmbeddedBrowserConnector browser;
     private final DataConnectorSessionService sessions;
     private final LingxingDomesticInventoryService inventory;
+    private final LingxingDomesticMcpSyncService domesticMcp;
     private final LingxingWfsShipmentService wfs;
     private final SupplyChainSyncService supplyChain;
     private final CurrentBrowserBridgeService currentBrowserBridge;
@@ -57,6 +59,7 @@ public class DataConnectorOrchestrator {
             EmbeddedBrowserConnector browser,
             DataConnectorSessionService sessions,
             LingxingDomesticInventoryService inventory,
+            LingxingDomesticMcpSyncService domesticMcp,
             LingxingWfsShipmentService wfs,
             SupplyChainSyncService supplyChain,
             CurrentBrowserBridgeService currentBrowserBridge
@@ -67,6 +70,7 @@ public class DataConnectorOrchestrator {
         this.browser = browser;
         this.sessions = sessions;
         this.inventory = inventory;
+        this.domesticMcp = domesticMcp;
         this.wfs = wfs;
         this.supplyChain = supplyChain;
         this.currentBrowserBridge = currentBrowserBridge;
@@ -82,6 +86,16 @@ public class DataConnectorOrchestrator {
                     log.warn("已关闭 {} 条因服务重启遗留的同步运行记录", recovered);
                 }
                 ensureAllWorkspaces();
+                for (WorkspacePrincipal principal : workspaces.connectorWorkspaces()) {
+                    boolean enabled = store.sourceStates(principal.workspaceId()).stream()
+                            .anyMatch(s -> s.sourceCode().equals(ConnectorSource.LINGXING_INVENTORY.name()) && s.enabled());
+                    if (!enabled) continue;
+                    boolean migrated = WorkspaceContext.callAs(principal, inventory::hasMcpSnapshot);
+                    LocalDateTime staleBefore = LocalDateTime.now(zone()).minusHours(6);
+                    if (!migrated || !store.succeededSince(principal.workspaceId(), ConnectorSource.LINGXING_INVENTORY, staleBefore)) {
+                        startDomestic(principal, migrated ? "MCP_STARTUP_CATCHUP" : "MCP_MIGRATION");
+                    }
+                }
                 if (!LocalTime.now(zone()).isBefore(LocalTime.of(8, 0))) {
                     workspaces.connectorWorkspaces().forEach(principal -> startDue(principal, "STARTUP_CATCHUP"));
                 }
@@ -99,21 +113,30 @@ public class DataConnectorOrchestrator {
         workspaces.connectorWorkspaces().forEach(principal -> startDue(principal, "CRON"));
     }
 
-    /**
-     * 领星网页库存和 WFS 货件按小时由项目统一发任务，扩展只负责通过心跳领取。
-     * 这样不会受 Manifest V3 Service Worker 重启、alarm 重建或浏览器标签页状态影响。
-     */
+    /** WFS 货件保持每小时通过浏览器桥接同步。 */
     @Scheduled(cron = "0 5 * * * *", zone = "${walmart.ads.data-connector.zone:Asia/Shanghai}")
     public void scheduledHourlyLingxingSync() {
         if (!properties.enabled()) return;
         ensureAllWorkspaces();
         LocalDateTime cutoff = LocalDateTime.now(zone()).minusMinutes(50);
         for (WorkspacePrincipal principal : workspaces.connectorWorkspaces()) {
-            EnumSet<ConnectorSource> due = EnumSet.of(
-                    ConnectorSource.LINGXING_INVENTORY, ConnectorSource.LINGXING_WFS);
+            EnumSet<ConnectorSource> due = EnumSet.of(ConnectorSource.LINGXING_WFS);
             due.removeIf(source -> store.succeededSince(principal.workspaceId(), source, cutoff));
             if (!due.isEmpty()) {
                 store.requestBrowserSync(principal.workspaceId(), due, "HOURLY_CRON");
+            }
+        }
+    }
+
+    /** 国内仓库存每 6 小时通过 MCP 同步，与浏览器采集任务独立。 */
+    @Scheduled(cron = "0 5 0/6 * * *", zone = "${walmart.ads.data-connector.zone:Asia/Shanghai}")
+    public void scheduledSixHourlyDomesticSync() {
+        if (!properties.enabled()) return;
+        ensureAllWorkspaces();
+        LocalDateTime cutoff = LocalDateTime.now(zone()).minusHours(5).minusMinutes(50);
+        for (WorkspacePrincipal principal : workspaces.connectorWorkspaces()) {
+            if (!store.succeededSince(principal.workspaceId(), ConnectorSource.LINGXING_INVENTORY, cutoff)) {
+                startDomestic(principal, "SIX_HOURLY_CRON");
             }
         }
     }
@@ -165,7 +188,8 @@ public class DataConnectorOrchestrator {
                     .filter(DataConnectorStore.SourceState::enabled)
                     .toList();
             boolean abnormal = sources.stream().anyMatch(row -> row.enabled()
-                    && ("FAILED".equals(row.status()) || "LOGIN_REQUIRED".equals(row.status())))
+                    && ("FAILED".equals(row.status()) || "LOGIN_REQUIRED".equals(row.status())
+                        || "WAITING_PAGE".equals(row.status())))
                     || systems.stream().anyMatch(system -> "LOGIN_REQUIRED".equals(system.status()));
             result.add(new WorkspaceStatus(target.workspaceId(), target.storeName(), target.storeAbbreviation(),
                     syncing.contains(target.workspaceId()), abnormal, systems, sources,
@@ -185,6 +209,7 @@ public class DataConnectorOrchestrator {
     private void startDue(WorkspacePrincipal principal, String triggeredBy) {
         LocalDate today = LocalDate.now(zone());
         EnumSet<ConnectorSource> due = enabledSources(principal);
+        due.remove(ConnectorSource.LINGXING_INVENTORY);
         due.removeIf(source -> store.succeededToday(principal.workspaceId(), source, today));
         if (!due.isEmpty()) start(principal, due, triggeredBy, false);
     }
@@ -200,8 +225,35 @@ public class DataConnectorOrchestrator {
             selected.removeIf(source -> store.succeededToday(principal.workspaceId(), source, today));
         }
         if (selected.isEmpty()) return false;
-        store.requestBrowserSync(principal.workspaceId(), selected, triggeredBy);
-        return true;
+        boolean accepted = false;
+        if (selected.remove(ConnectorSource.LINGXING_INVENTORY)) {
+            accepted = startDomestic(principal, triggeredBy);
+        }
+        if (!selected.isEmpty()) {
+            store.requestBrowserSync(principal.workspaceId(), selected, triggeredBy);
+            accepted = true;
+        }
+        return accepted;
+    }
+
+    private boolean startDomestic(WorkspacePrincipal principal, String triggeredBy) {
+        if (store.sourceStates(principal.workspaceId()).stream().noneMatch(s -> s.enabled()
+                && s.sourceCode().equals(ConnectorSource.LINGXING_INVENTORY.name()))) return false;
+        if (!syncing.add(principal.workspaceId())) return false;
+        try {
+            executor.submit(() -> {
+                try {
+                    WorkspaceContext.runAs(principal,
+                            () -> runSource(principal, ConnectorSource.LINGXING_INVENTORY, triggeredBy));
+                } finally {
+                    syncing.remove(principal.workspaceId());
+                }
+            });
+            return true;
+        } catch (RuntimeException exception) {
+            syncing.remove(principal.workspaceId());
+            throw exception;
+        }
     }
 
     private void runSource(WorkspacePrincipal principal, ConnectorSource source, String triggeredBy) {
@@ -210,10 +262,8 @@ public class DataConnectorOrchestrator {
             int count;
             String message;
             if (source == ConnectorSource.LINGXING_INVENTORY) {
-                progress(runId, principal.workspaceId(), source, "正在启动 Chrome，打开领星库存页面");
-                EmbeddedBrowserConnector.LingxingSnapshot snapshot = browser.readLingxing(principal, source);
-                progress(runId, principal.workspaceId(), source, "页面数据已读取，正在更新库存数据库");
-                var summary = inventory.replaceFromConnector(snapshot.sourceUrl(), snapshot.response(), snapshot.capturedAt());
+                progress(runId, principal.workspaceId(), source, "正在通过领星 MCP 读取本地仓及店铺专属库存");
+                var summary = domesticMcp.syncNow();
                 count = summary.importedSkus();
                 message = "同步 " + count + " 个 SKU，可用库存 " + summary.availableUnits();
             } else if (source == ConnectorSource.LINGXING_WFS) {

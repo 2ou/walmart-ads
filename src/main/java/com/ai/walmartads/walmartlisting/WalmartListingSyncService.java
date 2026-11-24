@@ -48,6 +48,8 @@ public class WalmartListingSyncService {
     private WorkspaceLingXingConfigService workspaceConfig;
     @Autowired
     private LingXingMcpCoordinator mcpCoordinator;
+    @Autowired(required = false)
+    private com.ai.walmartads.product.application.ProductCatalogService productCatalogService;
 
     public WalmartListingSyncService(
             LingXingProperties properties,
@@ -95,15 +97,23 @@ public class WalmartListingSyncService {
             List<ProductRecord> products = productRepository
                     .findAllBySkuInAndCurrentVersionTrue(bySku.keySet());
             int updated = 0;
+            List<ProductRecord> dirtyProducts = new ArrayList<>();
             for (ProductRecord product : products) {
                 WalmartListingDto dto = bySku.get(product.getSku());
                 if (dto == null) {
                     continue;
                 }
-                applyTo(product, dto);
+                if (applyTo(product, dto)) {
+                    dirtyProducts.add(product);
+                }
                 updated++;
             }
-            productRepository.saveAll(products);
+            if (!dirtyProducts.isEmpty()) {
+                productRepository.saveAll(dirtyProducts);
+                if (productCatalogService != null) {
+                    productCatalogService.invalidate();
+                }
+            }
             writeInventorySnapshot(bySku, products);
             String mappingError = rewriteSkuMapping(listings);
             long duration = System.currentTimeMillis() - start;
@@ -200,29 +210,52 @@ public class WalmartListingSyncService {
         }
     }
 
-    private void applyTo(ProductRecord product, WalmartListingDto d) {
-        product.setPrice(parseDecimal(d.price));
-        product.setStrikethroughPrice(parseDecimal(d.strikethroughPrice));
-        product.setUpc(blankToNull(d.upc));
-        product.setGtin(blankToNull(d.gtin));
-        product.setListingStatus(mapStatus(d.status));
-        product.setStore(blankToNull(d.store));
+    private boolean applyTo(ProductRecord product, WalmartListingDto d) {
+        boolean changed = false;
+        changed |= updateDecimal(product.getPrice(), parseDecimal(d.price), product::setPrice);
+        changed |= updateDecimal(product.getStrikethroughPrice(), parseDecimal(d.strikethroughPrice), product::setStrikethroughPrice);
+        changed |= updateValue(product.getUpc(), blankToNull(d.upc), product::setUpc);
+        changed |= updateValue(product.getGtin(), blankToNull(d.gtin), product::setGtin);
+        changed |= updateValue(product.getListingStatus(), mapStatus(d.status), product::setListingStatus);
+        changed |= updateValue(product.getStore(), blankToNull(d.store), product::setStore);
         if (d.itemId != null && !d.itemId.isBlank()) {
-            product.setProductId(d.itemId);
+            changed |= updateValue(product.getProductId(), d.itemId, product::setProductId);
         }
-        product.setWfsAvailable(d.wfsAvailable);
-        product.setNonWfsAvailable(d.nonWfsAvailable);
-        product.setBuyBoxPrice(parseDecimal(d.buyBoxPrice));
-        product.setReviewCount(parseInt(d.reviewCount));
-        product.setAverageRating(parseDecimal(d.averageRating));
-        product.setCompetitorPrice(parseDecimal(d.competitorPrice));
-        product.setFulfillmentType(d.fulfillmentType);
-        product.setFulfillmentTypeName(blankToNull(d.fulfillmentTypeName));
-        product.setListingStartTime(parseDateTime(d.listingStartTime));
-        product.setOfferEndDate(parseDateTime(d.offerEndDate));
-        product.setItemUrl(blankToNull(d.itemUrl));
-        product.setPromotionJson(promotionJson(d.promotionDataList));
-        product.setLastSyncedAt(LocalDateTime.now());
+        changed |= updateValue(product.getWfsAvailable(), d.wfsAvailable, product::setWfsAvailable);
+        changed |= updateValue(product.getNonWfsAvailable(), d.nonWfsAvailable, product::setNonWfsAvailable);
+        changed |= updateDecimal(product.getBuyBoxPrice(), parseDecimal(d.buyBoxPrice), product::setBuyBoxPrice);
+        changed |= updateValue(product.getReviewCount(), parseInt(d.reviewCount), product::setReviewCount);
+        changed |= updateDecimal(product.getAverageRating(), parseDecimal(d.averageRating), product::setAverageRating);
+        changed |= updateDecimal(product.getCompetitorPrice(), parseDecimal(d.competitorPrice), product::setCompetitorPrice);
+        changed |= updateValue(product.getFulfillmentType(), d.fulfillmentType, product::setFulfillmentType);
+        changed |= updateValue(product.getFulfillmentTypeName(), blankToNull(d.fulfillmentTypeName), product::setFulfillmentTypeName);
+        changed |= updateValue(product.getListingStartTime(), parseDateTime(d.listingStartTime), product::setListingStartTime);
+        changed |= updateValue(product.getOfferEndDate(), parseDateTime(d.offerEndDate), product::setOfferEndDate);
+        changed |= updateValue(product.getItemUrl(), blankToNull(d.itemUrl), product::setItemUrl);
+        changed |= updateValue(product.getPromotionJson(), promotionJson(d.promotionDataList), product::setPromotionJson);
+        if (changed) {
+            product.setLastSyncedAt(LocalDateTime.now());
+        }
+        return changed;
+    }
+
+    private static <T> boolean updateValue(T current, T next, java.util.function.Consumer<T> setter) {
+        if (java.util.Objects.equals(current, next)) {
+            return false;
+        }
+        setter.accept(next);
+        return true;
+    }
+
+    private static boolean updateDecimal(BigDecimal current, BigDecimal next, java.util.function.Consumer<BigDecimal> setter) {
+        if (current == null && next == null) {
+            return false;
+        }
+        if (current != null && next != null && current.compareTo(next) == 0) {
+            return false;
+        }
+        setter.accept(next);
+        return true;
     }
 
     private static BigDecimal parseDecimal(String value) {

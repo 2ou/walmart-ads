@@ -245,7 +245,7 @@ public class AdvertisingAgentTools {
                        min(report_date) as firstDate, max(report_date) as latestDate,
                        count(distinct report_date) as coveredDays,
                        count(*) as rowCount, max(synced_at) as lastSyncedAt
-                  from wm_ads_lx_ad_report
+                  from wm_ads_lx_ad_report_raw
                  group by report_level, ad_type
                  order by report_level, ad_type
                 """);

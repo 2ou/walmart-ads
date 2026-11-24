@@ -216,6 +216,7 @@ public class OperationRecordService {
         if (id == null) {
             throw new IllegalStateException("运营记录保存成功，但未返回记录编号。");
         }
+        impactCache.clear();
         return findRecord(id.longValue());
     }
 
@@ -765,7 +766,10 @@ public class OperationRecordService {
     }
 
     private OperationImpact impact(OperationRecord record, LocalDate latestDataDate, int days) {
-        String cacheKey = record.id() + "|" + latestDataDate + "|" + days;
+        long workspaceId = com.ai.walmartads.workspace.WorkspaceContext.current()
+                .map(com.ai.walmartads.workspace.WorkspacePrincipal::workspaceId)
+                .orElse(0L);
+        String cacheKey = workspaceId + "|" + record.id() + "|" + latestDataDate + "|" + days;
         OperationImpact cached = impactCache.get(cacheKey);
         if (cached != null) {
             return cached;
@@ -794,6 +798,7 @@ public class OperationRecordService {
         MetricSnapshot before = metrics(
                 record.targetType(),
                 record.targetKey(),
+                record.targetKeys(),
                 record.parentSku(),
                 window.beforeStart(),
                 window.beforeEnd(),
@@ -804,6 +809,7 @@ public class OperationRecordService {
                 : metrics(
                         record.targetType(),
                         record.targetKey(),
+                        record.targetKeys(),
                         record.parentSku(),
                         window.afterStart(),
                         window.afterEnd(),
@@ -832,6 +838,7 @@ public class OperationRecordService {
     private MetricSnapshot metrics(
             String targetType,
             String targetKey,
+            List<String> targetKeys,
             String parentSku,
             LocalDate start,
             LocalDate end,
@@ -839,11 +846,21 @@ public class OperationRecordService {
     ) {
         boolean parentLevel = "PARENT_SKU".equals(targetType);
         boolean hasParentGuard = !parentLevel && parentSku != null && !parentSku.isBlank();
+        List<String> effectiveSkus = (targetKeys != null && !targetKeys.isEmpty())
+                ? targetKeys
+                : (targetKey == null || targetKey.isBlank() ? List.of() : List.of(targetKey));
+        boolean multiSku = !parentLevel && effectiveSkus.size() > 1;
         String orderTarget;
         String adTarget;
         if (parentLevel) {
             orderTarget = "coalesce(orders.parent_sku, orders.sku) = :targetKey";
             adTarget = "ads.parent_sku = :targetKey";
+        } else if (multiSku && hasParentGuard) {
+            orderTarget = "orders.sku in (:targetKeys) and orders.parent_sku = :parentSku";
+            adTarget = "ads.sku in (:targetKeys) and ads.parent_sku = :parentSku";
+        } else if (multiSku) {
+            orderTarget = "orders.sku in (:targetKeys)";
+            adTarget = "ads.sku in (:targetKeys)";
         } else if (hasParentGuard) {
             // SKU 级：先用 parent_sku 走索引把范围收到本款内，再精确匹配 sku。
             // 实测 ads 侧由「全表扫 20 万行 / 885MB」降为本款内几百行，14.75s → 0.07s。
@@ -858,6 +875,9 @@ public class OperationRecordService {
                 .addValue("targetKey", targetKey)
                 .addValue("start", start)
                 .addValue("end", end);
+        if (multiSku) {
+            params.addValue("targetKeys", effectiveSkus);
+        }
         if (hasParentGuard) {
             params.addValue("parentSku", parentSku);
         }
@@ -867,7 +887,7 @@ public class OperationRecordService {
                   from wm_ads_order_record_valid orders
                   join wm_ads_import_file file
                     on file.id = orders.import_file_id and file.active = true
-                 where orders.report_date between :start and :end
+                 where coalesce(orders.order_date, orders.report_date) between :start and :end
                    and %s
                 """.formatted(orderTarget), params);
         Map<String, Object> ad = jdbc.queryForMap("""
@@ -945,7 +965,7 @@ public class OperationRecordService {
         return jdbc.query("""
                 select max(source.latest_date) as latest_date
                   from (
-                        select max(orders.report_date) as latest_date
+                        select max(coalesce(orders.order_date, orders.report_date)) as latest_date
                           from wm_ads_order_record orders
                           join wm_ads_import_file file
                             on file.id = orders.import_file_id and file.active = true

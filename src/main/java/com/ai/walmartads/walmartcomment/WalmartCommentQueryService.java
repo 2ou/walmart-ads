@@ -95,6 +95,24 @@ public class WalmartCommentQueryService {
     /** 同一款多个商品行只保留评论数最大的官方水位，并绑定该行的平均星级。 */
     private Map<String, ReportedMetric> loadReportedMetrics() {
         Map<String, ReportedMetric> map = new HashMap<>();
+        var summaries = productRecordRepository.findCurrentReviewSummaries();
+        if (summaries != null && !summaries.isEmpty()) {
+            for (ProductRecordRepository.ParentReviewSummaryView summary : summaries) {
+                if (summary.getParentSku() == null || summary.getParentSku().isBlank()) {
+                    continue;
+                }
+                String key = summary.getParentSku().trim().toUpperCase(Locale.ROOT);
+                int count = summary.getReviewCount() == null ? 0 : Math.max(0, summary.getReviewCount());
+                ReportedMetric candidate = new ReportedMetric(count, summary.getAverageRating());
+                ReportedMetric current = map.get(key);
+                if (current == null || candidate.reviewCount() > current.reviewCount()
+                        || (candidate.reviewCount() == current.reviewCount()
+                        && current.averageRating() == null && candidate.averageRating() != null)) {
+                    map.put(key, candidate);
+                }
+            }
+            return map;
+        }
         for (ProductRecord record : productRecordRepository.findAll()) {
             if (!record.isCurrentVersion() || record.getParentSku() == null || record.getParentSku().isBlank()) {
                 continue;
@@ -429,9 +447,12 @@ public class WalmartCommentQueryService {
     public Map<String, Object> buildStyleDetail(String parentSku) {
         if (parentSku == null || parentSku.isBlank()) throw new IllegalArgumentException("款号不能为空");
         String key = parentSku.trim().toUpperCase(Locale.ROOT);
-        List<WalmartComment> raw = commentRepository.findByPlatformOrderByCommentDateDesc(PLATFORM).stream()
-                .filter(comment -> comment.hasStyle() && key.equalsIgnoreCase(comment.getParentSku()))
-                .toList();
+        List<WalmartComment> raw = commentRepository.findByPlatformAndParentSkuIgnoreCaseOrderByCommentDateDesc(PLATFORM, key);
+        if (raw == null || raw.isEmpty()) {
+            raw = commentRepository.findByPlatformOrderByCommentDateDesc(PLATFORM).stream()
+                    .filter(comment -> comment.hasStyle() && key.equalsIgnoreCase(comment.getParentSku()))
+                    .toList();
+        }
         DedupeResult deduped = dedupeAcrossVariants(raw);
         List<WalmartComment> rows = deduped.rows();
         Map<String, ReportedMetric> reported = loadReportedMetrics();

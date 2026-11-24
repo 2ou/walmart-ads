@@ -494,12 +494,21 @@ public class WfsService {
     }
 
     private ProductIndex productIndex() {
-        List<ProductRow> rows = jdbc.query("""
+        List<ProductRow> rows = new ArrayList<>(jdbc.query("""
                 SELECT sku, parent_sku, gtin, upc, product_id
                   FROM wm_ads_product_record
                  WHERE current_version = 1
                 """, (rs, rowNum) -> new ProductRow(rs.getString("sku"), rs.getString("parent_sku"),
-                rs.getString("gtin"), rs.getString("upc"), rs.getString("product_id")));
+                rs.getString("gtin"), rs.getString("upc"), rs.getString("product_id"))));
+        try {
+            rows.addAll(jdbc.query("""
+                    SELECT sku, parent_sku, gtin, upc, item_id AS product_id
+                      FROM wm_ads_sku_mapping
+                     WHERE current_version = 1
+                    """, (rs, rowNum) -> new ProductRow(rs.getString("sku"), rs.getString("parent_sku"),
+                    rs.getString("gtin"), rs.getString("upc"), rs.getString("product_id"))));
+        } catch (Exception ignored) {
+        }
         return new ProductIndex(rows);
     }
 

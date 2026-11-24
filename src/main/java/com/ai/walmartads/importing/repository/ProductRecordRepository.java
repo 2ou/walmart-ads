@@ -25,8 +25,8 @@ public interface ProductRecordRepository extends JpaRepository<ProductRecord, Lo
     List<ProductRecord> findAllBySkuInOrderByCreatedAtDescIdDesc(Collection<String> skus);
 
     @Modifying
-    @Query("update ProductRecord product set product.currentVersion = false where product.currentVersion = true")
-    int deactivateAllCurrentVersions();
+    @Query("update ProductRecord product set product.currentVersion = false where product.currentVersion = true and product.id in :ids")
+    int deactivateCurrentVersionsById(@Param("ids") Collection<Long> ids);
 
     @Query(value = """
             select parent_sku, cutting_yield
@@ -42,4 +42,40 @@ public interface ProductRecordRepository extends JpaRepository<ProductRecord, Lo
     Optional<ProductRecord> findFirstByProductIdAndCurrentVersionTrueOrderBySourceUpdatedAtDesc(String productId);
 
     Optional<ProductRecord> findFirstBySkuAndCurrentVersionTrueOrderBySourceUpdatedAtDesc(String sku);
+
+    interface SkuPriceView {
+        String getSku();
+        String getParentSku();
+        java.math.BigDecimal getPrice();
+        java.time.LocalDateTime getSourceUpdatedAt();
+    }
+
+    @Query("""
+            select product.sku as sku,
+                   product.parentSku as parentSku,
+                   product.price as price,
+                   product.sourceUpdatedAt as sourceUpdatedAt
+              from ProductRecord product
+             where product.currentVersion = true
+               and product.sku is not null
+               and product.price is not null
+               and product.price > 0
+            """)
+    List<SkuPriceView> findCurrentSkuPrices();
+
+    interface ParentReviewSummaryView {
+        String getParentSku();
+        Integer getReviewCount();
+        java.math.BigDecimal getAverageRating();
+    }
+
+    @Query("""
+            select product.parentSku as parentSku,
+                   product.reviewCount as reviewCount,
+                   product.averageRating as averageRating
+              from ProductRecord product
+             where product.currentVersion = true
+               and product.parentSku is not null
+            """)
+    List<ParentReviewSummaryView> findCurrentReviewSummaries();
 }

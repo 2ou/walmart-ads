@@ -1,6 +1,8 @@
 package com.ai.walmartads.supplychain;
 
+import com.ai.walmartads.inventory.application.InventoryDataService;
 import com.ai.walmartads.workspace.WorkspaceContext;
+import org.springframework.context.event.EventListener;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -8,38 +10,90 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.sql.Timestamp;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 public class SupplyChainWorkspaceService {
 
     private static final BigDecimal ZERO = BigDecimal.ZERO;
+    private static final long CACHE_TTL_NANOS = Duration.ofMinutes(2).toNanos();
     private final NamedParameterJdbcTemplate jdbc;
     private final SupplyChainStore store;
+    private final InventoryDataService inventory;
+    private final Map<Long, SnapshotCacheEntry> snapshotCache = new ConcurrentHashMap<>();
+
+    private record SnapshotCacheEntry(
+            LocalDateTime lastSuccessAt,
+            long expiresAtNanos,
+            Summary summary,
+            List<OrderRow> orders,
+            List<ProductionRow> production,
+            List<DeliveryRow> deliveries,
+            List<LogisticsRow> logistics,
+            List<WorkbenchProductionRow> workbench
+    ) {
+    }
 
     public SupplyChainWorkspaceService(
             NamedParameterJdbcTemplate jdbc,
-            SupplyChainStore store
+            SupplyChainStore store,
+            InventoryDataService inventory
     ) {
         this.jdbc = jdbc;
         this.store = store;
+        this.inventory = inventory;
+    }
+
+    @EventListener
+    public void onSupplyChainSynced(SupplyChainSyncedEvent event) {
+        WorkspaceContext.current()
+                .map(com.ai.walmartads.workspace.WorkspacePrincipal::workspaceId)
+                .ifPresentOrElse(snapshotCache::remove, snapshotCache::clear);
     }
 
     @Transactional(readOnly = true)
     public WorkspacePayload load(Map<String, Object> syncStatus) {
         long workspaceId = WorkspaceContext.requireId();
-        boolean live = store.hasSuccessfulSnapshot();
+        LocalDateTime lastSuccessAt = store.lastSuccessAt();
+        boolean live = lastSuccessAt != null || store.hasSuccessfulSnapshot();
+        long now = System.nanoTime();
+        SnapshotCacheEntry cached = snapshotCache.get(workspaceId);
+        if (cached != null
+                && cached.expiresAtNanos() > now
+                && Objects.equals(cached.lastSuccessAt(), lastSuccessAt)) {
+            return new WorkspacePayload(
+                    syncStatus,
+                    cached.summary(),
+                    cached.orders(),
+                    cached.production(),
+                    cached.deliveries(),
+                    cached.logistics(),
+                    cached.workbench()
+            );
+        }
         List<OrderRow> orders = live ? loadOrders(workspaceId) : List.of();
         List<ProductionRow> production = live ? loadProduction(workspaceId) : List.of();
         List<DeliveryRow> deliveries = live ? loadDeliveries(workspaceId) : List.of();
         List<LogisticsRow> logistics = live ? loadLogistics(workspaceId) : List.of();
-        return new WorkspacePayload(syncStatus, summarize(orders, production, deliveries, logistics),
-                orders, production, deliveries, logistics);
+        // The same read model used by the inventory production detail keeps catalog matching and fallback identical.
+        List<WorkbenchProductionRow> workbench = inventory.productionOrders().stream()
+                .map(row -> new WorkbenchProductionRow(row.orderNo(), row.sku(), row.styleNo(), row.productionQty(),
+                        row.plannedShipQty(), row.unfinishedQty(), row.inventoryQty(), row.includedInInventory(),
+                        row.shipDate(), row.reconciliationStatus(), row.source()))
+                .toList();
+        Summary summary = summarize(orders, production, deliveries, logistics, workbench, live);
+        snapshotCache.put(workspaceId, new SnapshotCacheEntry(
+                lastSuccessAt, now + CACHE_TTL_NANOS, summary, orders, production, deliveries, logistics, workbench
+        ));
+        return new WorkspacePayload(syncStatus, summary, orders, production, deliveries, logistics, workbench);
     }
 
     private List<OrderRow> loadOrders(long workspaceId) {
@@ -112,11 +166,25 @@ public class SupplyChainWorkspaceService {
                        order_qty, ship_qty, warehouse_receive_qty, qc_receive_qty,
                        qc_pass_qty, rework_qty, delivery_status, plan_flag,
                        logistics_complete, assigned_at, source_created_at,
-                       factory_name, warehouse_name, snapshot_at
+                       factory_name, warehouse_name, snapshot_at,
+                       json_unquote(json_extract(raw_payload, '$.outboundOrderTime')) as outbound_time,
+                       json_unquote(json_extract(raw_payload, '$.qiHarvestStatus')) as qc_harvest_status,
+                       json_unquote(json_extract(raw_payload, '$.whHarvestStatus')) as warehouse_harvest_status
                   from wm_ads_supply_delivery_detail
                  where workspace_id=:workspaceId and active = 1
                  order by source_created_at desc, delivery_no, sku
-                """, new MapSqlParameterSource("workspaceId", workspaceId), (rs, rowNum) -> new DeliveryRow(
+                """, new MapSqlParameterSource("workspaceId", workspaceId), (rs, rowNum) -> {
+            BigDecimal shipQty = value(rs.getBigDecimal("ship_qty"));
+            BigDecimal qcReceived = value(rs.getBigDecimal("qc_receive_qty"));
+            BigDecimal warehouseReceived = value(rs.getBigDecimal("warehouse_receive_qty"));
+            BigDecimal qcPassed = value(rs.getBigDecimal("qc_pass_qty"));
+            String deliveryStatus = rs.getString("delivery_status");
+            String planFlag = rs.getString("plan_flag");
+            LocalDateTime snapshotAt = localDateTime(rs.getTimestamp("snapshot_at"));
+            var progress = SupplyChainDeliveryProgress.classify(shipQty, qcReceived, planFlag, deliveryStatus,
+                    rs.getString("qc_harvest_status"), rs.getString("warehouse_harvest_status"),
+                    rs.getString("outbound_time"), snapshotAt, warehouseReceived.signum() > 0 || qcPassed.signum() > 0);
+            return new DeliveryRow(
                 rs.getString("delivery_no"),
                 rs.getString("order_no"),
                 rs.getString("style_no"),
@@ -124,20 +192,24 @@ public class SupplyChainWorkspaceService {
                 rs.getString("cutting_no"),
                 rs.getString("model"),
                 value(rs.getBigDecimal("order_qty")),
-                value(rs.getBigDecimal("ship_qty")),
-                value(rs.getBigDecimal("warehouse_receive_qty")),
-                value(rs.getBigDecimal("qc_receive_qty")),
-                value(rs.getBigDecimal("qc_pass_qty")),
+                shipQty,
+                warehouseReceived,
+                qcReceived,
+                qcPassed,
                 value(rs.getBigDecimal("rework_qty")),
-                rs.getString("delivery_status"),
-                rs.getString("plan_flag"),
+                deliveryStatus,
+                planFlag,
                 booleanValue(rs.getObject("logistics_complete")),
                 localDateTime(rs.getTimestamp("assigned_at")),
                 localDateTime(rs.getTimestamp("source_created_at")),
                 rs.getString("factory_name"),
                 rs.getString("warehouse_name"),
-                localDateTime(rs.getTimestamp("snapshot_at"))
-        ));
+                snapshotAt,
+                progress.stage().name(),
+                progress.quantity(),
+                progress.outboundAt()
+            );
+        });
     }
 
     private List<LogisticsRow> loadLogistics(long workspaceId) {
@@ -187,11 +259,13 @@ public class SupplyChainWorkspaceService {
         ));
     }
 
-    private static Summary summarize(
+    static Summary summarize(
             List<OrderRow> orderRows,
             List<ProductionRow> production,
             List<DeliveryRow> deliveries,
-            List<LogisticsRow> logistics
+            List<LogisticsRow> logistics,
+            List<WorkbenchProductionRow> workbench,
+            boolean successfulSupplySnapshot
     ) {
         Set<String> orders = new LinkedHashSet<>();
         Set<String> skus = new LinkedHashSet<>();
@@ -204,6 +278,9 @@ public class SupplyChainWorkspaceService {
         BigDecimal qcPassQty = ZERO;
         BigDecimal reworkQty = ZERO;
         BigDecimal inTransitQty = ZERO;
+        BigDecimal pendingPlanQty = ZERO;
+        BigDecimal historicalReceiptGapQty = ZERO;
+        BigDecimal unverifiedQty = ZERO;
         for (ProductionRow row : production) {
             add(orders, row.orderNo());
             add(skus, row.sku());
@@ -217,14 +294,26 @@ public class SupplyChainWorkspaceService {
             qcReceivedQty = qcReceivedQty.add(row.qcReceiveQty());
             qcPassQty = qcPassQty.add(row.qcPassQty());
             reworkQty = reworkQty.add(row.reworkQty());
-            // 按行取不足部分再求和：某行超收不能冲抵另一行的未到仓。
-            inTransitQty = inTransitQty.add(row.shipQty().subtract(row.qcReceiveQty()).max(ZERO));
+            // 汇总与明细使用同一物理环节分类；某行超收不会冲抵其他行的收货差异。
+            switch (SupplyChainDeliveryProgress.Stage.valueOf(row.deliveryStage())) {
+                case PENDING_PLAN -> pendingPlanQty = pendingPlanQty.add(row.deliveryStageQty());
+                case IN_TRANSIT -> inTransitQty = inTransitQty.add(row.deliveryStageQty());
+                case HISTORICAL_RECEIPT_GAP -> historicalReceiptGapQty = historicalReceiptGapQty.add(row.deliveryStageQty());
+                case UNVERIFIED -> unverifiedQty = unverifiedQty.add(row.deliveryStageQty());
+                default -> { }
+            }
         }
-        // 在途口径 = 已发货 - 质检收货：上游 whHarvestNumber（仓库收货）长期为 0，
-        // 若以它为准会把全部发货量算成在途，到仓情况只有 qiHarvestNumber 可信。
+        BigDecimal matchedWip = ZERO;
+        BigDecimal unmatchedWip = ZERO;
+        for (WorkbenchProductionRow row : workbench) {
+            if (row.includedInInventory()) matchedWip = matchedWip.add(BigDecimal.valueOf(row.inventoryQty()));
+            else unmatchedWip = unmatchedWip.add(BigDecimal.valueOf(row.wipQty()));
+        }
         return new Summary(orderRows.size(), orders.size(), skus.size(), productionQty, wipQty,
                 deliveryNos.size(), deliveries.size(), shippedQty, receivedQty, qcReceivedQty,
-                inTransitQty, qcPassQty, reworkQty, logistics.size());
+                inTransitQty, qcPassQty, reworkQty, logistics.size(), pendingPlanQty, historicalReceiptGapQty,
+                unverifiedQty, matchedWip, unmatchedWip, matchedWip.add(unmatchedWip),
+                workbench.isEmpty() ? (successfulSupplySnapshot ? "SUPPLY_CHAIN" : null) : workbench.getFirst().source());
     }
 
     private static void add(Set<String> values, String value) {
@@ -260,7 +349,8 @@ public class SupplyChainWorkspaceService {
             List<OrderRow> orders,
             List<ProductionRow> productionOrders,
             List<DeliveryRow> deliveryDetails,
-            List<LogisticsRow> logisticsRegisters
+            List<LogisticsRow> logisticsRegisters,
+            List<WorkbenchProductionRow> workbenchProductionRows
     ) {
     }
 
@@ -278,7 +368,14 @@ public class SupplyChainWorkspaceService {
             BigDecimal inTransitQty,
             BigDecimal qcPassedQty,
             BigDecimal reworkQty,
-            int logisticsCount
+            int logisticsCount,
+            BigDecimal pendingPlanQty,
+            BigDecimal historicalReceiptGapQty,
+            BigDecimal unverifiedQty,
+            BigDecimal workbenchWipQty,
+            BigDecimal workbenchWipUnmatchedQty,
+            BigDecimal workbenchWipTotalQty,
+            String workbenchWipSource
     ) {
     }
 
@@ -328,6 +425,21 @@ public class SupplyChainWorkspaceService {
     ) {
     }
 
+    public record WorkbenchProductionRow(
+            String orderNo,
+            String sku,
+            String styleNo,
+            double productionQty,
+            Double plannedShipQty,
+            double wipQty,
+            double inventoryQty,
+            boolean includedInInventory,
+            String factoryReturnDate,
+            String reconciliationStatus,
+            String source
+    ) {
+    }
+
     public record DeliveryRow(
             String deliveryNo,
             String orderNo,
@@ -348,7 +460,10 @@ public class SupplyChainWorkspaceService {
             LocalDateTime createdAt,
             String factoryName,
             String warehouseName,
-            LocalDateTime snapshotAt
+            LocalDateTime snapshotAt,
+            String deliveryStage,
+            BigDecimal deliveryStageQty,
+            LocalDateTime outboundAt
     ) {
     }
 

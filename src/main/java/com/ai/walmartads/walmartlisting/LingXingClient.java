@@ -57,7 +57,7 @@ public class LingXingClient {
     /** 冷却上限；超过调度周期就会形成「永远自愈不了」的死循环，这里硬性夹住。 */
     private static final long MAX_COOLDOWN_MINUTES = 59L;
 
-    /** 无数据库协调器时的兼容限速；官方 FAQ 明确 QPS=1，这里取 30 次/分钟留足余量。 */
+    /** 无数据库协调器时的保守兼容限速，属于工作台自身保护策略。 */
     private static final long DEFAULT_CALLS_PER_MINUTE = 30L;
     private static final long MIN_CALLS_PER_MINUTE = 6L;
     private static final long MAX_CALLS_PER_MINUTE = 60L;
@@ -516,7 +516,7 @@ public class LingXingClient {
     /**
      * 解析每分鐘允许的调用次数：系统属性 {@code lingxing.rateLimit.callsPerMinute} 优先，
      * 其次环境变量 {@code LINGXING_RATE_LIMIT_CALLS_PER_MINUTE}，默认 30。
-     * 无论配置多少都会夹到 6~60，确保满足官方 QPS=1。
+     * 无论配置多少都会夹到 6~60，限制异常配置造成的请求突发。
      */
     private static long resolveCallIntervalMs() {
         String raw = System.getProperty("lingxing.rateLimit.callsPerMinute");

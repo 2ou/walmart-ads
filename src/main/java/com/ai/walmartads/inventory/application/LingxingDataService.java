@@ -69,7 +69,11 @@ public class LingxingDataService {
                     select sku, available_units, warehouse_name, store_name
                       from wm_ads_lx_domestic_inventory
                     """, new MapSqlParameterSource());
-            source = "PROJECT_CONNECTOR";
+            String sourceUrl = jdbc.query("select source_url from wm_ads_lx_domestic_inventory where workspace_id=:workspaceId order by synced_at desc limit 1",
+                    new MapSqlParameterSource("workspaceId", com.ai.walmartads.workspace.WorkspaceContext.requireId()),
+                    rs -> rs.next() ? rs.getString(1) : null);
+            source = LingxingDomesticInventoryService.MCP_SOURCE.equals(sourceUrl)
+                    ? "LINGXING_MCP" : "PROJECT_CONNECTOR";
             sourceAt = automaticAt;
             warehouseAvailable = true;
         } else {
@@ -402,6 +406,7 @@ public class LingxingDataService {
 
     private static String sourceLabel(String source) {
         return switch (source) {
+            case "LINGXING_MCP" -> "领星 MCP 自动同步";
             case "PROJECT_CONNECTOR" -> "工作台自动同步";
             case "FILE_UPLOAD" -> "文件上传";
             default -> "无数据";

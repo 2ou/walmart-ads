@@ -20,11 +20,9 @@ public class WorkspaceInitializationService {
     private static final Logger log = LoggerFactory.getLogger(WorkspaceInitializationService.class);
 
     /**
-     * 同一工作区的重试间隔，与同步周期对齐（6 小时）。
+     * 同一工作区初始化失败后的保守重试间隔（6 小时）。
      *
-     * <p>领星官方限流是「每用户 1 分钟 100 次 MCP TOOL」，超限后网关会给出数小时的
-     * Retry-After 惩罚。以前失败后每 20 分钟重跑一次，每次都落在惩罚窗内、白耗配额；
-     * 改为 6 小时后，重试节奏与同步一致，也不会在冷却期里反复敲门。
+     * <p>此前观察到 429 和 Retry-After；失败后避免频繁重试，以免冷却期间反复请求。
      */
     private final Set<Long> running = ConcurrentHashMap.newKeySet();
     private final WorkspaceLingXingConfigService configs;

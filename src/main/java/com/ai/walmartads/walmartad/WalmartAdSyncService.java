@@ -63,8 +63,18 @@ public class WalmartAdSyncService {
     private final WalmartAdSkuResolver skuResolver;
     private final WorkspaceLingXingConfigService workspaceConfig;
     private final CampaignStyleDiagnosisService diagnosisService;
-    private final ReentrantLock syncLock = new ReentrantLock();
-    private final AtomicBoolean backfillRunning = new AtomicBoolean(false);
+    private final Map<Long, ReentrantLock> syncLocks = new java.util.concurrent.ConcurrentHashMap<>();
+    private final Map<Long, AtomicBoolean> backfillRunningByWorkspace = new java.util.concurrent.ConcurrentHashMap<>();
+
+    private ReentrantLock currentSyncLock() {
+        long workspaceId = WorkspaceContext.current().map(WorkspacePrincipal::workspaceId).orElse(1L);
+        return syncLocks.computeIfAbsent(workspaceId, ignored -> new ReentrantLock());
+    }
+
+    private AtomicBoolean currentBackfillRunning() {
+        long workspaceId = WorkspaceContext.current().map(WorkspacePrincipal::workspaceId).orElse(1L);
+        return backfillRunningByWorkspace.computeIfAbsent(workspaceId, ignored -> new AtomicBoolean(false));
+    }
 
     public WalmartAdSyncService(
             LingXingProperties properties,
@@ -88,7 +98,8 @@ public class WalmartAdSyncService {
             log.debug("LingXing MCP is not configured; skip Walmart ad synchronization");
             return;
         }
-        if (!syncLock.tryLock()) {
+        ReentrantLock lock = currentSyncLock();
+        if (!lock.tryLock()) {
             log.info("LingXing ad synchronization is already running; skip this hourly tick");
             return;
         }
@@ -98,7 +109,7 @@ public class WalmartAdSyncService {
         } catch (Exception exception) {
             log.error("Hourly LingXing ad synchronization failed: {}", exception.getMessage(), exception);
         } finally {
-            syncLock.unlock();
+            lock.unlock();
         }
         // History is scheduled by the workspace orchestrator only after a successful current-data run.
     }
@@ -162,13 +173,14 @@ public class WalmartAdSyncService {
 
     public SyncSummary syncWindow(String triggeredBy, LocalDate start, LocalDate end) {
         validateWindow(start, end);
-        if (!syncLock.tryLock()) {
+        ReentrantLock lock = currentSyncLock();
+        if (!lock.tryLock()) {
             throw new IllegalStateException("LingXing ad synchronization is already running");
         }
         try {
             return syncWindowUnlocked(triggeredBy, start, end);
         } finally {
-            syncLock.unlock();
+            lock.unlock();
         }
     }
 
@@ -176,12 +188,14 @@ public class WalmartAdSyncService {
         LocalDate start = requestedStart == null ? properties.resolvedAdBackfillStart() : requestedStart;
         LocalDate end = requestedEnd == null ? LocalDate.now() : requestedEnd;
         validateWindow(start, end);
-        if (!backfillRunning.compareAndSet(false, true)) {
+        AtomicBoolean backfillFlag = currentBackfillRunning();
+        if (!backfillFlag.compareAndSet(false, true)) {
             return new BackfillStart(false, start, end, "BACKFILL_ALREADY_RUNNING");
         }
         WorkspacePrincipal principal = WorkspaceContext.requirePrincipal();
+        ReentrantLock lock = currentSyncLock();
         Thread.startVirtualThread(() -> WorkspaceContext.runAs(principal, () -> {
-            syncLock.lock();
+            lock.lock();
             try {
                 for (LocalDate date = start; !date.isAfter(end); date = date.plusDays(1)) {
                     syncWindowUnlocked("BACKFILL", date, date);
@@ -189,8 +203,8 @@ public class WalmartAdSyncService {
             } catch (Exception exception) {
                 log.error("LingXing ad history backfill stopped: {}", exception.getMessage(), exception);
             } finally {
-                syncLock.unlock();
-                backfillRunning.set(false);
+                lock.unlock();
+                backfillFlag.set(false);
             }
         }));
         return new BackfillStart(true, start, end, "BACKFILL_STARTED");
@@ -199,7 +213,7 @@ public class WalmartAdSyncService {
     public Map<String, Object> latestStatus() {
         Map<String, Object> latest = new LinkedHashMap<>(store.latestLog());
         latest.put("configured", client.configured());
-        latest.put("backfillRunning", backfillRunning.get());
+        latest.put("backfillRunning", currentBackfillRunning().get());
         latest.put("schedule", properties.resolvedCron());
         latest.put("rollingWindowDays", properties.resolvedAdWindowDays());
         latest.put("attributionDays", LingXingAdClient.ATTRIBUTION_DAYS);

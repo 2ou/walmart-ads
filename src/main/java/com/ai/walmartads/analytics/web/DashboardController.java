@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/dashboard")
@@ -27,6 +28,11 @@ public class DashboardController {
     @GetMapping("/bootstrap")
     public DashboardDataService.DashboardPayload bootstrap() {
         return dashboardDataService.bootstrap();
+    }
+
+    @GetMapping("/version")
+    public Map<String, Object> version() {
+        return dashboardDataService.version();
     }
 
     @GetMapping("/recommendations")

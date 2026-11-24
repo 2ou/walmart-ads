@@ -192,7 +192,7 @@ class TransitInventoryServiceTest {
         when(second.getLocalStatus()).thenReturn("已发货");
         when(second.getShipmentCreatedAt()).thenReturn(LocalDateTime.of(2026, 7, 25, 10, 55));
         when(second.getSku()).thenReturn("SKU-B");
-        when(second.getParentSku()).thenReturn("PNK001");
+        when(second.getParentSku()).thenReturn("PNK002");
         when(second.getReceiptDifference()).thenReturn(BigDecimal.ZERO); // 源表 -3 在实体列里已被归零
         when(second.getRawPayload()).thenReturn(
                 "{\"申报量\":\"5\",\"已发货\":\"5\",\"签收量(损坏)\":\"8(1)\",\"申收差异\":\"-3\"}");
@@ -215,8 +215,13 @@ class TransitInventoryServiceTest {
             assertThat(view.rawTransitUnits()).isEqualTo(7.0);    // 10 + (-3)，超收不归零
             assertThat(view.overUnits()).isEqualTo(3.0);          // 仅 -3 那行的绝对值
             assertThat(view.skuCount()).isEqualTo(2);
+            assertThat(view.parentSkus()).containsExactly("PNK001", "PNK002");
             assertThat(view.items()).hasSize(2);
+            assertThat(view.items().get(0).parentSku()).isEqualTo("PNK001");
+            assertThat(view.items().get(0).units()).isEqualTo(10.0);
             assertThat(view.items().get(1).sku()).isEqualTo("SKU-B");
+            assertThat(view.items().get(1).parentSku()).isEqualTo("PNK002");
+            assertThat(view.items().get(1).units()).isZero();
             assertThat(view.items().get(1).transitUnits()).isEqualTo(-3.0);
             assertThat(view.items().get(1).signedUnits()).isEqualTo(8.0);
         });
@@ -256,6 +261,11 @@ class TransitInventoryServiceTest {
             assertThat(view.signedUnits()).isZero();
             assertThat(view.rawTransitUnits()).isZero();
             assertThat(view.overUnits()).isZero();
+            assertThat(view.items()).singleElement().satisfies(item -> {
+                assertThat(item.parentSku()).isEqualTo("PNK-LEGACY");
+                assertThat(item.units()).isEqualTo(42.0);
+                assertThat(item.transitUnits()).isZero();
+            });
         });
     }
 
@@ -385,14 +395,21 @@ class TransitInventoryServiceTest {
                 new TransitShipmentEta("SHP-ETA", LocalDate.of(2026, 10, 18))
         ));
 
-        TransitInventoryService.TransitData result = new TransitInventoryService(
+        TransitInventoryService service = new TransitInventoryService(
                 shipmentRepository, logisticsRepository, emptySnapshotSource(), leadTimeRepository, etaRepository
-        ).load();
+        );
+        TransitInventoryService.TransitData result = service.load();
 
         assertThat(result.shipments()).singleElement().satisfies(view -> {
             assertThat(view.estimatedArrival()).isNull();
             assertThat(view.manualArrival()).isEqualTo(LocalDate.of(2026, 10, 18));
             assertThat(view.effectiveArrival()).isEqualTo(LocalDate.of(2026, 10, 18));
         });
+        assertThat(service.suppliesAvailableWithin(LocalDate.of(2026, 10, 1), 60))
+                .singleElement().satisfies(supply -> {
+                    assertThat(supply.sku()).isEqualTo("SKU-ETA");
+                    assertThat(supply.availableDay()).isEqualTo(17);
+                    assertThat(supply.units()).isEqualTo(50);
+                });
     }
 }

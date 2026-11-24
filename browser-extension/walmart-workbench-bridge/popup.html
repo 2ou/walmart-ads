@@ -19,8 +19,9 @@
   <p class="sub">复用此 Chrome 的登录状态，不启动专属浏览器。</p>
   <div class="card"><div class="state"><span id="dot" class="dot"></span><span id="state">等待工作台</span></div><small id="store">请打开并登录沃尔玛工作台</small></div>
   <button id="syncAll">立即同步全部</button>
-  <div class="row"><button data-source="LINGXING_INVENTORY">领星库存</button><button data-source="LINGXING_WFS">WFS 货件</button></div>
-  <div class="row"><button data-source="SUPPLY_CHAIN">供应链</button><button id="openWorkbench">打开工作台</button></div>
+  <div class="row"><button data-source="LINGXING_WFS">WFS 货件</button><button data-source="SUPPLY_CHAIN">供应链</button></div>
+  <div class="row"><button id="openWorkbench">打开工作台</button></div>
+  <small>国内仓库存由工作台通过领星 MCP 自动同步。</small>
   <div id="message"></div>
   <script src="popup.js"></script>
 </body>

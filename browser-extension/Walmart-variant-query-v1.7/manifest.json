@@ -1,0 +1,12 @@
+{
+  "manifest_version": 3,
+  "name": "Walmart 商品变体查看器",
+  "version": "1.7.0",
+  "description": "在整款查询和当前 Item 之间切换，查看 Walmart 商品的页面下单上限、在售状态和价格，支持导出 CSV。",
+  "permissions": ["activeTab", "scripting", "storage", "alarms"],
+  "background": { "service_worker": "scanner.mjs", "type": "module" },
+  "action": {
+    "default_title": "查看整款下单上限",
+    "default_popup": "popup.html"
+  }
+}

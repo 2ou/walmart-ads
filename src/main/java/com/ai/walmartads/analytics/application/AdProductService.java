@@ -7,6 +7,7 @@ import org.springframework.stereotype.Service;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
@@ -31,13 +32,32 @@ public class AdProductService {
     }
 
     public AdProductPayload load(int days) {
-        return load(days, false);
+        return load(days, false, null, null);
     }
 
     public AdProductPayload load(int days, boolean latest) {
-        int window = latest ? 1 : Math.max(1, Math.min(days, 365));
-        LocalDate end = UsBusinessDate.capToVisibleSalesDate(latestAdDate());
-        LocalDate start = end.minusDays(window - 1L);
+        return load(days, latest, null, null);
+    }
+
+    public AdProductPayload load(int days, boolean latest, LocalDate requestedStart, LocalDate requestedEnd) {
+        if ((requestedStart == null) != (requestedEnd == null)) {
+            throw new IllegalArgumentException("自定义时间范围必须同时提供开始日期和结束日期");
+        }
+        if (requestedStart != null && requestedStart.isAfter(requestedEnd)) {
+            throw new IllegalArgumentException("开始日期不能晚于结束日期");
+        }
+        final LocalDate start;
+        final LocalDate end;
+        final int window;
+        if (!latest && requestedStart != null) {
+            start = requestedStart;
+            end = requestedEnd;
+            window = Math.toIntExact(ChronoUnit.DAYS.between(start, end) + 1);
+        } else {
+            window = latest ? 1 : Math.max(1, Math.min(days, 365));
+            end = UsBusinessDate.capToVisibleSalesDate(latestAdDate());
+            start = end.minusDays(window - 1L);
+        }
 
         Map<String, Object> params = new HashMap<>();
         params.put("start", start);
@@ -115,7 +135,7 @@ public class AdProductService {
 
     private LocalDate latestAdDate() {
         LocalDate latest = jdbc.getJdbcTemplate().queryForObject(
-                "select max(report_date) from wm_ads_lx_ad_report where report_level = 'AD_ITEM'", LocalDate.class);
+                "select max(report_date) from wm_ads_lx_ad_report_raw where report_level = 'AD_ITEM'", LocalDate.class);
         return latest == null ? UsBusinessDate.visibleSalesDate() : latest;
     }
 

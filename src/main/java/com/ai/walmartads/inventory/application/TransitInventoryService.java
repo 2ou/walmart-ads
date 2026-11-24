@@ -65,6 +65,8 @@ public class TransitInventoryService {
     private final LogisticsRegisterSource logisticsRegisterSource;
     private final TransitChannelLeadTimeRepository channelLeadTimeRepository;
     private final TransitShipmentEtaRepository shipmentEtaRepository;
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private org.springframework.context.ApplicationEventPublisher events;
 
     public TransitInventoryService(
             ShipmentRecordRepository shipmentRepository,
@@ -192,12 +194,12 @@ public class TransitInventoryService {
             if (transit < 0) {
                 shipment.overUnits += -transit;
             }
+            String parentSku = present(record.getParentSku()) ? record.getParentSku() : null;
             shipment.items.add(new TransitShipmentItem(
-                    record.getSku(), round(declared), round(shipped), round(signed), round(transit)));
+                    record.getSku(), parentSku, round(declared), round(shipped), round(signed), round(transit), round(units)));
 
             shipment.skuCount++;
-            String parentSku = present(record.getParentSku()) ? record.getParentSku() : record.getSku();
-            shipment.parentSkus.add(parentSku);
+            shipment.parentSkus.add(parentSku != null ? parentSku : record.getSku());
         }
 
         List<TransitShipment> views = new ArrayList<>();
@@ -296,6 +298,7 @@ public class TransitInventoryService {
                 .orElseGet(() -> new TransitShipmentEta(shipmentNo, null));
         value.updateArrivalDate(arrivalDate);
         shipmentEtaRepository.save(value);
+        publishTimingChangedAfterCommit();
     }
 
     /** Returns only SKU-level in-transit supply that becomes sellable in the requested horizon. */
@@ -308,6 +311,10 @@ public class TransitInventoryService {
         Map<String, ShipmentLogisticsInfo> logisticsByShipment = logisticsByShipment();
         Map<String, TransitChannelLeadTime> leadTimeByChannel = channelLeadTimeRepository.findAll().stream()
                 .collect(Collectors.toMap(TransitChannelLeadTime::getChannelName, value -> value));
+        Map<String, LocalDate> manualArrivalByShipment = new LinkedHashMap<>();
+        shipmentEtaRepository.findAll().forEach(eta -> {
+            if (eta.getArrivalDate() != null) manualArrivalByShipment.put(eta.getShipmentNo(), eta.getArrivalDate());
+        });
         List<TransitSkuSupply> result = new ArrayList<>();
         for (ShipmentRecord record : shipmentRepository.findCurrentVersions()) {
             if (!kept.contains(record.getShipmentNo())) {
@@ -319,7 +326,8 @@ public class TransitInventoryService {
             TransitChannelLeadTime leadTime = channel == null ? null : leadTimeByChannel.get(channel);
             Double leadDays = leadTime == null || !leadTime.isManual() || leadTime.getLeadDays() == null
                     ? null : leadTime.getLeadDays().doubleValue();
-            LocalDate arrival = estimatedArrival(estimatedDeparture(record.getShipmentCreatedAt()), leadDays);
+            LocalDate arrival = manualArrivalByShipment.get(record.getShipmentNo());
+            if (arrival == null) arrival = estimatedArrival(estimatedDeparture(record.getShipmentCreatedAt()), leadDays);
             if (arrival == null || arrival.isBefore(snapshotDate.plusDays(1)) || arrival.isAfter(snapshotDate.plusDays(horizonDays))) {
                 continue;
             }
@@ -347,7 +355,20 @@ public class TransitInventoryService {
         TransitChannelLeadTime value = channelLeadTimeRepository.findById(channelName)
                 .orElseGet(() -> new TransitChannelLeadTime(channelName, null, false));
         value.updateManually(BigDecimal.valueOf(leadDays).setScale(2, RoundingMode.HALF_UP));
-        return toView(channelLeadTimeRepository.save(value));
+        TransitChannel result = toView(channelLeadTimeRepository.save(value));
+        publishTimingChangedAfterCommit();
+        return result;
+    }
+
+    private void publishTimingChangedAfterCommit() {
+        if (events == null) return;
+        Runnable publish = () -> events.publishEvent(new TransitTimingChangedEvent());
+        if (org.springframework.transaction.support.TransactionSynchronizationManager.isSynchronizationActive()) {
+            org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(
+                    new org.springframework.transaction.support.TransactionSynchronization() {
+                        @Override public void afterCommit() { publish.run(); }
+                    });
+        } else publish.run();
     }
 
     private TransitChannel toView(TransitChannelLeadTime value) {
@@ -541,13 +562,15 @@ public class TransitInventoryService {
         }
     }
 
-    /** 单个 SKU 的对账明细，四个数量与货件级同口径，均取自源表原值。 */
+    /** 单个 SKU 的款号、原始对账数量和归零后的库存数量。 */
     public record TransitShipmentItem(
             String sku,
+            String parentSku,
             double declaredUnits,
             double shippedUnits,
             double signedUnits,
-            double transitUnits
+            double transitUnits,
+            double units
     ) {
     }
 

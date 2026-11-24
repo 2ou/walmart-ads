@@ -56,32 +56,35 @@ public class ReplenishmentPlanningService {
     @Transactional(readOnly = true)
     public PlanningPayload plan(int targetDays) {
         int days = Math.max(7, Math.min(targetDays, 180));
-        LocalDate snapshotDate = latestWfsSnapshotDate();
-        if (snapshotDate == null) {
-            return PlanningPayload.empty("WFS inventory snapshot has not been imported");
-        }
-        List<VariantSeed> variants = loadVariants(snapshotDate);
+        LocalDateTime snapshotAt = latestWfsSnapshotAt();
+        LocalDate snapshotDate = snapshotAt == null ? LocalDate.now() : snapshotAt.toLocalDate();
+        List<VariantSeed> variants = loadVariants(snapshotAt);
         if (variants.isEmpty()) {
             return PlanningPayload.empty("The latest WFS inventory snapshot has no SKU rows");
         }
-        Map<String, Double> domesticBySku = domesticBySku();
-        Map<String, Double> trailing90Sales = salesBySku(snapshotDate.minusDays(89), snapshotDate);
+        InventorySkuMatcher matcher = new InventorySkuMatcher(variants.stream().map(VariantSeed::sku).toList());
+        Map<String, Double> domesticBySku = matcher.align(domesticBySku()).matched();
+        Map<String, Double> trailing90Sales = matcher.align(salesBySku(snapshotDate.minusDays(89), snapshotDate)).matched();
         Set<String> variantSkus = variants.stream().map(VariantSeed::sku).collect(java.util.stream.Collectors.toSet());
         Map<String, Double> lastSellingPace90Sales = lastSellingPace90BySku(snapshotDate, variantSkus);
         LocalDate sameSeasonStart = snapshotDate.minusYears(1).plusDays(1);
-        Map<String, Double> sameSeasonLastYearSales = salesBySku(
+        Map<String, Double> sameSeasonLastYearSales = matcher.align(salesBySku(
                 sameSeasonStart,
                 sameSeasonStart.plusDays(days - 1)
-        );
-        Map<String, List<ReplenishmentPlanner.ScheduledSupply>> incomingBySku = incomingBySku(snapshotDate, days);
+        )).matched();
+        Map<String, List<ReplenishmentPlanner.ScheduledSupply>> incomingBySku = alignSupplies(incomingBySku(snapshotDate, days), matcher);
         List<String> warnings = new ArrayList<>();
-        Map<String, List<ReplenishmentPlanner.ScheduledSupply>> factoryWipBySku = factoryWipBySku(snapshotDate, days, warnings);
+        Map<String, List<ReplenishmentPlanner.ScheduledSupply>> factoryWipBySku = alignSupplies(factoryWipBySku(snapshotDate, days, warnings), matcher);
         Map<String, WipDisplay> factoryWipDisplayBySku = wipDisplayBySku(factoryWipBySku);
         factoryWipBySku.forEach((sku, supplies) -> incomingBySku.computeIfAbsent(sku, ignored -> new ArrayList<>()).addAll(supplies));
 
         Map<String, List<VariantSeed>> variantsByParent = new LinkedHashMap<>();
-        variants.forEach(variant -> variantsByParent.computeIfAbsent(variant.parentSku(), ignored -> new ArrayList<>()).add(variant));
-        Map<String, List<StatsForecastClient.Observation>> historyByParent = salesHistory(snapshotDate, variantsByParent.keySet());
+        Map<String, String> skuToParent = new LinkedHashMap<>();
+        variants.forEach(variant -> {
+            variantsByParent.computeIfAbsent(variant.parentSku(), ignored -> new ArrayList<>()).add(variant);
+            skuToParent.put(variant.sku(), variant.parentSku());
+        });
+        Map<String, List<StatsForecastClient.Observation>> historyByParent = salesHistory(snapshotDate, variantsByParent.keySet(), matcher, skuToParent);
         Map<String, StatsForecastClient.ForecastResult> forecastByParent = forecastClient.forecast(historyByParent, days);
         if (forecastClient.lastFailureReason() != null) {
             warnings.add("Local forecast service unavailable; baseline used: " + forecastClient.lastFailureReason());
@@ -205,51 +208,58 @@ public class ReplenishmentPlanningService {
         );
     }
 
-    private LocalDate latestWfsSnapshotDate() {
+    private LocalDateTime latestWfsSnapshotAt() {
         List<Map<String, Object>> results = jdbc.queryForList("""
-                select max(inventory.snapshot_at) as snapshot_at
+                select inventory.snapshot_at, count(*) as row_count
                   from wm_ads_inventory_unified inventory
+                 group by inventory.snapshot_at order by inventory.snapshot_at desc limit 2
                 """, new MapSqlParameterSource());
-        return results.isEmpty() ? null : localDate(results.getFirst().get("snapshot_at"));
+        return InventoryDataService.selectCompleteSnapshot(results.stream().map(row -> {
+            Object value = row.get("snapshot_at");
+            LocalDateTime time = value instanceof Timestamp timestamp ? timestamp.toLocalDateTime() : (LocalDateTime) value;
+            return new InventoryDataService.SnapshotCandidate(time, ((Number) row.get("row_count")).intValue());
+        }).toList());
     }
 
-    private List<VariantSeed> loadVariants(LocalDate snapshotDate) {
-        return jdbc.queryForList("""
-                select inventory.sku,
-                       inventory.available_units,
-                       product.color,
-                       product.size,
-                       style_yield.cutting_yield
-                  from wm_ads_inventory_unified inventory
-                  join (
-                        select sku,
-                               max(color) as color,
-                               max(size) as size,
-                               max(cutting_yield) as cutting_yield
-                          from wm_ads_product_record
-                         where current_version = true
-                         group by sku
-                  ) product on product.sku = inventory.sku
-                  left join (
-                        select coalesce(nullif(parent_sku, ''), substring_index(sku, '-', 1)) as parent_sku,
-                               max(cutting_yield) as cutting_yield
-                          from wm_ads_product_record
-                         where current_version = true
-                           and cutting_yield is not null
-                         group by coalesce(nullif(parent_sku, ''), substring_index(sku, '-', 1))
-                  ) style_yield on style_yield.parent_sku = substring_index(inventory.sku, '-', 1)
-                 where date(inventory.snapshot_at) = :snapshotDate
-                """, new MapSqlParameterSource("snapshotDate", snapshotDate)).stream()
-                .map(row -> new VariantSeed(
-                        text(row.get("sku")),
-                        parentSku(text(row.get("sku"))),
-                        text(row.get("color")),
-                        text(row.get("size")),
-                        integer(row.get("cutting_yield")),
-                        number(row.get("available_units"))
-                ))
-                .filter(variant -> variant.sku() != null && variant.parentSku() != null)
-                .toList();
+    List<VariantSeed> loadVariants(LocalDateTime snapshotAt) {
+        List<Map<String, Object>> products = jdbc.queryForList("""
+                select sku, max(parent_sku) as parent_sku, max(color) as color,
+                       max(size) as size, max(cutting_yield) as cutting_yield
+                  from wm_ads_product_record where current_version = true group by sku
+                """, new MapSqlParameterSource());
+        InventorySkuMatcher matcher = new InventorySkuMatcher(products.stream().map(row -> text(row.get("sku"))).toList());
+        Map<String, Double> rawWfs = new LinkedHashMap<>();
+        jdbc.queryForList("""
+                select inventory.sku, inventory.available_units from wm_ads_inventory_unified inventory
+                 where inventory.snapshot_at = :snapshotAt
+                """, new MapSqlParameterSource("snapshotAt", snapshotAt)).forEach(row ->
+                rawWfs.merge(text(row.get("sku")), number(row.get("available_units")), Double::sum));
+        Map<String, Double> available = matcher.align(rawWfs).matched();
+        Map<String, Integer> yieldByParent = new LinkedHashMap<>();
+        products.forEach(row -> {
+            String sku = text(row.get("sku"));
+            String parent = text(row.get("parent_sku"));
+            if (parent == null || parent.isBlank()) parent = parentSku(sku);
+            Integer yield = integer(row.get("cutting_yield"));
+            if (parent != null && yield != null) yieldByParent.merge(parent, yield, Math::max);
+        });
+        return products.stream().map(row -> {
+            String sku = text(row.get("sku"));
+            String parent = text(row.get("parent_sku"));
+            if (parent == null || parent.isBlank()) parent = parentSku(sku);
+            return new VariantSeed(sku, parent, text(row.get("color")), text(row.get("size")),
+                    yieldByParent.get(parent), available.getOrDefault(sku, 0d));
+        }).filter(variant -> variant.sku() != null && variant.parentSku() != null).toList();
+    }
+
+    private static Map<String, List<ReplenishmentPlanner.ScheduledSupply>> alignSupplies(
+            Map<String, List<ReplenishmentPlanner.ScheduledSupply>> source, InventorySkuMatcher matcher) {
+        Map<String, List<ReplenishmentPlanner.ScheduledSupply>> result = new LinkedHashMap<>();
+        source.forEach((sku, supplies) -> {
+            String resolved = matcher.resolve(sku);
+            if (resolved != null) result.computeIfAbsent(resolved, ignored -> new ArrayList<>()).addAll(supplies);
+        });
+        return result;
     }
 
     private Map<String, Double> domesticBySku() {
@@ -353,7 +363,9 @@ public class ReplenishmentPlanningService {
 
     private Map<String, List<StatsForecastClient.Observation>> salesHistory(
             LocalDate snapshotDate,
-            Set<String> requestedParents
+            Set<String> requestedParents,
+            InventorySkuMatcher matcher,
+            Map<String, String> skuToParent
     ) {
         LocalDate startDate = snapshotDate.minusDays(364);
         Map<String, Map<LocalDate, Double>> sales = new LinkedHashMap<>();
@@ -372,14 +384,14 @@ public class ReplenishmentPlanningService {
                 """, new MapSqlParameterSource()
                 .addValue("startDate", startDate)
                 .addValue("endDate", snapshotDate)).forEach(row -> {
-            String parentSku = parentSku(text(row.get("sku")));
+            String parentSku = resolveParentSku(text(row.get("sku")), matcher, skuToParent);
             LocalDate saleDate = localDate(row.get("sale_date"));
             if (requestedParents.contains(parentSku) && saleDate != null) {
                 sales.computeIfAbsent(parentSku, ignored -> new LinkedHashMap<>())
                         .merge(saleDate, number(row.get("units")), Double::sum);
             }
         });
-        Map<String, Set<LocalDate>> stockoutDates = parentStockoutDates(startDate, snapshotDate, requestedParents);
+        Map<String, Set<LocalDate>> stockoutDates = parentStockoutDates(startDate, snapshotDate, requestedParents, matcher, skuToParent);
         Map<String, List<StatsForecastClient.Observation>> result = new LinkedHashMap<>();
         for (String parentSku : requestedParents) {
             List<StatsForecastClient.Observation> history = new ArrayList<>();
@@ -396,7 +408,9 @@ public class ReplenishmentPlanningService {
     private Map<String, Set<LocalDate>> parentStockoutDates(
             LocalDate startDate,
             LocalDate endDate,
-            Set<String> requestedParents
+            Set<String> requestedParents,
+            InventorySkuMatcher matcher,
+            Map<String, String> skuToParent
     ) {
         Map<String, Set<LocalDate>> result = new LinkedHashMap<>();
         jdbc.queryForList("""
@@ -409,13 +423,27 @@ public class ReplenishmentPlanningService {
                 """, new MapSqlParameterSource()
                 .addValue("startDate", startDate)
                 .addValue("endDate", endDate)).forEach(row -> {
-            String parentSku = parentSku(text(row.get("sku")));
+            String parentSku = resolveParentSku(text(row.get("sku")), matcher, skuToParent);
             LocalDate day = localDate(row.get("snapshot_date"));
             if (requestedParents.contains(parentSku) && day != null && number(row.get("available_units")) <= 0) {
                 result.computeIfAbsent(parentSku, ignored -> new LinkedHashSet<>()).add(day);
             }
         });
         return result;
+    }
+
+    private static String resolveParentSku(String rawSku, InventorySkuMatcher matcher, Map<String, String> skuToParent) {
+        if (rawSku == null || rawSku.isBlank()) {
+            return null;
+        }
+        String matchedSku = matcher == null ? null : matcher.resolve(rawSku);
+        if (matchedSku != null && skuToParent != null && skuToParent.containsKey(matchedSku)) {
+            return skuToParent.get(matchedSku);
+        }
+        if (skuToParent != null && skuToParent.containsKey(rawSku)) {
+            return skuToParent.get(rawSku);
+        }
+        return parentSku(rawSku);
     }
 
     private Map<String, List<ReplenishmentPlanner.ScheduledSupply>> incomingBySku(LocalDate snapshotDate, int horizonDays) {
@@ -566,7 +594,7 @@ public class ReplenishmentPlanningService {
         return Math.round(value * 10000d) / 10000d;
     }
 
-    private record VariantSeed(
+    record VariantSeed(
             String sku,
             String parentSku,
             String color,

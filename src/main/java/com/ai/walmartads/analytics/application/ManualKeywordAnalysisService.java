@@ -77,8 +77,9 @@ public class ManualKeywordAnalysisService {
             trend.computeIfAbsent(reportDate, ignored -> new MutableMetrics()).add(source);
         }
 
+        Map<String, String> parentByCampaign = loadCampaignParentSkus();
         List<KeywordRow> keywords = grouped.values().stream()
-                .map(keyword -> keyword.toRow(thresholds))
+                .map(keyword -> keyword.toRow(thresholds, parentByCampaign))
                 .sorted(Comparator.comparing(KeywordRow::spend).reversed()
                         .thenComparing(KeywordRow::keywordText, Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER)))
                 .toList();
@@ -144,11 +145,33 @@ public class ManualKeywordAnalysisService {
     private LocalDate latestDate() {
         List<Map<String, Object>> rows = jdbc.queryForList("""
                 select max(report_date) as latest_date
-                  from wm_ads_lx_ad_report
+                  from wm_ads_lx_ad_report_raw
                  where report_level = 'KEYWORD' and targeting_type = 'manual'
                 """, new MapSqlParameterSource());
         LocalDate latest = rows.isEmpty() ? null : date(rows.getFirst().get("latest_date"));
         return latest == null ? UsBusinessDate.usToday() : latest;
+    }
+
+    private Map<String, String> loadCampaignParentSkus() {
+        Map<String, String> result = new LinkedHashMap<>();
+        try {
+            jdbc.queryForList("""
+                    select ad_type, cast(campaign_id as char) as campaign_id, max(parent_sku) as parent_sku
+                      from wm_ads_lx_ad_report_raw
+                     where report_level = 'AD_ITEM'
+                       and campaign_id is not null
+                       and parent_sku is not null and parent_sku <> ''
+                     group by ad_type, cast(campaign_id as char)
+                    """, new MapSqlParameterSource()).forEach(row -> {
+                String key = text(row.get("ad_type")) + "|" + text(row.get("campaign_id"));
+                String parent = text(row.get("parent_sku"));
+                if (parent != null && !parent.isBlank()) {
+                    result.put(key, parent.trim().toUpperCase(Locale.ROOT));
+                }
+            });
+        } catch (Exception ignored) {
+        }
+        return result;
     }
 
     private static String normalizeAdType(String value) {
@@ -394,13 +417,17 @@ public class ManualKeywordAnalysisService {
             }
         }
 
-        private KeywordRow toRow(DecisionThresholds thresholds) {
+        private KeywordRow toRow(DecisionThresholds thresholds, Map<String, String> parentByCampaign) {
             String decision = decide(metrics.spend, metrics.sales, metrics.orders, metrics.clicks, thresholds);
             boolean serving = "enabled".equalsIgnoreCase(keywordState)
                     && "approved".equalsIgnoreCase(keywordStatus)
                     && (adGroupStatus == null || "enabled".equalsIgnoreCase(adGroupStatus));
+            String resolvedParent = parentSku(campaignName);
+            if (resolvedParent == null && parentByCampaign != null) {
+                resolvedParent = parentByCampaign.get(adType + "|" + campaignId);
+            }
             return new KeywordRow(
-                    advertiserId, adType, parentSku(campaignName), campaignId, campaignName, campaignStatus,
+                    advertiserId, adType, resolvedParent, campaignId, campaignName, campaignStatus,
                     adGroupId, adGroupName, adGroupStatus, keywordId, keywordText, keywordState,
                     keywordStatus, matchType, round(bid, 2), round(suggestedBid, 2),
                     recommendedBid(bid, decision), serving, latestDate, dates.size(),

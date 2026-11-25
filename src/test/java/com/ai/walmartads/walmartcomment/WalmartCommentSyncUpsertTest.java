@@ -5,6 +5,7 @@ import com.ai.walmartads.importing.repository.SkuMappingRepository;
 import com.ai.walmartads.walmartcomment.domain.WalmartComment;
 import com.ai.walmartads.walmartcomment.repository.WalmartCommentRepository;
 import com.ai.walmartads.walmartcomment.repository.WalmartCommentSyncLogRepository;
+import com.ai.walmartads.workspace.WorkspaceLingXingConfigService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -53,7 +54,6 @@ class WalmartCommentSyncUpsertTest {
         commentRepository = mock(WalmartCommentRepository.class);
         WalmartCommentSyncLogRepository logRepository = mock(WalmartCommentSyncLogRepository.class);
         skuMappingRepository = mock(SkuMappingRepository.class);
-        // enabled=false → 构造函数不创建 LingXingClient，单测不触网。
         LingXingProperties properties = new LingXingProperties(
                 false, null, null, null, 0, null, 0, List.of(), 0, null,
                 null, 0, null, null);
@@ -62,7 +62,7 @@ class WalmartCommentSyncUpsertTest {
         when(transactionManager.getTransaction(any()))
                 .thenReturn(mock(org.springframework.transaction.TransactionStatus.class));
         service = new WalmartCommentSyncService(properties, commentRepository, logRepository,
-                skuMappingRepository, transactionManager, new ObjectMapper());
+                skuMappingRepository, transactionManager, new ObjectMapper(), mock(WorkspaceLingXingConfigService.class));
         saved = ArgumentCaptor.forClass(WalmartComment.class);
         when(commentRepository.save(any(WalmartComment.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
@@ -75,7 +75,7 @@ class WalmartCommentSyncUpsertTest {
         when(commentRepository.findByPlatformAndCommentIdIn(eq("walmart"), any()))
                 .thenReturn(List.of());
         when(skuMappingRepository.findCurrentParentSkuByItemIds(anyCollection()))
-                .thenReturn(List.<Object[]>of(new Object[]{"11111111111", "PNK363055"}));
+                .thenReturn(List.<Object[]>of(new Object[]{"11111111111", "DEMO990055"}));
 
         WalmartCommentSyncService.WriteResult result = service.persist(List.of(
                 row("c-1", "11111111111", "2026-09-01", 5, "great quality"),
@@ -93,7 +93,7 @@ class WalmartCommentSyncUpsertTest {
 
         List<WalmartComment> entities = saved.getAllValues();
         assertThat(entities).extracting(WalmartComment::getCommentId).containsExactly("c-1", "c-2");
-        assertThat(entities.get(0).getParentSku()).isEqualTo("PNK363055");
+        assertThat(entities.get(0).getParentSku()).isEqualTo("DEMO990055");
         assertThat(entities.get(0).getPlatform()).isEqualTo("walmart");
         assertThat(entities.get(0).getCommentDate()).isEqualTo(LocalDate.of(2026, 9, 1));
         assertThat(entities.get(0).getRawPayload())
@@ -110,7 +110,7 @@ class WalmartCommentSyncUpsertTest {
         when(commentRepository.findByPlatformAndCommentIdIn(eq("walmart"), any()))
                 .thenReturn(List.of(existing));
         when(skuMappingRepository.findCurrentParentSkuByItemIds(anyCollection()))
-                .thenReturn(List.<Object[]>of(new Object[]{"11111111111", "PNK363055"}));
+                .thenReturn(List.<Object[]>of(new Object[]{"11111111111", "DEMO990055"}));
 
         // 买家事后把 5 星改成了 1 星并重写内容 —— upsert 必须落到同一行。
         WalmartCommentSyncService.WriteResult result = service.persist(List.of(
@@ -125,7 +125,7 @@ class WalmartCommentSyncUpsertTest {
 
         assertThat(existing.getCommentStar()).isEqualTo(1);
         assertThat(existing.getCommentContent()).isEqualTo("rewritten by buyer");
-        assertThat(existing.getParentSku()).isEqualTo("PNK363055");
+        assertThat(existing.getParentSku()).isEqualTo("DEMO990055");
         assertThat(existing.getCommentDate()).isEqualTo(LocalDate.of(2026, 9, 15));
         // 业务主键与首次入库时间不得被覆盖，否则「同一评价」会被算成两次。
         assertThat(existing.getCommentId()).isEqualTo("c-1");
@@ -138,7 +138,7 @@ class WalmartCommentSyncUpsertTest {
         when(commentRepository.findByPlatformAndCommentIdIn(eq("walmart"), any()))
                 .thenReturn(List.of());
         when(skuMappingRepository.findCurrentParentSkuByItemIds(anyCollection()))
-                .thenReturn(List.<Object[]>of(new Object[]{"11111111111", "PNK363055"}));
+                .thenReturn(List.<Object[]>of(new Object[]{"11111111111", "DEMO990055"}));
 
         // 第一条无 comment_id（无法定位业务行）、第二条缺 comment_date（NOT NULL 约束）。
         Map<String, Object> orphan = row(null, "11111111111", "2026-09-01", 5, "no id");
@@ -163,12 +163,12 @@ class WalmartCommentSyncUpsertTest {
         when(commentRepository.findByPlatformAndParentSkuIsNull(eq("walmart")))
                 .thenReturn(List.of(orphan));
         when(skuMappingRepository.findCurrentParentSkuByItemIds(anyCollection()))
-                .thenReturn(List.<Object[]>of(new Object[]{"17123456789", "PNK0079"}));
+                .thenReturn(List.<Object[]>of(new Object[]{"17123456789", "DEMO0079"}));
 
         int fixed = service.rescueUnmatched();
 
         assertThat(fixed).isEqualTo(1);
-        assertThat(orphan.getParentSku()).isEqualTo("PNK0079");
+        assertThat(orphan.getParentSku()).isEqualTo("DEMO0079");
         assertThat(orphan.hasStyle()).isTrue();
         verify(commentRepository, times(1)).save(orphan);
     }
@@ -216,8 +216,8 @@ class WalmartCommentSyncUpsertTest {
             row.put("id", id);
         }
         row.put("platformProductNo", itemId);
-        row.put("storeId", "110358320595211264");
-        row.put("storeName", "PINKSIR");
+        row.put("storeId", "900000000000000002");
+        row.put("storeName", "Sample Shop");
         row.put("commentStar", star);
         if (commentDate != null) {
             row.put("commentDate", commentDate);
@@ -229,7 +229,7 @@ class WalmartCommentSyncUpsertTest {
     }
 
     private WalmartComment entity(String commentId, String itemId, LocalDate date, int star, String content) {
-        return new WalmartComment("walmart", commentId, "110358320595211264", "PINKSIR", itemId,
+        return new WalmartComment("walmart", commentId, "900000000000000002", "Sample Shop", itemId,
                 null, date, star, "title", content, "buyer", "product", null, null, "US",
                 null, NOW, NOW);
     }

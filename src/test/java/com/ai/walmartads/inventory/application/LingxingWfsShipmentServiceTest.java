@@ -3,11 +3,13 @@ package com.ai.walmartads.inventory.application;
 import com.ai.walmartads.workspace.WorkspaceContext;
 import com.ai.walmartads.workspace.WorkspacePrincipal;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -16,12 +18,14 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 
 class LingxingWfsShipmentServiceTest {
 
     private JdbcTemplate jdbc;
     private ObjectMapper objectMapper;
     private LingxingWfsShipmentService service;
+    private ApplicationEventPublisher events;
 
     @BeforeEach
     void setUp() {
@@ -51,8 +55,11 @@ class LingxingWfsShipmentServiceTest {
                     source_url varchar(500), message varchar(1000)
                 )
                 """);
+        jdbc.execute("create table wm_ads_workspace (id bigint primary key, status varchar(20), store_id varchar(40))");
+        jdbc.update("insert into wm_ads_workspace values (7, 'ACTIVE', 'store-7')");
         objectMapper = new ObjectMapper();
-        service = new LingxingWfsShipmentService(jdbc, objectMapper, mock(ReplenishmentPlanCache.class));
+        events = mock(ApplicationEventPublisher.class);
+        service = new LingxingWfsShipmentService(jdbc, objectMapper, mock(ReplenishmentPlanCache.class), events);
         WorkspaceContext.set(new WorkspacePrincipal(
                 7L, "PINKSIR", "ACTIVE", "store-7", "PINKSIR", "PNK", true, 1L));
     }
@@ -179,5 +186,55 @@ class LingxingWfsShipmentServiceTest {
                 response, LocalDateTime.now()))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("只接受");
+    }
+
+    @Test
+    void mcpCutoverKeepsOldSnapshotAndCountsOnlyOpenTransit() throws Exception {
+        seedOpenConnector();
+        var snapshot = (ArrayNode) objectMapper.readTree("""
+                [
+                  {"cargoCode":"OPEN","storeId":"store-7","cargoStatusName":"CLOSED",
+                   "cargoListGoodsDetailResponses":[{"sku":"PNK-OLD","diffOfDeclareAndSign":8}]},
+                  {"cargoCode":"NEW","storeId":"store-7","cargoStatusName":"RECEIVING_IN_PROGRESS",
+                   "cargoCreateDate":"2026-11-24 10:30:00","inboundOrderId":"PIN-TEST",
+                   "cargoListGoodsDetailResponses":[{"sku":"PNK-NEW","diffOfDeclareAndSign":4}]}
+                ]
+                """);
+        var result = service.replaceFromMcp(snapshot, "store-7", LocalDateTime.now());
+        assertThat(result.source()).isEqualTo("LINGXING_MCP");
+        assertThat(result.importedRows()).isEqualTo(2);
+        assertThat(result.transitUnits()).isEqualByComparingTo("4");
+        assertThat(service.status().activeSource()).isEqualTo("LINGXING_MCP");
+        assertThat(service.status().transitUnits()).isEqualByComparingTo("4");
+        assertThat(jdbc.queryForObject("select current_version from wm_ads_shipment_record where source_type='PROJECT_CONNECTOR'",
+                Boolean.class)).isFalse();
+        assertThat(jdbc.queryForObject("select raw_payload from wm_ads_shipment_record where shipment_no='NEW'", String.class))
+                .contains("PIN-TEST", "入库订单编号");
+        verify(events).publishEvent(new WfsShipmentsSyncedEvent(7L));
+    }
+
+    @Test
+    void staleOrIncompleteMcpSnapshotCannotReplaceActiveConnectorRows() throws Exception {
+        seedOpenConnector();
+        var snapshot = (ArrayNode) objectMapper.readTree("""
+                [{"cargoCode":"OTHER","storeId":"store-7","cargoStatusName":"RECEIVING_IN_PROGRESS",
+                  "cargoCreateDate":"2026-11-24 10:30:00",
+                  "cargoListGoodsDetailResponses":[{"sku":"PNK-NEW","diffOfDeclareAndSign":4}]}]
+                """);
+        assertThatThrownBy(() -> service.replaceFromMcp(snapshot, "store-7", LocalDateTime.now().minusHours(3)))
+                .hasMessageContaining("已有更新的货件快照");
+        assertThatThrownBy(() -> service.replaceFromMcp(snapshot, "store-7", LocalDateTime.now()))
+                .hasMessageContaining("此前有未签收量");
+        assertThat(service.status().activeSource()).isEqualTo("PROJECT_CONNECTOR");
+        assertThat(service.status().transitUnits()).isEqualByComparingTo("8");
+    }
+
+    private void seedOpenConnector() {
+        LocalDateTime previous = LocalDateTime.now().minusHours(1);
+        jdbc.update("""
+                insert into wm_ads_shipment_record(workspace_id, source_type, synced_at, current_version, shipment_no,
+                    local_status, sku, receipt_difference, raw_payload, created_at)
+                values (7, 'PROJECT_CONNECTOR', ?, true, 'OPEN', '已发货', 'PNK-OLD', 8, '{}', ?)
+                """, previous, previous);
     }
 }

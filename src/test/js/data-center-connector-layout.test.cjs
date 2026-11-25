@@ -56,17 +56,33 @@ test("domestic inventory status and history are separated from browser connector
   assert.match(elements["#dataCenterDomesticMcp"].innerHTML, /上次写入<b>954<\/b>/);
   assert.doesNotMatch(elements["#dataCenterDomesticMcp"].innerHTML, /data-connector-sync/);
   assert.doesNotMatch(elements["#connectorWorkspaceList"].innerHTML, /国内仓库存|LINGXING_INVENTORY/);
-  assert.match(elements["#connectorWorkspaceList"].innerHTML, /LINGXING_WFS/);
+  assert.doesNotMatch(elements["#connectorWorkspaceList"].innerHTML, /LINGXING_WFS/);
   assert.match(elements["#connectorWorkspaceList"].innerHTML, /SUPPLY_CHAIN/);
   assert.match(elements["#domesticMcpRunHistoryList"].innerHTML, /库存/);
   assert.doesNotMatch(elements["#connectorRunHistoryList"].innerHTML, /国内仓库存/);
 });
 
-test("browser sync all does not start the MCP inventory task", async () => {
+test("browser sync all starts only the supply-chain source", async () => {
   const { ctx, requests, bridge } = fixture();
   await vm.runInContext("startConnectorSync(1, 'BROWSER_ALL')", ctx);
-  assert.deepEqual(requests, ["LINGXING_WFS", "SUPPLY_CHAIN"]);
-  assert.deepEqual(bridge, ["LINGXING_WFS", "SUPPLY_CHAIN"]);
+  assert.deepEqual(requests, ["SUPPLY_CHAIN"]);
+  assert.deepEqual(bridge, ["SUPPLY_CHAIN"]);
+});
+
+test("WFS MCP card retains effective snapshot metrics after a sync error", () => {
+  const el = { innerHTML: "", contains: () => false };
+  const state = { workspaceSyncSettings: [{ category: "WFS_SHIPMENTS", enabled:true, staggerMinute:15, lastStatus:"FAILED", lastMessage:"分页不完整" }],
+    wfsShipmentSource: { activeSource:"PROJECT_CONNECTOR", activeAt:"snapshot", shipmentCount:121, itemCount:2245, transitUnits:4453 } };
+  const env = vm.createContext({ state, document: { activeElement: null }, $: () => el, escapeHtml: String,
+    integer: String, connectorDateTime: (v) => v || "—", workspaceSyncStatus: () => "同步失败" });
+  vm.runInContext(extract("function wfsShipmentSourceLabel(", "function renderDataCenterSyncPlan("), env);
+  vm.runInContext("renderWfsMcpCard()", env);
+  assert.match(el.innerHTML, /00:15、06:15、12:15、18:15/);
+  assert.match(el.innerHTML, /历史采集快照/);
+  assert.match(el.innerHTML, /<b>2245<\/b>/);
+  assert.match(el.innerHTML, /当前快照仍在使用。分页不完整/);
+  assert.match(el.innerHTML, /data-workspace-sync-now="WFS_SHIPMENTS"[^>]*>立即同步/);
+  assert.doesNotMatch(el.innerHTML, /data-connector-sync/);
 });
 
 test("manual domestic MCP sync does not request the browser bridge", async () => {

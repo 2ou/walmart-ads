@@ -38,7 +38,8 @@ public class WorkspaceSqlGuard {
             "wm_ads_product_import_change",
             "wm_ads_lx_domestic_inventory", "wm_ads_lx_domestic_inventory_sync_log",
             "wm_ads_lx_wfs_shipment_sync_log",
-            "wm_ads_finance_import_batch", "wm_ads_finance_store_monthly", "wm_ads_finance_style_monthly");
+            "wm_ads_finance_import_batch", "wm_ads_finance_store_monthly", "wm_ads_finance_style_monthly",
+            "wm_ads_finance_commission_rule");
 
     private static final String TABLE_ALTERNATION = TENANT_TABLES.stream()
             .sorted((left, right) -> Integer.compare(right.length(), left.length()))

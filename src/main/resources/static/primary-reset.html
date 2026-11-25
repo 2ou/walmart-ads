@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>重置主工作区密码 · 沃尔玛工作台</title>
+  <link rel="stylesheet" href="auth.css?v=20261008-simple-login">
+</head>
+<body>
+  <main class="auth-page">
+    <section class="auth-card login-card">
+      <div class="brand-mark" aria-hidden="true">W</div>
+      <header class="auth-heading">
+        <h1>重置主工作区密码</h1>
+        <p>此入口仅允许服务器本机访问。重置后已有登录会话继续有效。</p>
+      </header>
+      <form id="resetForm" class="auth-form" method="post" action="/api/auth/primary-reset">
+        <label for="newPassword">新密码
+          <input id="newPassword" name="newPassword" type="password" required minlength="8" autocomplete="new-password">
+        </label>
+        <label for="confirmPassword">确认新密码
+          <input id="confirmPassword" name="confirmPassword" type="password" required minlength="8" autocomplete="new-password">
+        </label>
+        <p class="form-error" id="resetError" role="alert" hidden></p>
+        <p class="success-note" id="resetSuccess" role="status" hidden></p>
+        <button class="primary-action" type="submit">确认重置</button>
+      </form>
+      <a class="back-link" href="/login.html">返回登录</a>
+    </section>
+  </main>
+  <script src="primary-reset.js"></script>
+</body>
+</html>

@@ -16,6 +16,7 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeParseException;
+import java.util.Locale;
 
 /** Public only on loopback; every operation is authenticated with a workspace-scoped bridge key. */
 @RestController
@@ -59,25 +60,24 @@ public class BrowserBridgeController {
 
     @PostMapping("/lingxing-wfs-shipments")
     public ApiResponse<CurrentBrowserBridgeService.SyncResult> wfs(
-            HttpServletRequest request, @RequestBody SnapshotRequest body) {
-        WorkspacePrincipal principal = authenticate(request);
-        requireSnapshot(body);
-        return ApiResponse.ok(bridge.importWfs(principal, body.sourceUrl(), body.response(),
-                capturedAt(body.capturedAt()), "CURRENT_CHROME"));
+            HttpServletRequest request) {
+        WorkspacePrincipal principal = authenticateRetiredSource(request);
+        return ApiResponse.ok(bridge.importWfs(principal, null, null, null, "CURRENT_CHROME"));
     }
 
     @PostMapping("/failure")
     public ApiResponse<Void> failure(HttpServletRequest request, @RequestBody FailureRequest body) {
-        WorkspacePrincipal principal = authenticate(request);
         if (body == null || body.source() == null || body.source().isBlank()) {
             throw new IllegalArgumentException("缺少数据源");
         }
         ConnectorSource source;
         try {
-            source = ConnectorSource.valueOf(body.source().trim().toUpperCase());
+            source = ConnectorSource.valueOf(body.source().trim().toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException exception) {
             throw new IllegalArgumentException("未知的数据源");
         }
+        WorkspacePrincipal principal = source == ConnectorSource.LINGXING_WFS
+                ? authenticateRetiredSource(request) : authenticate(request);
         bridge.recordFailure(principal, source,
                 body.message() == null || body.message().isBlank() ? "当前 Chrome 同步失败" : body.message(),
                 body.loginRequired(), body.pageRequired());
@@ -86,6 +86,11 @@ public class BrowserBridgeController {
 
     private WorkspacePrincipal authenticate(HttpServletRequest request) {
         return bridge.authenticateAndReload(request.getHeader("X-Bridge-Key"),
+                request.getHeader("X-Extension-Id"));
+    }
+
+    private WorkspacePrincipal authenticateRetiredSource(HttpServletRequest request) {
+        return bridge.authenticateRetiredSource(request.getHeader("X-Bridge-Key"),
                 request.getHeader("X-Extension-Id"));
     }
 

@@ -17,6 +17,7 @@ import org.springframework.data.jpa.domain.Specification;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -169,6 +170,43 @@ class PriceMonitorQueryServiceTest {
         assertThat(points.get(0).get("kind")).isEqualTo("BASELINE");
         assertThat(points.get(1).get("kind")).isEqualTo("CHANGE");
         assertThat(points.get(2).get("kind")).isEqualTo("CURRENT");
+    }
+
+    @Test
+    void changesKeepsAbnormalAheadOfNewerNormalChangesWhenTruncated() {
+        LocalDateTime abnormalAt = now.minusDays(5);
+        List<PriceChange> reds = List.of(
+                new PriceChange("SKU-RED-1", "DEMO101", new BigDecimal("19.99"), new BigDecimal("12.99"),
+                        new BigDecimal("-35.02"), new BigDecimal("-35.02"), abnormalAt, false, true),
+                new PriceChange("SKU-RED-2", "DEMO101", new BigDecimal("19.99"), new BigDecimal("13.99"),
+                        new BigDecimal("-30.02"), new BigDecimal("-30.02"), abnormalAt, false, true)
+        );
+        LocalDateTime normalAt = now.minusHours(1);
+        List<PriceChange> greens = new ArrayList<>();
+        for (int i = 0; i < 25; i++) {
+            greens.add(new PriceChange("SKU-GREEN-" + i, "DEMO101", new BigDecimal("14.99"), new BigDecimal("15.99"),
+                    new BigDecimal("6.67"), new BigDecimal("6.67"), normalAt.minusMinutes(i), false, false));
+        }
+
+        when(changeRepository.findByAcknowledgedFalseAndAbnormalTrueOrderByDetectedAtDesc())
+                .thenReturn(reds);
+        when(changeRepository.findByAbnormalFalseAndDetectedAtAfterOrderByDetectedAtDesc(anyPast()))
+                .thenReturn(greens);
+
+        Map<String, Object> changes = service.changes();
+        List<Map<String, Object>> groups = (List<Map<String, Object>>) changes.get("groups");
+
+        assertThat(groups).hasSize(1);
+        Map<String, Object> group = groups.get(0);
+        assertThat(group.get("parentSku")).isEqualTo("DEMO101");
+        assertThat(group.get("changeCount")).isEqualTo(27);
+        assertThat(group.get("abnormalCount")).isEqualTo(2);
+        assertThat(group.get("hiddenChangeCount")).isEqualTo(7);
+
+        List<Map<String, Object>> items = (List<Map<String, Object>>) group.get("changes");
+        assertThat(items).hasSize(20);
+        assertThat(items.get(0).get("abnormal")).isEqualTo(true);
+        assertThat(items.get(1).get("abnormal")).isEqualTo(true);
     }
 
     @Test

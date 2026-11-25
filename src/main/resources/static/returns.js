@@ -17,6 +17,7 @@
     detailPage: 0,
     pageSize: 50,
   };
+  let pendingParentSku = null;
 
   const $ = (selector) => document.querySelector(selector);
   const $$ = (selector) => [...document.querySelectorAll(selector)];
@@ -87,7 +88,7 @@
           <div><dt>覆盖月份</dt><dd id="returnAccountMonths">--</dd></div>
         </dl>
       </section>
-      <div class="return-metric-grid" id="returnMetricGrid"></div>
+      <div class="wb-react-root return-metric-grid" id="returnMetricGrid"></div>
       <div class="return-layout">
         <section class="panel return-trend-panel" aria-labelledby="returnTrendTitle">
           <div class="panel-header">
@@ -105,7 +106,7 @@
                   </div>
                   <label class="return-trend-series-search" for="returnTrendSeriesSearch">
                     <span class="sr-only">搜索趋势款号</span>
-                    <input id="returnTrendSeriesSearch" type="search" placeholder="搜索款号，如 PNK366076" autocomplete="off">
+                    <input id="returnTrendSeriesSearch" type="search" placeholder="搜索款号" autocomplete="off">
                   </label>
                   <div class="return-trend-series-options" id="returnTrendSeriesOptions"></div>
                 </div>
@@ -168,7 +169,7 @@
             </div>
           </div>
         </div>
-        <div class="table-scroll">
+        <div class="table-scroll" tabindex="0" role="region" aria-labelledby="returnOverviewTitle">
           <table class="return-table">
             <thead><tr><th>商品与维度</th><th class="num">本月退款率</th><th class="num">预估退款率</th><th class="num" id="returnTotalRateHeader">款号累计总退款率</th><th>风险</th><th class="num">申请件数</th><th class="num">已退款</th><th class="num">已取消</th><th class="num">处理中</th><th class="num">当月销量</th><th class="num">退款金额</th><th class="num">金额退款率</th></tr></thead>
             <tbody id="returnOverviewBody"></tbody>
@@ -184,7 +185,7 @@
             <input class="search-input" id="returnDetailSearch" type="search" placeholder="模糊搜索订单号、RMA、SKU 或退款原因">
           </div>
         </div>
-        <div class="table-scroll">
+        <div class="table-scroll" tabindex="0" role="region" aria-labelledby="returnDetailTitle">
           <table class="return-table">
             <thead><tr><th>申请时间与订单</th><th>商品</th><th>原因</th><th class="num">数量</th><th class="num">订单金额</th><th class="num">退款金额</th><th>退款方式</th><th>承担方</th><th>渠道</th><th>其他字段</th></tr></thead>
             <tbody id="returnDetailBody"></tbody>
@@ -195,51 +196,29 @@
     </section>`;
 
   function install() {
-    if ($("#view-returns")) return;
-    const salesButton = $('[data-view="sales"]');
-    if (!salesButton || !$(".content")) return;
-    salesButton.insertAdjacentHTML("afterend", `
-      <button class="nav-button" type="button" data-view="returns">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M8 7H4v-4"/><path d="M4 7a8 8 0 1 1-1 8"/><path d="M9 10h6M9 14h4"/></svg>
-        <span>退款率分析</span>
-      </button>`);
-    $(".content").insertAdjacentHTML("beforeend", pageHtml);
-
-    const returnButton = $('[data-view="returns"]');
-    returnButton.addEventListener("click", activateReturns);
-    $$(".nav-button:not([data-view='returns'])").forEach((button) => {
-      button.addEventListener("click", () => document.body.classList.remove("returns-active"));
-    });
+    const content = $(".content");
+    if (!content || $("#view-returns")) return;
+    content.insertAdjacentHTML("beforeend", pageHtml);
     bindControls();
-    if (location.hash === "#returns") activateReturns();
-  }
-
-  function activateReturns() {
-    document.body.classList.add("returns-active");
-    history.replaceState(null, "", "#returns");
-    $$(".nav-button").forEach((button) => button.classList.toggle("active", button.dataset.view === "returns"));
-    $$(".view").forEach((view) => view.classList.toggle("active", view.id === "view-returns"));
-    $("#pageTitle").textContent = "退款率分析";
-    const periodSwitch = $("#periodSwitch");
-    if (periodSwitch) periodSwitch.hidden = true;
-    syncPageMeta();
-    document.body.classList.remove("sidebar-open");
-    $("#menuButton")?.setAttribute("aria-expanded", "false");
-    window.scrollTo({ top: 0, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
-    if (!state.data && !state.loading) loadReturns();
+    if (window.workbenchBridge?.getActiveView() === "returns") {
+      window.workbenchBridge.switchView("returns", { preserveHistory: true });
+    }
   }
 
   window.returnsView = {
-    load: (force = false) => {
+    load: (force = false, parentSku = null) => {
+      if (!$("#view-returns")) return false;
       if (force) state.data = null;
+      if (parentSku) {
+        if (state.data && !state.loading) selectParent(parentSku, true);
+        else pendingParentSku = parentSku;
+      }
       if (!state.data && !state.loading) loadReturns(state.selectedMonth);
+      syncPageMeta();
+      return true;
     },
     openParent: (parentSku) => {
-      activateReturns();
-      if (parentSku) {
-        state.selectedParentSku = parentSku;
-        if (state.data) selectParent(parentSku, true);
-      }
+      window.workbenchBridge?.switchView("returns", { returnParentSku: parentSku });
     }
   };
 
@@ -328,7 +307,7 @@
   }
 
   async function loadReturns(month) {
-    if (state.loading) return;
+    if (state.loading || !$("#view-returns")) return;
     state.loading = true;
     $("#returnStatusHeadline").textContent = "正在读取退款数据";
     $("#returnStatusDetail").textContent = "正在关联订单销量、Item ID、SKU、款号、颜色和尺码。";
@@ -339,12 +318,19 @@
       if (!response.ok || !payload.success) throw new Error(payload.message || `HTTP ${response.status}`);
       state.data = payload.data;
       state.selectedMonth = payload.data.meta.selectedMonth;
-      ensureSelectedParent();
+      if (pendingParentSku) {
+        applyParentScope(pendingParentSku, true);
+        pendingParentSku = null;
+      }
       render();
     } catch (error) {
       $("#returnStatusHeadline").textContent = "退款数据读取失败";
       $("#returnStatusDetail").textContent = error.message;
-      $("#returnMetricGrid").innerHTML = "";
+      if (window.workbenchReactUI?.updateReturnMetrics) {
+        window.workbenchReactUI.updateReturnMetrics([]);
+      } else {
+        $("#returnMetricGrid").innerHTML = "";
+      }
       $("#returnTrendChart").innerHTML = `<div class="empty-state"><strong>无法读取退款数据</strong>${escapeHtml(error.message)}</div>`;
     } finally {
       state.loading = false;
@@ -360,7 +346,11 @@
       $("#returnStatusDetail").textContent = "可在数据导入页面扫描 source/Return_Orders，或直接上传月度退款报表。";
       $("#returnDateRange").textContent = "";
       renderAccountSummary();
-      $("#returnMetricGrid").innerHTML = "";
+      if (window.workbenchReactUI?.updateReturnMetrics) {
+        window.workbenchReactUI.updateReturnMetrics([]);
+      } else {
+        $("#returnMetricGrid").innerHTML = "";
+      }
       $("#returnTrendChart").innerHTML = `<div class="empty-state"><strong>等待退款报表</strong>上传后，这里会显示月度退款率与款色码下钻。</div>`;
       renderTrendSeriesControl();
       $("#returnReasonList").innerHTML = "";
@@ -382,13 +372,24 @@
     $("#returnDateRange").textContent = `${meta.startDate} 至 ${meta.endDate}`;
     syncPageMeta();
     renderAccountSummary(accountSummary);
-    $("#returnMetricGrid").innerHTML = [
-      metric("已完成退款率", currentRefundRate(summary), `${integer(summary.completedUnits)} 件已完成`, "alert"),
-      metric("已退款金额", money(summary.refundAmount), `金额退款率 ${number(summary.salesRevenue) > 0 ? percent(summary.refundAmountRate) : "缺少分母"}`, "cost"),
-      metric("处理中", `${integer(summary.pendingUnits)} 件`, `已取消 ${integer(summary.cancelledUnits)} 件`, ""),
-      metric("卖家承担", money(summary.sellerAmount), `沃尔玛承担 ${money(summary.walmartAmount)}`, "cost"),
-      metric("受影响范围", `${integer(summary.affectedParents)} 款`, `${integer(summary.affectedSkus)} 个已映射 SKU`, ""),
-    ].join("");
+    const returnMetrics = [
+      { key: "completed-rate", label: "已完成退款率", value: currentRefundRate(summary), note: `${integer(summary.completedUnits)} 件已完成`, tone: "alert" },
+      { key: "refund-amount", label: "已退款金额", value: money(summary.refundAmount), note: `金额退款率 ${number(summary.salesRevenue) > 0 ? percent(summary.refundAmountRate) : "缺少分母"}`, tone: "default" },
+      { key: "pending", label: "处理中", value: `${integer(summary.pendingUnits)} 件`, note: `已取消 ${integer(summary.cancelledUnits)} 件`, tone: "default" },
+      { key: "seller-amount", label: "卖家承担", value: money(summary.sellerAmount), note: `沃尔玛承担 ${money(summary.walmartAmount)}`, tone: "default" },
+      { key: "affected", label: "受影响范围", value: `${integer(summary.affectedParents)} 款`, note: `${integer(summary.affectedSkus)} 个已映射 SKU`, tone: "focus" },
+    ];
+    if (window.workbenchReactUI?.updateReturnMetrics) {
+      window.workbenchReactUI.updateReturnMetrics(returnMetrics);
+    } else {
+      $("#returnMetricGrid").innerHTML = [
+        metric("已完成退款率", currentRefundRate(summary), `${integer(summary.completedUnits)} 件已完成`, "alert"),
+        metric("已退款金额", money(summary.refundAmount), `金额退款率 ${number(summary.salesRevenue) > 0 ? percent(summary.refundAmountRate) : "缺少分母"}`, "cost"),
+        metric("处理中", `${integer(summary.pendingUnits)} 件`, `已取消 ${integer(summary.cancelledUnits)} 件`, ""),
+        metric("卖家承担", money(summary.sellerAmount), `沃尔玛承担 ${money(summary.walmartAmount)}`, "cost"),
+        metric("受影响范围", `${integer(summary.affectedParents)} 款`, `${integer(summary.affectedSkus)} 个已映射 SKU`, ""),
+      ].join("");
+    }
     renderTrendSeriesControl();
     renderTrend();
     renderBreakdown(state.data.reasons, "#returnReasonList");
@@ -599,15 +600,19 @@
     renderDetails();
   }
 
-  function selectParent(parentSku, drillToSku) {
-    if (!parentRows().some((row) => row.parentSku === parentSku)) return;
+  function applyParentScope(parentSku, drillToSku) {
+    if (!parentRows().some((row) => row.parentSku === parentSku)) return false;
     state.selectedParentSku = parentSku;
     state.selectedColor = null;
     state.selectedSize = null;
     state.overviewPage = 0;
     state.detailPage = 0;
     if (drillToSku) state.group = "sku";
-    renderScopedAnalysis();
+    return true;
+  }
+
+  function selectParent(parentSku, drillToSku) {
+    if (applyParentScope(parentSku, drillToSku)) renderScopedAnalysis();
   }
 
   function selectDimension(key, label) {
@@ -1093,27 +1098,15 @@
     $("#returnDetailNext").disabled = state.detailPage >= pages - 1;
   }
 
-  function waitForShell(attempt = 0) {
-    const shellReady = $("#sidebarSourceTime")?.textContent;
-    if (shellReady || attempt >= 100) {
-      install();
-      return;
-    }
-    setTimeout(() => waitForShell(attempt + 1), 50);
-  }
-
   const pageMetaObserver = new MutationObserver(syncPageMeta);
-  const observePageMeta = () => {
+  const initialize = () => {
     if ($("#pageMeta")) pageMetaObserver.observe($("#pageMeta"), { childList: true, subtree: true, characterData: true });
+    install();
   };
 
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", () => {
-      observePageMeta();
-      waitForShell();
-    }, { once: true });
+    document.addEventListener("DOMContentLoaded", initialize, { once: true });
   } else {
-    observePageMeta();
-    waitForShell();
+    initialize();
   }
 })();

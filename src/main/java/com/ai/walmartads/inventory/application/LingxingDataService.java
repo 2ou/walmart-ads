@@ -1,5 +1,6 @@
 package com.ai.walmartads.inventory.application;
 
+import com.ai.walmartads.workspace.WorkspaceOwnershipService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
@@ -41,10 +42,13 @@ public class LingxingDataService {
 
     private final NamedParameterJdbcTemplate jdbc;
     private final ObjectMapper objectMapper;
+    private final WorkspaceOwnershipService ownership;
 
-    public LingxingDataService(NamedParameterJdbcTemplate jdbc, ObjectMapper objectMapper) {
+    public LingxingDataService(NamedParameterJdbcTemplate jdbc, ObjectMapper objectMapper,
+                               WorkspaceOwnershipService ownership) {
         this.jdbc = jdbc;
         this.objectMapper = objectMapper;
+        this.ownership = ownership;
     }
 
     // ---------------------------------------------------------------- 国内仓
@@ -200,6 +204,7 @@ public class LingxingDataService {
 
     private Map<String, ShipmentBuilder> groupByShipment(List<Map<String, Object>> raw, Set<String> skus) {
         Map<String, ProductInfo> products = loadProducts(skus);
+        List<String> prefixes = skus.isEmpty() ? List.of() : ownership.currentPrefixes();
         Map<String, ShipmentBuilder> builders = new LinkedHashMap<>();
         for (Map<String, Object> row : raw) {
             String sku = text(row, "sku");
@@ -209,7 +214,7 @@ public class LingxingDataService {
             String parent = firstNonBlank(
                     text(row, "parent_sku"),
                     info == null ? null : info.parentSku(),
-                    parseParent(sku),
+                    parseParent(sku, prefixes),
                     UNMAPPED);
             JsonNode payload = readJson(text(row, "raw_payload"));
             double declared = payloadNumber(payload, "申报量");
@@ -237,7 +242,7 @@ public class LingxingDataService {
     // ---------------------------------------------------------------- 同步日志
 
     /**
-     * 仅两条插件同步链路：国内仓库存（{@code wm_ads_lx_domestic_inventory_sync_log}）与
+     * 仅两条库存同步链路：国内仓库存（{@code wm_ads_lx_domestic_inventory_sync_log}）与
      * WFS 货件（{@code wm_ads_lx_wfs_shipment_sync_log}）。其余订单 / 评论 / 广告 / Listing / 供应链
      * 属于定时任务，不在此模块呈现。
      */
@@ -260,9 +265,12 @@ public class LingxingDataService {
                        imported_shipment_count as record_count,
                        concat('货件 ', coalesce(source_shipment_count, 0),
                               ' · 明细行 ', coalesce(imported_row_count, 0),
-                              ' · 申收差异 ', coalesce(transit_units, 0)) as detail,
+                              case when source_url = 'lingxing://mcp/wfs_cargo_list'
+                                   then ' · 在途量 ' else ' · 申收差异 ' end,
+                              coalesce(transit_units, 0)) as detail,
                        coalesce(message, '') as message,
-                       '项目内置连接器' as source,
+                       case when source_url = 'lingxing://mcp/wfs_cargo_list'
+                            then '领星 MCP' else '项目内置连接器' end as source,
                        null as triggered_by
                   from wm_ads_lx_wfs_shipment_sync_log
                  order by id desc limit 30
@@ -314,6 +322,7 @@ public class LingxingDataService {
             if (sku != null && !sku.isBlank()) skus.add(sku);
         }
         Map<String, ProductInfo> products = loadProducts(skus);
+        List<String> prefixes = skus.isEmpty() ? List.of() : ownership.currentPrefixes();
 
         for (Map<String, Object> row : rows) {
             String sku = text(row, "sku");
@@ -325,7 +334,7 @@ public class LingxingDataService {
             String parent = firstNonBlank(
                     info == null ? null : info.parentSku(),
                     text(row, "parent_sku"),
-                    parseParent(sku),
+                    parseParent(sku, prefixes),
                     UNMAPPED);
             String itemId = firstNonBlank(text(row, "item_id"),
                     info == null ? null : info.itemId());
@@ -382,10 +391,11 @@ public class LingxingDataService {
         return result;
     }
 
-    private static String parseParent(String sku) {
+    private static String parseParent(String sku, List<String> prefixes) {
         int dash = sku.indexOf('-');
         String head = dash > 0 ? sku.substring(0, dash) : sku;
-        return head.toUpperCase(Locale.ROOT).startsWith("PNK") ? head : null;
+        String normalized = head.toUpperCase(Locale.ROOT);
+        return prefixes.stream().anyMatch(normalized::startsWith) ? head : null;
     }
 
     private static List<StyleNode> sorted(Map<String, StyleAccumulator> styles) {
@@ -415,7 +425,8 @@ public class LingxingDataService {
 
     private static String shipmentSourceLabel(String source) {
         return switch (source) {
-            case "PROJECT_CONNECTOR" -> "工作台自动同步";
+            case LingxingWfsShipmentService.MCP_SOURCE_TYPE -> "领星 MCP 自动同步";
+            case "PROJECT_CONNECTOR" -> "浏览器旧快照";
             case "FILE_UPLOAD" -> "文件上传";
             default -> "无数据";
         };

@@ -667,7 +667,7 @@ public class ProductCatalogService {
                        product.listing_status,
                        product.store,
                        product.delivery_fee,
-                       pa.purchase_cost,
+                       coalesce(pa.purchase_cost, product.purchase_cost) as purchase_cost,
                        pa.first_leg,
                        pa.sales_qty,
                        pa.ad_cost,
@@ -866,11 +866,7 @@ public class ProductCatalogService {
      * </ol>
      * 任一不满足即返回 {@code null}，由前端显示「—」。
      *
-     * <p>为什么必须收敛：实测该字段在导入环节被污染 —— 多款存在「划线价 = 售价」甚至
-     * 「划线价 &lt; 售价」的行（PNK363127 29/31、PNK366066 51/52、PNK366078 12/12），
-     * 且个别链接的变体值分裂成多档（PNK369006 众数仅占 38%）。这些都不构成真实划线价，
-     * 直接展示会误导定价判断。此前的实现是「抓代表变体、没有就取第一个非空」，
-     * 从不校验链接是否统一，脏值排在前面就会直接显示出来。
+     * <p>导入值可能等于或低于售价，也可能因变体而异。链接缺少统一的有效划线价时，展示层返回空值。
      *
      * <p>只在展示层收敛：DB 原始值原样保留，口径要调整无需重新同步。
      * 变体级明细（{@link #toVariant}）仍照显真值，便于定位哪些变体是脏的。

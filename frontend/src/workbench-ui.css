@@ -1,0 +1,1139 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /* Supply the border baseline HeroUI expects without enabling global preflight. */
+  :where(.wb-react-root button, .wb-detail-drawer button) {
+    border: 0 solid currentColor;
+  }
+}
+
+.wb-react-root {
+  color: var(--wb-ink, #1d1d1f);
+  min-width: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "PingFang SC", "Helvetica Neue", system-ui, sans-serif;
+}
+
+:where(.wb-react-root, .wb-detail-drawer) .wb-mono {
+  font-family: "SF Mono", "SFMono-Regular", "Fira Code", "Cascadia Mono", Menlo, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+:where(.wb-react-root, .wb-detail-drawer) .wb-num {
+  font-family: "SF Mono", "SFMono-Regular", "Fira Code", "Cascadia Mono", Menlo, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Header card (HeroUI Card wrapper + macOS clean surface) */
+:where(.wb-react-root) .wb-page-header-card {
+  margin-bottom: 16px;
+  border: 1px solid var(--wb-hairline, rgba(0, 0, 0, .06));
+  border-radius: var(--wb-radius, 16px);
+  background: var(--wb-surface, #fff);
+  box-shadow: var(--wb-surface-shadow, 0 2px 12px rgba(0, 0, 0, .04));
+}
+
+:where(.wb-react-root) .wb-page-header {
+  display: flex;
+  flex-direction: row !important;
+  align-items: center;
+  justify-content: space-between;
+  gap: 22px;
+  padding: 18px 22px;
+}
+
+:where(.wb-react-root) .wb-page-header-copy {
+  flex: 1 1 auto;
+  min-width: 0;
+  align-self: center;
+}
+
+:where(.wb-react-root) .wb-page-title {
+  margin: 0;
+  color: #1d1d1f;
+  font-size: 21px;
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+}
+
+:where(.wb-react-root) .wb-page-desc {
+  margin: 6px 0 0;
+  color: #515154;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+:where(.wb-react-root) .wb-page-extra {
+  width: min(410px, 38vw);
+  flex: 0 0 auto;
+  align-self: center;
+}
+
+/* Allow host metric containers with legacy grid classes to expand full width when React mounts inside */
+.wb-react-root:has(> [aria-label]) {
+  display: block;
+}
+
+/* Metric cards */
+:where(.wb-react-root) .wb-metric-grid {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+:where(.wb-react-root) .wb-metric-card {
+  min-width: 0;
+  min-height: 104px;
+  border: 1px solid var(--wb-hairline, rgba(0, 0, 0, .06));
+  border-radius: var(--wb-radius, 16px);
+  background: var(--wb-surface, #fff);
+  box-shadow: var(--wb-surface-shadow, 0 2px 12px rgba(0, 0, 0, .04));
+}
+
+:where(.wb-react-root) .wb-metric-card.is-accent {
+  border-top: 2px solid var(--wb-accent, #0071e3);
+}
+
+:where(.wb-react-root) .wb-metric-card.is-clickable {
+  cursor: pointer;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
+}
+
+:where(.wb-react-root) .wb-metric-card.is-clickable:hover:not(.is-disabled) {
+  border-color: rgba(0, 113, 227, 0.36);
+  box-shadow: 0 6px 18px rgba(0, 113, 227, 0.08);
+  transform: translateY(-1px);
+}
+
+:where(.wb-react-root) .wb-metric-card.is-clickable:focus-visible {
+  outline: 2px solid #0071e3;
+  outline-offset: 2px;
+}
+
+:where(.wb-react-root) .wb-metric-card.is-disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+:where(.wb-react-root) .wb-metric-action {
+  display: inline-block;
+  margin-top: 6px;
+  color: #0071e3;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+:where(.wb-react-root) .wb-metric-label {
+  display: block;
+  color: #626267;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+:where(.wb-react-root) .wb-metric-value {
+  display: block;
+  margin-top: 10px;
+  overflow: hidden;
+  color: #1d1d1f;
+  font: 680 clamp(1.125rem, .99rem + .65vw, 1.55rem)/1.2 var(--font-sans, system-ui, sans-serif);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.03em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:where(.wb-react-root) .wb-metric-note {
+  display: block;
+  margin-top: 8px;
+  color: #515154;
+  font-size: 11px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+:where(.wb-react-root) .wb-dashboard-metric-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px 8px;
+  flex-wrap: wrap;
+}
+
+/* White card panels */
+:where(.wb-react-root) .wb-panel {
+  margin-bottom: 14px;
+  border: 1px solid var(--wb-hairline, rgba(0, 0, 0, .06));
+  border-radius: var(--wb-radius, 16px);
+  background: var(--wb-surface, #fff);
+  box-shadow: var(--wb-surface-shadow, 0 2px 12px rgba(0, 0, 0, .04));
+  overflow: hidden;
+}
+
+:where(.wb-react-root) .wb-panel-header {
+  display: flex;
+  flex-direction: row !important;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 14px;
+  padding: 14px 18px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+:where(.wb-react-root) .wb-panel-title {
+  margin: 0;
+  color: #1d1d1f;
+  font-size: 14px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+:where(.wb-react-root) .wb-panel-subtitle {
+  margin: 3px 0 0;
+  color: #626267;
+  font-size: 11px;
+}
+
+:where(.wb-react-root) .wb-panel-subtitle:empty {
+  margin: 0;
+}
+
+:where(.wb-react-root) .wb-table-panel-body {
+  padding: 0 12px 12px;
+}
+
+:where(.wb-react-root) .wb-table-panel-body > .ant-alert {
+  margin-top: 12px;
+}
+
+:where(.wb-react-root) .wb-table-panel .ant-table-content:focus-visible {
+  outline: 2px solid #0071e3;
+  outline-offset: -2px;
+}
+
+:where(.wb-react-root) .wb-filter-body {
+  padding: 14px 18px 16px;
+}
+
+:where(.wb-react-root) .wb-filter-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr));
+  align-items: end;
+  gap: 10px;
+}
+
+:where(.wb-react-root) .wb-filter-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+:where(.wb-react-root) .wb-filter-field-label {
+  color: #626267;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+:where(.wb-react-root) .wb-filter-field-wide {
+  grid-column: span 2;
+}
+
+/* Dropzone */
+:where(.wb-react-root) .wb-dropzone {
+  display: grid;
+  width: 100%;
+  min-height: 84px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1.5px dashed color-mix(in srgb, var(--wb-accent, #0071e3) 34%, transparent);
+  border-radius: 14px;
+  color: #1d1d1f;
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--wb-accent, #0071e3) 5%, transparent),
+    rgba(255, 255, 255, 0.96)
+  );
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.75);
+  text-align: left;
+  white-space: normal;
+  cursor: pointer;
+}
+
+:where(.wb-react-root) .wb-dropzone:hover:not(:disabled) {
+  border-color: var(--wb-accent, #0071e3);
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--wb-accent, #0071e3) 9%, #ffffff),
+    #ffffff
+  );
+}
+
+:where(.wb-react-root) .wb-dropzone.is-dragging {
+  border-color: var(--wb-accent, #0071e3);
+  border-style: solid;
+  background: color-mix(in srgb, var(--wb-accent, #0071e3) 12%, #ffffff);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--wb-accent, #0071e3) 14%, transparent), 0 10px 26px rgba(0, 0, 0, 0.08);
+}
+
+:where(.wb-react-root) .wb-dropzone:disabled {
+  cursor: wait;
+  opacity: 0.74;
+}
+
+:where(.wb-react-root) .wb-dropzone-icon {
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border-radius: 11px;
+  color: var(--wb-accent, #0071e3);
+  background: #ffffff;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+  font-size: 18px;
+}
+
+:where(.wb-react-root) .wb-dropzone-copy {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+:where(.wb-react-root) .wb-dropzone-copy strong {
+  color: #1d1d1f;
+  font-size: 12px;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+:where(.wb-react-root) .wb-dropzone-copy small {
+  color: #626267;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+:where(.wb-react-root) .wb-import-feedback {
+  margin-bottom: 14px;
+}
+
+:where(.wb-react-root) .wb-import-errors {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  max-height: 120px;
+  overflow: auto;
+  font-size: 12px;
+}
+
+/* Primary/secondary two-line cell inside tables */
+:where(.wb-react-root) .wb-cell-primary {
+  display: block;
+  max-width: 260px;
+  overflow: hidden;
+  color: #1d1d1f;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:where(.wb-react-root) .wb-cell-secondary {
+  display: block;
+  max-width: 260px;
+  margin-top: 2px;
+  overflow: hidden;
+  color: #626267;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:where(.wb-react-root) .wb-sku-link-btn {
+  padding: 0;
+  min-height: 24px;
+  border: 0;
+  background: transparent;
+  color: #0071e3;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+:where(.wb-react-root) .wb-sku-link-btn:hover {
+  text-decoration: underline;
+}
+
+:where(.wb-react-root) :is(.wb-dropzone, .wb-sku-link-btn):focus-visible {
+  outline: 2px solid #0071e3;
+  outline-offset: 2px;
+}
+
+/* Neutralize legacy app.css bare table/cell rules & give AntD tables a clean macOS hairline surface */
+.wb-react-root .ant-table-cell,
+.wb-detail-drawer .ant-table-cell {
+  white-space: normal;
+  vertical-align: middle;
+}
+
+.wb-react-root .ant-table-thead > tr > th {
+  background: #f5f5f7 !important;
+  color: #626267 !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06) !important;
+}
+
+.wb-react-root .ant-table-thead > tr > th::before {
+  display: none !important;
+}
+
+.wb-react-root .ant-descriptions-view td,
+.wb-react-root .ant-descriptions-view th,
+.wb-detail-drawer .ant-descriptions-view td,
+.wb-detail-drawer .ant-descriptions-view th {
+  white-space: normal;
+  word-break: break-word;
+}
+
+:where(.wb-react-root, .wb-detail-drawer) .wb-detail-section-title {
+  margin: 16px 0 8px;
+  color: #1d1d1f;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+:where(.wb-react-root, .wb-detail-drawer) .wb-detail-section-title:first-child {
+  margin-top: 0;
+}
+
+/* Sync status banner (HeroUI Card wrapper) */
+:where(.wb-react-root) .wb-sync-banner {
+  margin-bottom: 14px;
+  border-radius: 14px;
+  border-color: rgba(0, 113, 227, 0.16);
+  background: rgba(0, 113, 227, 0.06);
+}
+
+:where(.wb-react-root) .wb-sync-banner-body {
+  display: grid !important;
+  flex-direction: row !important;
+  min-height: 60px;
+  align-items: center;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 12px;
+  padding: 10px 16px;
+}
+
+:where(.wb-react-root) .wb-sync-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #0071e3;
+  box-shadow: 0 0 0 4px rgba(0, 113, 227, 0.14);
+}
+
+:where(.wb-react-root) .wb-sync-banner.is-success {
+  border-color: rgba(36, 138, 61, 0.18);
+  background: rgba(36, 138, 61, 0.06);
+}
+
+:where(.wb-react-root) .wb-sync-banner.is-success .wb-sync-dot {
+  background: #248a3d;
+  box-shadow: 0 0 0 4px rgba(36, 138, 61, 0.14);
+}
+
+:where(.wb-react-root) .wb-sync-banner.is-warning {
+  border-color: rgba(255, 149, 0, 0.24);
+  background: rgba(255, 149, 0, 0.08);
+}
+
+:where(.wb-react-root) .wb-sync-banner.is-warning .wb-sync-dot {
+  background: #ff9500;
+  box-shadow: 0 0 0 4px rgba(255, 149, 0, 0.15);
+}
+
+:where(.wb-react-root) .wb-sync-banner.is-danger {
+  border-color: rgba(255, 59, 48, 0.22);
+  background: rgba(255, 59, 48, 0.08);
+}
+
+:where(.wb-react-root) .wb-sync-banner.is-danger .wb-sync-dot {
+  background: #ff3b30;
+  box-shadow: 0 0 0 4px rgba(255, 59, 48, 0.14);
+}
+
+:where(.wb-react-root) .wb-sync-copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+:where(.wb-react-root) .wb-sync-headline {
+  color: #1d1d1f;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+:where(.wb-react-root) .wb-sync-detail {
+  color: #515154;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+:where(.wb-react-root) .wb-sync-meta {
+  display: grid;
+  min-width: 104px;
+  justify-items: end;
+  gap: 3px;
+  padding-left: 16px;
+  border-left: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+:where(.wb-react-root) .wb-sync-meta span {
+  color: #626267;
+  font-size: 10px;
+}
+
+:where(.wb-react-root) .wb-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 12px 18px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+  background: #fafafa;
+}
+
+:where(.wb-react-root) .wb-dash-grid-2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+:where(.wb-react-root) .wb-form-grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px 14px;
+}
+
+@media (max-width: 1180px) {
+  :where(.wb-react-root) .wb-metric-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (max-width: 900px) {
+  :where(.wb-react-root) .wb-page-header {
+    flex-direction: column !important;
+    align-items: stretch;
+    gap: 14px;
+  }
+
+  :where(.wb-react-root) .wb-page-extra {
+    width: 100%;
+  }
+
+  :where(.wb-react-root) .wb-filter-field-wide {
+    grid-column: auto;
+  }
+
+  :where(.wb-react-root) .wb-dash-grid-2 {
+    grid-template-columns: 1fr;
+  }
+
+  :where(.wb-react-root) .wb-form-grid-3 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  :where(.wb-react-root) .wb-sync-banner-body {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  :where(.wb-react-root) .wb-sync-meta {
+    grid-column: 2;
+    justify-items: start;
+    padding-left: 0;
+    border-left: 0;
+  }
+}
+
+@media (max-width: 640px) {
+  :where(.wb-react-root) .wb-form-grid-3 {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+@media (max-width: 359px) {
+  :where(.wb-react-root) .wb-metric-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) and (hover: hover) {
+  :where(.wb-react-root) .wb-dropzone {
+    transition: border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
+  }
+
+  :where(.wb-react-root) .wb-dropzone:hover:not(:disabled),
+  :where(.wb-react-root) .wb-dropzone.is-dragging {
+    transform: translateY(-1px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workbench .view :is(.wb-dropzone, .wb-rep-style-card, .wb-agent-conv-item, .wb-agent-prompt-card) {
+    transition: none;
+    transform: none;
+  }
+}
+
+/* ================= Reputation View (.wb-rep-*) ================= */
+:where(.wb-react-root) .wb-rep-header-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+:where(.wb-react-root) .wb-rep-header-chips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+:where(.wb-react-root) .wb-rep-insight-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+:where(.wb-react-root) .wb-rep-trend-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+:where(.wb-react-root) .wb-rep-positive-list {
+  display: grid;
+  gap: 8px;
+}
+
+:where(.wb-react-root) .wb-rep-positive-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  border-radius: 11px;
+  background: #fafafa;
+}
+
+:where(.wb-react-root) .wb-rep-positive-rank {
+  width: 22px;
+  height: 22px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 7px;
+  background: rgba(36, 138, 61, 0.12);
+  color: #248a3d;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+:where(.wb-react-root) .wb-rep-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(225px, 1fr));
+  gap: 10px;
+}
+
+:where(.wb-react-root) .wb-rep-style-card {
+  display: grid;
+  gap: 8px;
+  padding: 13px 14px;
+  border: 1px solid rgba(0, 0, 0, 0.07);
+  border-radius: 14px;
+  background: #ffffff;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+:where(.wb-react-root) .wb-rep-style-card:hover {
+  border-color: rgba(0, 113, 227, 0.4);
+  box-shadow: 0 6px 18px rgba(0, 113, 227, 0.08);
+  transform: translateY(-1px);
+}
+
+:where(.wb-react-root) .wb-rep-style-card:focus-visible {
+  outline: 2px solid #0071e3;
+  outline-offset: 2px;
+}
+
+:where(.wb-react-root) .wb-rep-style-card.is-empty {
+  background: #fafafa;
+}
+
+:where(.wb-react-root) .wb-rep-style-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+:where(.wb-react-root) .wb-rep-style-code {
+  font-size: 13px;
+  font-weight: 700;
+  color: #1d1d1f;
+}
+
+:where(.wb-react-root) .wb-rep-style-score {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+:where(.wb-react-root) .wb-rep-style-score strong {
+  font-size: 20px;
+  font-weight: 700;
+  color: #1d1d1f;
+  line-height: 1.1;
+}
+
+:where(.wb-react-root) .wb-rep-style-plat {
+  margin-left: auto;
+  font-size: 11px;
+  color: #626267;
+}
+
+:where(.wb-react-root) .wb-rep-star-track {
+  display: flex;
+  height: 6px;
+  gap: 1.5px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: #ececef;
+}
+
+:where(.wb-react-root) .wb-rep-star-seg.is-s5 { background: #248a3d; }
+:where(.wb-react-root) .wb-rep-star-seg.is-s4 { background: #52c41a; }
+:where(.wb-react-root) .wb-rep-star-seg.is-s3 { background: #ff9500; }
+:where(.wb-react-root) .wb-rep-star-seg.is-s2 { background: #ff6b35; }
+:where(.wb-react-root) .wb-rep-star-seg.is-s1 { background: #ff3b30; }
+:where(.wb-react-root) .wb-rep-star-seg.is-blank { flex: 1; background: #e5e5ea; }
+
+:where(.wb-react-root) .wb-rep-style-foot {
+  display: grid;
+  gap: 2px;
+  font-size: 11px;
+  color: #626267;
+}
+
+:where(.wb-react-root) .wb-rep-pain-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+:where(.wb-react-root, .wb-detail-drawer) .wb-rep-highlight {
+  padding: 0 3px;
+  border-radius: 4px;
+  background: rgba(255, 149, 0, 0.22);
+  color: #1d1d1f;
+  font-weight: 600;
+}
+
+:where(.wb-detail-drawer) .wb-rep-drawer-product {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: 12px;
+  background: #fafafa;
+}
+
+:where(.wb-detail-drawer) .wb-rep-drawer-thumb {
+  width: 52px;
+  height: 52px;
+  border-radius: 10px;
+  object-fit: cover;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  flex: none;
+}
+
+:where(.wb-detail-drawer) .wb-rep-drawer-neg-item {
+  padding: 11px 13px;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: 12px;
+  background: #ffffff;
+}
+
+:where(.wb-detail-drawer) .wb-rep-drawer-neg-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+/* ================= Advertising Agent View (.wb-agent-*) ================= */
+:where(.wb-react-root) .wb-agent-shell {
+  display: grid;
+  grid-template-columns: 272px minmax(0, 1fr);
+  gap: 14px;
+  min-height: calc(100vh - 116px);
+  align-items: stretch;
+}
+
+:where(.wb-react-root) .wb-agent-sidebar {
+  min-width: 0;
+  border-radius: 16px;
+}
+
+:where(.wb-react-root) .wb-agent-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 2px 6px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+:where(.wb-react-root) .wb-agent-brand-mark {
+  width: 34px;
+  height: 34px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: rgba(0, 113, 227, 0.12);
+  color: #0071e3;
+  font-size: 16px;
+}
+
+:where(.wb-react-root) .wb-agent-conv-list {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  max-height: calc(100vh - 300px);
+  display: grid;
+  gap: 6px;
+  align-content: start;
+}
+
+:where(.wb-react-root) .wb-agent-conv-item {
+  width: 100%;
+  padding: 9px 11px;
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  border-radius: 11px;
+  background: #fafafa;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.14s ease, border-color 0.14s ease;
+}
+
+:where(.wb-react-root) .wb-agent-conv-item:hover {
+  background: #f2f6fc;
+  border-color: rgba(0, 113, 227, 0.2);
+}
+
+:where(.wb-react-root) .wb-agent-conv-item.is-active {
+  background: #e8f2ff;
+  border-color: rgba(0, 113, 227, 0.35);
+}
+
+:where(.wb-react-root) .wb-agent-conv-title {
+  font-size: 12px;
+  font-weight: 650;
+  color: #1d1d1f;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:where(.wb-react-root) .wb-agent-conv-preview {
+  margin-top: 3px;
+  font-size: 11px;
+  color: #626267;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:where(.wb-react-root) .wb-agent-conv-meta {
+  margin-top: 4px;
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: #86868b;
+}
+
+:where(.wb-react-root) .wb-agent-sidebar-foot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(0, 0, 0, 0.05);
+  color: #626267;
+  font-size: 11px;
+}
+
+:where(.wb-react-root) .wb-agent-main {
+  min-width: 0;
+  border-radius: 16px;
+}
+
+:where(.wb-react-root) .wb-agent-main-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 18px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+:where(.wb-react-root) .wb-agent-scope-bar {
+  padding: 2px 10px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+  background: #fafafa;
+}
+
+:where(.wb-react-root) .wb-agent-scope-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+  padding-bottom: 6px;
+}
+
+:where(.wb-react-root) .wb-agent-messages {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  max-height: calc(100vh - 340px);
+  min-height: 360px;
+  padding: 18px;
+  display: grid;
+  gap: 14px;
+  align-content: start;
+  background: #fbfbfd;
+}
+
+:where(.wb-react-root) .wb-agent-welcome {
+  display: grid;
+  justify-items: center;
+  text-align: center;
+  padding: 28px 16px;
+}
+
+:where(.wb-react-root) .wb-agent-welcome-icon {
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  background: rgba(0, 113, 227, 0.1);
+  color: #0071e3;
+  font-size: 22px;
+}
+
+:where(.wb-react-root) .wb-agent-prompt-grid {
+  margin-top: 20px;
+  width: min(680px, 100%);
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+:where(.wb-react-root) .wb-agent-prompt-card {
+  display: grid;
+  justify-items: start;
+  gap: 6px;
+  padding: 13px 14px;
+  border: 1px solid rgba(0, 0, 0, 0.07);
+  border-radius: 13px;
+  background: #ffffff;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+:where(.wb-react-root) .wb-agent-prompt-card:hover {
+  border-color: rgba(0, 113, 227, 0.4);
+  box-shadow: 0 6px 16px rgba(0, 113, 227, 0.08);
+  transform: translateY(-1px);
+}
+
+:where(.wb-react-root) .wb-agent-prompt-card strong {
+  font-size: 13px;
+  color: #1d1d1f;
+}
+
+:where(.wb-react-root) .wb-agent-msg {
+  display: flex;
+}
+
+:where(.wb-react-root) .wb-agent-msg.is-user {
+  justify-content: flex-end;
+}
+
+:where(.wb-react-root) .wb-agent-bubble-user {
+  max-width: min(640px, 86%);
+  padding: 11px 14px;
+  border-radius: 16px 16px 4px 16px;
+  background: #0071e3;
+  color: #ffffff;
+  font-size: 13px;
+  line-height: 1.5;
+  box-shadow: 0 4px 14px rgba(0, 113, 227, 0.18);
+}
+
+:where(.wb-react-root) .wb-agent-msg.is-user .wb-agent-msg-time {
+  color: rgba(255, 255, 255, 0.78);
+}
+
+:where(.wb-react-root) .wb-agent-bubble-assistant {
+  width: min(820px, 100%);
+  padding: 14px 16px;
+  border: 1px solid rgba(0, 0, 0, 0.07);
+  border-radius: 16px 16px 16px 4px;
+  background: #ffffff;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03);
+}
+
+:where(.wb-react-root) .wb-agent-msg-role {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+  font-size: 12px;
+  font-weight: 650;
+  color: #1d1d1f;
+}
+
+:where(.wb-react-root) .wb-agent-msg-time {
+  display: block;
+  margin-top: 4px;
+  font-size: 10px;
+  color: #86868b;
+}
+
+:where(.wb-react-root) .wb-agent-msg-role .wb-agent-msg-time {
+  margin-top: 0;
+  margin-left: auto;
+}
+
+:where(.wb-react-root) .wb-agent-step-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: #fafafa;
+}
+
+:where(.wb-react-root) .wb-agent-report-summary {
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  border-radius: 10px;
+  background: #f5f9ff;
+  border: 1px solid rgba(0, 113, 227, 0.15);
+  color: #1d1d1f;
+  font-size: 13px;
+  line-height: 1.55;
+  font-weight: 500;
+}
+
+:where(.wb-react-root) .wb-agent-section {
+  margin-top: 12px;
+}
+
+:where(.wb-react-root) .wb-agent-section-label {
+  margin-bottom: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #626267;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+:where(.wb-react-root) .wb-agent-finding-card,
+:where(.wb-react-root) .wb-agent-action-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: 11px;
+  background: #fafafa;
+}
+
+:where(.wb-react-root) .wb-agent-limitations {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #fff9eb;
+  font-size: 11px;
+  color: #515154;
+}
+
+:where(.wb-react-root) .wb-agent-limitations ul {
+  margin: 4px 0 0;
+  padding-left: 18px;
+}
+
+:where(.wb-react-root) .wb-agent-composer {
+  padding: 12px 16px;
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+  background: #ffffff;
+}
+
+:where(.wb-react-root) .wb-agent-composer-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+:where(.wb-react-root) .wb-agent-composer-foot {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+  font-size: 11px;
+  color: #86868b;
+}
+
+@media (max-width: 1000px) {
+  :where(.wb-react-root) .wb-rep-insight-grid,
+  :where(.wb-react-root) .wb-agent-shell {
+    grid-template-columns: 1fr;
+  }
+
+  :where(.wb-react-root) .wb-rep-header-actions {
+    align-items: flex-start;
+  }
+
+  :where(.wb-react-root) .wb-rep-header-chips {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 640px) {
+  :where(.wb-react-root) .wb-agent-prompt-grid {
+    grid-template-columns: 1fr;
+  }
+}

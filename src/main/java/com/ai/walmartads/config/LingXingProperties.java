@@ -1,5 +1,6 @@
 package com.ai.walmartads.config;
 
+import com.ai.walmartads.common.UsBusinessDate;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.util.StringUtils;
 
@@ -8,7 +9,7 @@ import java.util.List;
 
 /**
  * 领星 MCP 配置（沃尔玛在线商品每小时同步 + 广告三块同步的数据源）。
- * 密钥走外部 config/application.yml（已 gitignore，同 KIE key 模式）。
+ * 店铺连接配置由工作区持久化，部署属性可用于首次绑定。
  */
 @ConfigurationProperties(prefix = "walmart.ads.lingxing")
 public record LingXingProperties(
@@ -38,12 +39,6 @@ public record LingXingProperties(
         String commentReconcileCron
 ) {
 
-    /** 沃尔玛美国站 PINKSIR 店铺 ID（platform_v2_page_list 的 sids 入参）。 */
-    private static final String DEFAULT_STORE_ID = "110358320595211264";
-
-    /** 沃尔玛广告账号默认 ID（PINKSIR 沃尔玛广告主）。外部未配置时兜底。 */
-    private static final long DEFAULT_ADVERTISER_ID = 323561L;
-
     public boolean configured() {
         return enabled && StringUtils.hasText(apiKey);
     }
@@ -67,7 +62,7 @@ public record LingXingProperties(
     }
 
     public String resolvedStoreId() {
-        return StringUtils.hasText(storeId) ? storeId : DEFAULT_STORE_ID;
+        return StringUtils.hasText(storeId) ? storeId.strip() : null;
     }
 
     /**
@@ -84,12 +79,9 @@ public record LingXingProperties(
         return Math.min(orderWindowDays, 90);
     }
 
-    /** 广告账号 ID 列表；外部未配置时兜底单个默认账号。 */
+    /** 首次绑定时可预填部署环境显式提供的广告账号。 */
     public List<Long> resolvedAdvertiserIds() {
-        if (advertiserIds != null && !advertiserIds.isEmpty()) {
-            return advertiserIds;
-        }
-        return List.of(DEFAULT_ADVERTISER_ID);
+        return advertiserIds == null ? List.of() : List.copyOf(advertiserIds);
     }
 
     /** 广告同步滚动窗口；至少覆盖完整 14 天归因期并多回看两天。 */
@@ -99,7 +91,7 @@ public record LingXingProperties(
     }
 
     public LocalDate resolvedAdBackfillStart() {
-        return adBackfillStart == null ? LocalDate.of(2026, 7, 21) : adBackfillStart;
+        return adBackfillStart == null ? UsBusinessDate.usToday().minusDays(resolvedAdWindowDays() - 1L) : adBackfillStart;
     }
 
     /**
@@ -123,9 +115,9 @@ public record LingXingProperties(
         return Math.max(1, Math.min(commentWindowDays, 31));
     }
 
-    /** 评价首次回填起始日。PINKSIR Walmart 站评价最早见于 2024-11-04，留一年余量。 */
+    /** 首次回填的默认评价窗口可通过部署配置扩展。 */
     public LocalDate resolvedCommentBackfillStart() {
-        return commentBackfillStart == null ? LocalDate.of(2024, 1, 1) : commentBackfillStart;
+        return commentBackfillStart == null ? LocalDate.now().minusYears(5) : commentBackfillStart;
     }
 
     public String resolvedCommentReconcileCron() {

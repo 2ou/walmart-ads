@@ -1,52 +1,52 @@
     :root {
       color-scheme: light;
 
-      /* —— 品牌与语义色（浅色主题，唯一主题） —— */
-      --midnight-grid: #eef1f7;               /* 页面背景 · 冷灰蓝画布 */
+      /* —— Apple HIG 浅色系统色板 —— */
+      --midnight-grid: #f5f5f7;               /* 页面背景 · Apple Grouped Canvas */
       --navy-panel: #ffffff;                  /* 主卡片背景 */
-      --navy-raised: #f2f5fa;                 /* 悬停 / 二级区块 */
-      --frost-ink: #10203a;                   /* 主文本（对比度 ~15:1） */
-      --steel-copy: #4f6180;                  /* 次要说明文字（~6.4:1，达 AA） */
-      --slate-dim: #667994;                   /* 辅助标签 / 弱提示（~4.6:1，达 AA） */
-      --walmart-blue: #1668d6;                /* 唯一主交互强调色（~5.3:1） */
-      --spark-yellow: #a9710b;                /* 品牌辅助 / 成本提醒（~5.2:1，文本安全） */
-      --production-color: #0b7d5f;            /* 做货绿（~4.8:1） */
-      --signal-green: #0b7d5f;                /* 正向状态 */
-      --signal-red: #d0343a;                  /* 风险状态（~5.0:1） */
-      --signal-orange: #b35f00;               /* 需优化状态（~4.5:1） */
-      --on-accent: #ffffff;                   /* 强调实底之上的文字色（蓝/黄底上 ~5.5:1） */
+      --navy-raised: #f5f5f7;                 /* 悬停 / 二级区块 */
+      --frost-ink: #1d1d1f;                   /* 主文本（Apple Label Ink） */
+      --steel-copy: #515154;                  /* 次要说明文字 */
+      --slate-dim: #86868b;                   /* 辅助标签 / 弱提示 */
+      --walmart-blue: #0071e3;                /* Apple System Blue 主交互色 */
+      --spark-yellow: #c47200;                /* 暖琥珀辅色 */
+      --production-color: #248a3d;            /* Apple Green 做货绿 */
+      --signal-green: #248a3d;                /* 正向状态 */
+      --signal-red: #ff3b30;                  /* Apple System Red 风险状态 */
+      --signal-orange: #ff9500;               /* Apple System Orange 提示状态 */
+      --on-accent: #ffffff;                   /* 强调实底之上的文字色 */
 
       /* —— 描边与色片 —— */
-      --line-soft: rgba(16, 32, 58, .09);
-      --line-strong: rgba(16, 32, 58, .17);
-      --blue-soft: rgba(22, 104, 214, .09);
-      --yellow-soft: rgba(169, 113, 11, .12);
-      --green-soft: rgba(11, 125, 95, .11);
-      --red-soft: rgba(208, 52, 58, .10);
-      --orange-soft: rgba(179, 95, 0, .11);
+      --line-soft: rgba(0, 0, 0, .06);
+      --line-strong: rgba(0, 0, 0, .12);
+      --blue-soft: rgba(0, 113, 227, .09);
+      --yellow-soft: rgba(255, 149, 0, .12);
+      --green-soft: rgba(36, 138, 61, .11);
+      --red-soft: rgba(255, 59, 48, .10);
+      --orange-soft: rgba(255, 149, 0, .12);
 
-      /* —— 框架与色板 —— */
+      /* —— macOS 毛玻璃框架 —— */
       --sidebar: 248px;
       --topbar: 72px;
-      --sidebar-bg: #ffffff;
-      --sidebar-border: rgba(16, 32, 58, .10);
-      --topbar-bg: rgba(255, 255, 255, .88);
-      --scrim: rgba(16, 32, 58, .38);
+      --sidebar-bg: rgba(255, 255, 255, .76);
+      --sidebar-border: rgba(0, 0, 0, .08);
+      --topbar-bg: rgba(255, 255, 255, .75);
+      --scrim: rgba(0, 0, 0, .32);
 
-      /* —— 圆角 / 阴影 / 字体 / 动效 —— */
+      /* —— 连续圆角 / 克制弥散阴影 / SF 字体 / 弹簧动效 —— */
       --radius-lg: 18px;
-      --radius-md: 13px;
-      --radius-sm: 9px;
-      --shadow-panel: 0 18px 44px rgba(16, 32, 58, .10);
-      --shadow-card: 0 8px 24px rgba(16, 32, 58, .07);
-      --shadow-pop: 0 24px 56px rgba(16, 32, 58, .16);
-      --font-sans: "Fira Sans", "Segoe UI Variable", "Microsoft YaHei UI", "PingFang SC", system-ui, -apple-system, sans-serif;
-      --font-mono: "Fira Code", "Cascadia Mono", "SFMono-Regular", Consolas, monospace;
+      --radius-md: 14px;
+      --radius-sm: 10px;
+      --shadow-panel: 0 8px 30px rgba(0, 0, 0, .055);
+      --shadow-card: 0 2px 12px rgba(0, 0, 0, .035);
+      --shadow-pop: 0 20px 48px rgba(0, 0, 0, .14);
+      --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "PingFang SC", "Helvetica Neue", system-ui, sans-serif;
+      --font-mono: "SF Mono", "SFMono-Regular", "Fira Code", "Cascadia Mono", Menlo, Consolas, monospace;
       --ease: cubic-bezier(.16, 1, .3, 1);
       --t-fast: .16s;
       --t-med: .26s;
-      --focus-ring: 0 0 0 3px rgba(22, 104, 214, .40);
-}
+      --focus-ring: 0 0 0 3px rgba(0, 113, 227, .35);
+    }
 
 /* WFS settlement and storage console */
 .wfs-view { --wfs-accent: var(--walmart-blue); }
@@ -329,7 +329,8 @@
       background: var(--sidebar-bg);
       border-right: 1px solid var(--sidebar-border);
       z-index: 30;
-      backdrop-filter: blur(16px);
+      backdrop-filter: saturate(180%) blur(22px);
+      -webkit-backdrop-filter: saturate(180%) blur(22px);
     }
     .brand {
       min-height: 42px;
@@ -492,9 +493,10 @@
       justify-content: space-between;
       gap: 20px;
       padding: 0 30px;
-      border-bottom: 1px solid var(--line-strong);
+      border-bottom: 1px solid var(--line-soft);
       background: var(--topbar-bg);
-      backdrop-filter: blur(18px);
+      backdrop-filter: saturate(180%) blur(22px);
+      -webkit-backdrop-filter: saturate(180%) blur(22px);
     }
     .page-heading { display: flex; align-items: center; gap: 13px; min-width: 0; }
     .menu-button {
@@ -514,24 +516,25 @@
       display: inline-flex;
       gap: 3px;
       padding: 4px;
-      border: 1px solid var(--line-soft);
-      border-radius: 11px;
-      background: rgba(16, 32, 58, .025);
+      border: 0;
+      border-radius: 999px;
+      background: rgba(118, 118, 128, .12);
     }
     /* 顶部周期只对 经营驾驶舱/销量分析/SKU 机会矩阵 生效；其余视图隐藏（display:inline-flex 会盖掉 UA 的 [hidden]） */
     .period-switch[hidden] { display: none; }
     .period-button {
       min-width: 48px;
-      min-height: 44px;
+      min-height: 36px;
       border: 0;
-      border-radius: 8px;
+      border-radius: 999px;
       background: transparent;
       color: var(--steel-copy);
       cursor: pointer;
       font-size: 12px;
-      font-weight: 700;
+      font-weight: 650;
+      transition: background .18s var(--ease), color .18s var(--ease), box-shadow .18s var(--ease);
     }
-    .period-button.active { color: var(--on-accent); background: var(--walmart-blue); box-shadow: 0 6px 18px rgba(22, 104, 214, .2); }
+    .period-button.active { color: var(--frost-ink); background: #ffffff; box-shadow: 0 2px 6px rgba(0, 0, 0, .10); }
     .custom-period-control { position: relative; display: inline-flex; }
     .custom-period-trigger { min-width: 64px; padding: 0 9px; }
     .custom-period-trigger b {
@@ -1476,7 +1479,7 @@
     .sales-skeleton::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, rgba(16, 32, 58, .06), transparent); transform: translateX(-100%); animation: salesSkeleton 1.2s infinite; }
     @keyframes salesSkeleton { to { transform: translateX(100%); } }
 
-    .inventory-metric-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
+    .inventory-metric-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 14px; }
     .inventory-metric {
       min-height: 116px;
       padding: 15px;
@@ -5057,6 +5060,24 @@
 .data-center-sync-plan-card { display: grid; min-width: 0; gap: 13px; padding: 15px; border: 1px solid #e0e8f1; border-radius: 13px; background: #fbfdff; }
 .data-center-domestic-mcp-card .data-center-sync-counts { grid-template-columns: repeat(2,minmax(0,1fr)); }
 .data-center-domestic-mcp-card > .secondary-button { width: 100%; min-height: 44px; }
+.data-center-wfs-mcp-card { align-content: start; gap: 11px; }
+.data-center-wfs-mcp-card .data-center-sync-plan-head span { font-size: 11px; font-weight: 700; }
+.data-center-wfs-mcp-card .data-center-sync-plan-head small { color: #475a72; font-size: 11px; line-height: 1.45; }
+.wfs-mcp-source { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; padding: 8px 9px; border-radius: 8px; background: #ebf2f9; color: #40556d; font-size: 11px; }
+.wfs-mcp-source strong { color: #24415f; }
+.wfs-mcp-source time { margin-left: auto; font-variant-numeric: tabular-nums; }
+.data-center-wfs-mcp-card .data-center-sync-counts span { font-size: 11px; color: #40556d; }
+.data-center-wfs-mcp-card .data-center-sync-counts b { font-size: 15px; }
+.wfs-mcp-result { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 10px; color: #435870; font-size: 11px; }
+.data-center-wfs-mcp-card > .wfs-mcp-note { margin: 0; overflow: visible; white-space: normal; overflow-wrap: anywhere; font-size: 12px; color: #40556d; }
+.data-center-wfs-mcp-card[data-status="FAILED"] > .wfs-mcp-note { color: #8a3d3d; }
+.wfs-mcp-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.wfs-mcp-actions button { flex: 1 1 110px; min-height: 44px; white-space: normal; }
+.wfs-mcp-actions button:focus-visible, .data-center-wfs-mcp-card:focus-visible, .data-center-wfs-mcp-card .data-center-switch:focus-visible { outline: 2px solid #2472bd; outline-offset: 2px; }
+.connector-browser-note[hidden] { display: none; }
+@media (prefers-reduced-motion: reduce) {
+  .data-center-wfs-mcp-card .data-center-switch::before, .data-center-wfs-mcp-card .data-center-switch > span { transition: none; }
+}
 .data-center-sync-plan-card[data-enabled="false"] { background: #f6f8fa; }
 .data-center-sync-plan-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .data-center-sync-plan-head > div { display: grid; min-width: 0; gap: 5px; }
@@ -5629,6 +5650,34 @@
 .inventory-style-domestic-note > span { color: #5f48a8; font-size: 9.5px; font-weight: 750; white-space: nowrap; }
 .inventory-style-domestic-note > strong { color: var(--frost-ink); font: 750 14px var(--font-mono); white-space: nowrap; }
 .inventory-style-domestic-note > small { color: var(--steel-copy); font-size: 9.5px; line-height: 1.5; }
+.sub-id.wfs-warn { color: #a15a00; font-weight: 650; }
+.sub-id.wfs-lock { color: #5f48a8; font-weight: 650; }
+.inventory-style-wfs-health { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line-soft); }
+.inventory-style-wfs-health-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.inventory-style-wfs-health-head h4 { margin: 0; color: var(--frost-ink); font-size: 13px; letter-spacing: -.01em; }
+.inventory-style-wfs-health-head span { color: var(--steel-copy); font: 650 11px var(--font-mono); }
+.inventory-style-age-bar { display: flex; height: 12px; margin-top: 10px; overflow: hidden; border-radius: 5px; background: #e9eef5; }
+.inventory-style-age-bar > span { min-width: 0; }
+.inventory-style-age-bar .age-0-3 { background: #168362; }
+.inventory-style-age-bar .age-3-6 { background: #2f90ff; }
+.inventory-style-age-bar .age-6-9 { background: #e69d00; }
+.inventory-style-age-bar .age-9-12 { background: #eb6b2d; }
+.inventory-style-age-bar .age-1y { background: #d63a49; }
+.inventory-style-age-legend { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); margin: 10px 0 0; overflow: hidden; border: 1px solid var(--line-soft); border-radius: 10px; }
+.inventory-style-age-legend > div { padding: 8px 10px; border-right: 1px solid var(--line-soft); background: #f9fbfd; }
+.inventory-style-age-legend > div:last-child { border-right: 0; }
+.inventory-style-age-legend dt { display: flex; align-items: center; gap: 5px; color: var(--steel-copy); font-size: 9.5px; white-space: nowrap; }
+.inventory-style-age-legend dt i { width: 7px; height: 7px; flex: 0 0 auto; border-radius: 2px; }
+.inventory-style-age-legend dt i.age-0-3 { background: #168362; }
+.inventory-style-age-legend dt i.age-3-6 { background: #2f90ff; }
+.inventory-style-age-legend dt i.age-6-9 { background: #e69d00; }
+.inventory-style-age-legend dt i.age-9-12 { background: #eb6b2d; }
+.inventory-style-age-legend dt i.age-1y { background: #d63a49; }
+.inventory-style-age-legend dd { margin: 4px 0 0; color: var(--frost-ink); font: 750 12px var(--font-mono); white-space: nowrap; }
+.inventory-style-wfs-health-meta { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
+.inventory-style-wfs-health-meta > div { padding: 9px 11px; border: 1px solid var(--line-soft); border-radius: 9px; background: #f8fafc; }
+.inventory-style-wfs-health-meta span { display: block; color: var(--slate-dim); font-size: 9.5px; }
+.inventory-style-wfs-health-meta strong { display: block; margin-top: 4px; color: var(--frost-ink); font: 750 12.5px var(--font-mono); }
 
 .inventory-style-risk-panel { scroll-margin-top: 64px; }
 .inventory-style-risk-panel .product-dashboard-panel-head h3 { font-size: 14px; letter-spacing: -.02em; }

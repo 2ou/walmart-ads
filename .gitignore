@@ -50,4 +50,6 @@ outputs/
 node_modules/
 package.json
 package-lock.json
+!/frontend/package.json
+!/frontend/package-lock.json
 README-WORKBUDDY-DEPLOY.md

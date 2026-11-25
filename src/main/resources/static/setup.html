@@ -12,7 +12,7 @@
       <div class="brand-mark" aria-hidden="true">W</div>
       <header class="auth-heading">
         <span class="eyebrow">LOCAL INITIAL SETUP</span>
-        <h1>初始化 PINKSIR 店铺</h1>
+        <h1>初始化主工作区</h1>
         <p>此页面仅允许服务器本机访问。账号将自动使用所选领星店铺的真实名称。</p>
       </header>
       <form id="setupForm" class="auth-form">
@@ -21,10 +21,10 @@
           <small id="legacyKeyHint">正在检测现有领星配置…</small>
         </label>
         <details><summary>高级连接设置</summary><label>MCP 地址<input id="setupBaseUrl" type="url" value="https://openmcp.lingxing.com/mcp-servers/lingxing-mcp"></label></details>
-        <div class="setup-actions"><button class="secondary-action" id="discoverStores" type="button">测试连接并读取店铺</button><span id="discoverStatus">确认连接后才能选择店铺</span></div>
+        <div class="setup-actions"><button class="secondary-action" id="discoverStores" type="button">测试连接并读取店铺</button><span id="discoverStatus" role="status">确认连接后才能选择店铺</span></div>
         <div class="field-grid">
           <label>领星店铺<select id="setupStore" required disabled><option value="">请先测试连接</option></select></label>
-          <label>店铺缩写<input id="setupAbbreviation" required minlength="2" maxlength="12" pattern="[A-Za-z0-9]{2,12}" placeholder="例如 PNK"></label>
+          <label>店铺缩写<input id="setupAbbreviation" required minlength="2" maxlength="12" pattern="[A-Za-z0-9]{2,12}" placeholder="例如 DEMO"></label>
         </div>
         <div class="field-grid">
           <label>密码<input id="setupPassword" type="password" autocomplete="new-password" required minlength="8"></label>
@@ -36,6 +36,6 @@
       </form>
     </section>
   </main>
-  <script src="setup.js?v=20261008-simple-login"></script>
+  <script src="setup.js?v=workspace-identity"></script>
 </body>
 </html>

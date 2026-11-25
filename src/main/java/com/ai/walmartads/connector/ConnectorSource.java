@@ -20,4 +20,9 @@ public enum ConnectorSource {
     public String label() {
         return label;
     }
+
+    /** WFS and domestic inventory no longer depend on the user's browser. */
+    public boolean usesBrowser() {
+        return this == SUPPLY_CHAIN;
+    }
 }

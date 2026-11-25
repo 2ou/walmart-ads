@@ -88,7 +88,6 @@ public class WorkspaceAccountService {
         String key = valueOr(request.mcpKey(), legacyProperties.apiKey());
         String baseUrl = valueOr(request.baseUrl(), legacyProperties.resolvedBaseUrl());
         String storeId = valueOr(request.storeId(), legacyProperties.resolvedStoreId());
-        List<Long> advertisers = normalizedAdvertisers(request.advertiserIds(), legacyProperties.resolvedAdvertiserIds());
         if (!StringUtils.hasText(key) || !StringUtils.hasText(storeId)) {
             throw new IllegalArgumentException("请填写领星 MCP Key 并确认店铺");
         }
@@ -96,14 +95,15 @@ public class WorkspaceAccountService {
         StoreOption selected = stores.stream().filter(store -> store.storeId().equals(storeId)).findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("所选店铺不在当前 MCP Key 的可访问范围内"));
         String storeName = requireStoreName(selected.storeName());
-        if (!storeName.equalsIgnoreCase("PINKSIR")) {
-            throw new IllegalArgumentException("首个工作区必须选择 PINKSIR 店铺");
-        }
+        List<Long> legacyAdvertisers = storeId.equals(legacyProperties.resolvedStoreId())
+                ? legacyProperties.resolvedAdvertiserIds() : List.of();
+        List<Long> discoveredAdvertisers = normalizedAdvertisers(selected.advertiserIds(), legacyAdvertisers);
+        List<Long> advertisers = normalizedAdvertisers(request.advertiserIds(), discoveredAdvertisers);
         long id = insertAccount(storeName, request.password(), "ACTIVE", storeId,
                 storeName, abbreviation, List.of(abbreviation),
                 baseUrl, key, true, true, null, "SYNCING");
         if (id != 1L) {
-            throw new IllegalStateException("初始 PINKSIR 工作区必须使用固定编号 1");
+            throw new IllegalStateException("首个工作区编号必须与历史数据的工作区编号一致");
         }
         replaceAdvertisers(id, advertisers);
         seedSyncSettings(id, !advertisers.isEmpty());
@@ -143,7 +143,7 @@ public class WorkspaceAccountService {
 
     public List<StoreOption> discoverRegistrationStores(RegisterDiscoveryRequest request) {
         if (setupRequired()) {
-            throw new IllegalStateException("请先在服务器本机完成 PINKSIR 初始化");
+            throw new IllegalStateException("请先在服务器本机完成首个工作区初始化");
         }
         String key = requireMcpKey(request == null ? null : request.mcpKey());
         return discoverStores(DEFAULT_MCP_URL, key);
@@ -152,7 +152,7 @@ public class WorkspaceAccountService {
     @Transactional
     public SetupResult registerAccount(RegisterAccountRequest request, String ip, String userAgent) {
         if (setupRequired()) {
-            throw new IllegalStateException("请先在服务器本机完成 PINKSIR 初始化");
+            throw new IllegalStateException("请先在服务器本机完成首个工作区初始化");
         }
         if (request == null) {
             throw new IllegalArgumentException("请填写注册信息");
@@ -174,7 +174,7 @@ public class WorkspaceAccountService {
             replaceAdvertisers(id, selected.advertiserIds());
             seedSyncSettings(id, !selected.advertiserIds().isEmpty());
         } catch (DataIntegrityViolationException exception) {
-            throw new IllegalArgumentException("该店铺或店铺缩写已经注册，请直接登录或联系 PINKSIR 重置密码");
+            throw new IllegalArgumentException("该店铺或店铺缩写已经注册，请直接登录或联系主工作区管理员");
         }
         audit(id, storeName, "ACCOUNT_SELF_REGISTER", true,
                 "通过登录页注册并绑定领星店铺 " + storeName, ip, userAgent);
@@ -333,43 +333,55 @@ public class WorkspaceAccountService {
         audit(account.id(), account.username(), "PASSWORD_CHANGE", true, "修改密码；保留现有会话", ip, userAgent);
     }
 
+    public boolean isPrimaryWorkspace(long workspaceId) {
+        Integer count = jdbc.queryForObject("""
+                select count(*) from wm_ads_workspace where id=? and primary_workspace=true and status='ACTIVE'
+                """, Integer.class, workspaceId);
+        return count != null && count == 1;
+    }
+
     public List<ManagedAccountView> managedAccounts() {
-        requirePinksir();
+        requirePrimaryWorkspace();
         return jdbc.query("""
                 select id, username, store_id, store_name, store_abbreviation, status,
-                       initialization_status, mcp_key is not null as mcp_configured
+                       initialization_status, mcp_key is not null as mcp_configured, primary_workspace
                   from wm_ads_workspace
                  order by username
                 """, (rs, rowNum) -> new ManagedAccountView(
                 rs.getLong("id"), rs.getString("username"), rs.getString("store_id"),
                 rs.getString("store_name"), rs.getString("store_abbreviation"), rs.getString("status"),
-                rs.getString("initialization_status"), rs.getBoolean("mcp_configured")));
+                rs.getString("initialization_status"), rs.getBoolean("mcp_configured"),
+                rs.getBoolean("primary_workspace")));
     }
 
     @Transactional
     public void resetManagedPassword(long workspaceId, PasswordResetRequest request, String ip, String userAgent) {
-        WorkspacePrincipal actor = requirePinksir();
+        WorkspacePrincipal actor = requirePrimaryWorkspace();
         AccountRow target = requireAccount(workspaceId);
-        if (target.username().equalsIgnoreCase("PINKSIR")) {
-            throw new IllegalArgumentException("PINKSIR 请使用本机紧急重置入口或本人修改密码");
+        if (target.primaryWorkspace()) {
+            throw new IllegalArgumentException("主工作区请使用本机紧急重置入口或本人修改密码");
         }
         validateConfirmedPassword(request.newPassword(), request.confirmPassword());
         jdbc.update("update wm_ads_workspace set password_hash=? where id=?",
                 passwordEncoder.encode(request.newPassword()), target.id());
-        audit(target.id(), target.username(), "PASSWORD_RESET_BY_PINKSIR", true,
-                "由 PINKSIR 重置密码；保留现有会话", ip, userAgent);
+        audit(target.id(), target.username(), "PASSWORD_RESET_BY_PRIMARY", true,
+                "由主工作区管理员重置密码；保留现有会话", ip, userAgent);
         audit(actor.workspaceId(), actor.username(), "MANAGED_PASSWORD_RESET", true,
                 "重置店铺账号 " + target.username() + " 的密码", ip, userAgent);
     }
 
     @Transactional
-    public void emergencyResetPinksir(PasswordResetRequest request, String ip, String userAgent) {
+    public void emergencyResetPrimary(PasswordResetRequest request, String ip, String userAgent) {
         validateConfirmedPassword(request.newPassword(), request.confirmPassword());
-        AccountRow target = findByUsername("PINKSIR")
-                .orElseThrow(() -> new IllegalArgumentException("PINKSIR 账号尚未创建"));
+        List<AccountRow> primaryAccounts = jdbc.query(
+                "select * from wm_ads_workspace where primary_workspace=true", accountMapper);
+        if (primaryAccounts.size() != 1) {
+            throw new IllegalStateException("无法确认唯一主工作区账号");
+        }
+        AccountRow target = primaryAccounts.getFirst();
         jdbc.update("update wm_ads_workspace set password_hash=? where id=?",
                 passwordEncoder.encode(request.newPassword()), target.id());
-        audit(target.id(), target.username(), "PINKSIR_LOCAL_RESET", true,
+        audit(target.id(), target.username(), "PRIMARY_LOCAL_RESET", true,
                 "通过服务器本机紧急重置密码；保留现有会话", ip, userAgent);
     }
 
@@ -407,18 +419,25 @@ public class WorkspaceAccountService {
         long workspaceId = WorkspaceContext.requireId();
         AccountRow account = requireAccount(workspaceId);
         LingXingMcpCoordinator.RuntimeStatus runtime = mcpCoordinator.status(account.mcpBaseUrl(), account.mcpKey());
+        LingXingMcpCoordinator.RuntimeStatus wfsRuntime = mcpCoordinator.status(
+                account.mcpBaseUrl(), account.mcpKey(), WorkspaceSyncScheduler.WFS_SHIPMENTS);
         return jdbc.query("""
                 select sync_category, enabled, cadence, stagger_minute, last_started_at, last_completed_at,
                        last_status, last_message,last_valid_data_at,last_fetched_count,last_written_count,
                        integrity_status,next_retry_at
                   from wm_ads_workspace_sync_setting where workspace_id=? order by sync_category
-                """, (rs, rowNum) -> new SyncSettingView(rs.getString("sync_category"), rs.getBoolean("enabled"),
+                """, (rs, rowNum) -> {
+            String category = rs.getString("sync_category");
+            LingXingMcpCoordinator.RuntimeStatus categoryRuntime = WorkspaceSyncScheduler.WFS_SHIPMENTS.equals(category)
+                    ? wfsRuntime : runtime;
+            return new SyncSettingView(category, rs.getBoolean("enabled"),
                 rs.getString("cadence"), rs.getInt("stagger_minute"), timestamp(rs, "last_started_at"),
                 timestamp(rs, "last_completed_at"), rs.getString("last_status"), rs.getString("last_message"),
                 timestamp(rs, "last_valid_data_at"), nullableLong(rs, "last_fetched_count"),
                 nullableLong(rs, "last_written_count"), rs.getString("integrity_status"),
-                timestamp(rs, "next_retry_at"), runtime.coolingDown(), runtime.limitedUntil(),
-                runtime.lastRequestAt()), workspaceId);
+                timestamp(rs, "next_retry_at"), categoryRuntime.coolingDown(), categoryRuntime.limitedUntil(),
+                categoryRuntime.lastRequestAt());
+        }, workspaceId);
     }
 
     public List<SyncRunView> syncRuns() {
@@ -437,7 +456,7 @@ public class WorkspaceAccountService {
 
     public void setSyncEnabled(String category, boolean enabled, String ip, String userAgent) {
         String normalized = category == null ? "" : category.trim().toUpperCase(Locale.ROOT);
-        if (!List.of("PRODUCTS", "SALES", "ADS", "INVENTORY", "REVIEWS", "HISTORY").contains(normalized)) {
+        if (!List.of("PRODUCTS", "SALES", "ADS", "INVENTORY", "REVIEWS", "HISTORY", WorkspaceSyncScheduler.WFS_SHIPMENTS).contains(normalized)) {
             throw new IllegalArgumentException("未知同步类别");
         }
         WorkspacePrincipal principal = WorkspaceContext.requirePrincipal();
@@ -517,6 +536,8 @@ public class WorkspaceAccountService {
                 workspaceId, "REVIEWS", (minute + 40) % 60);
         jdbc.update("insert into wm_ads_workspace_sync_setting (workspace_id,sync_category,enabled,cadence,stagger_minute) values (?,?,1,'BACKGROUND',?)",
                 workspaceId, "HISTORY", minute);
+        jdbc.update("insert into wm_ads_workspace_sync_setting (workspace_id,sync_category,enabled,cadence,stagger_minute) values (?,?,1,'SIX_HOURLY',?)",
+                workspaceId, WorkspaceSyncScheduler.WFS_SHIPMENTS, WorkspaceSyncScheduler.WFS_SHIPMENT_MINUTE);
     }
 
     private void updateAdsSyncAvailability(long workspaceId, boolean adsConfigured) {
@@ -550,10 +571,10 @@ public class WorkspaceAccountService {
                 row.storeAbbreviation(), row.supplyChainEnabled(), sessionId);
     }
 
-    private WorkspacePrincipal requirePinksir() {
+    private WorkspacePrincipal requirePrimaryWorkspace() {
         WorkspacePrincipal principal = WorkspaceContext.requirePrincipal();
-        if (!principal.username().equalsIgnoreCase("PINKSIR")) {
-            throw new IllegalArgumentException("仅 PINKSIR 店铺账号可以执行此操作");
+        if (!isPrimaryWorkspace(principal.workspaceId())) {
+            throw new IllegalArgumentException("仅主工作区管理员可以执行此操作");
         }
         return principal;
     }
@@ -815,6 +836,6 @@ public class WorkspaceAccountService {
 
     public record ManagedAccountView(long id, String username, String storeId, String storeName,
                                      String storeAbbreviation, String status,
-                                     String initializationStatus, boolean mcpConfigured) {
+                                     String initializationStatus, boolean mcpConfigured, boolean primaryWorkspace) {
     }
 }

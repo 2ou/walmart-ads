@@ -40,12 +40,19 @@ import java.util.regex.Pattern;
 @Component
 public class FinanceWorkbookParser {
 
-    public static final String TARGET_ACCOUNT_PNK = "PNK-US";
     private static final String ERROR_PREFIX = "__ERR__:";
     private static final Pattern FILE_YEAR_MONTH = Pattern.compile("(202\\d)年\\s*0?(\\d{1,2})月");
     private static final Pattern MONTH_HEADER = Pattern.compile("^0?(\\d{1,2})月(.*)$");
     private static final Pattern ODER_SHEET = Pattern.compile("^Oder\\s+(202\\d)\\.(\\d{2})$");
     private static final Pattern CELL_COL = Pattern.compile("^([A-Z]+)");
+    private static final Pattern STYLE_SKU = Pattern.compile("[A-Z0-9][A-Z0-9_-]{0,79}");
+
+    record ImportAccount(String code, String companyName, List<String> skuPrefixes) {
+        boolean allowsStyle(String sku) {
+            return STYLE_SKU.matcher(sku).matches()
+                    && (skuPrefixes.isEmpty() || skuPrefixes.stream().anyMatch(sku::startsWith));
+        }
+    }
 
     public record YearMonthKey(int year, int month) implements Comparable<YearMonthKey> {
         public String formatted() {
@@ -69,18 +76,17 @@ public class FinanceWorkbookParser {
         return Optional.of(new YearMonthKey(year, month));
     }
 
-    public static boolean isPnkProfitCandidate(String fileName) {
+    public static boolean isProfitCandidate(String fileName) {
         if (fileName == null || fileName.startsWith("~$")) return false;
         String lower = fileName.toLowerCase(Locale.ROOT);
         if (!lower.endsWith(".xlsx")) return false;
         if (!fileName.contains("利润表")) return false;
-        if (fileName.toUpperCase(Locale.ROOT).contains("CPY-US")) return false;
         return extractFileYearMonth(fileName).isPresent();
     }
 
-    public Optional<ParsedFinanceWorkbook> parsePnkWorkbook(Path path) throws Exception {
+    Optional<ParsedFinanceWorkbook> parseWorkbook(Path path, ImportAccount account) throws Exception {
         String fileName = path.getFileName().toString();
-        if (!isPnkProfitCandidate(fileName)) {
+        if (!isProfitCandidate(fileName)) {
             return Optional.empty();
         }
         YearMonthKey fileYm = extractFileYearMonth(fileName).orElseThrow();
@@ -119,7 +125,7 @@ public class FinanceWorkbookParser {
             for (Map.Entry<String, List<Map<Integer, String>>> entry : capturedSheets.entrySet()) {
                 if (isStoreSheet(entry.getKey())) {
                     List<StoreMonthlyRow> parsed = parseStoreSheet(
-                            entry.getKey(), entry.getValue(), fileYm.year(), fileName);
+                            entry.getKey(), entry.getValue(), fileYm.year(), fileName, account);
                     storeRows.addAll(parsed);
                     for (StoreMonthlyRow row : parsed) {
                         exchangeRatesByMonth.put(row.reportMonth(), row.exchangeRate());
@@ -137,7 +143,7 @@ public class FinanceWorkbookParser {
                 for (Map.Entry<String, List<Map<Integer, String>>> entry : capturedSheets.entrySet()) {
                     if (isStyleSheet(entry.getKey())) {
                         List<StyleMonthlyRow> styles = parseDedicatedStyleSheet(
-                                entry.getValue(), fileYm, fileName,
+                                entry.getValue(), fileYm, fileName, account,
                                 exchangeRatesByMonth.getOrDefault(fileYm.formatted(), BigDecimal.ZERO),
                                 storeRevenueByMonth.get(fileYm.formatted()));
                         if (!styles.isEmpty()) {
@@ -153,7 +159,7 @@ public class FinanceWorkbookParser {
                                 Integer.parseInt(matcher.group(1)),
                                 Integer.parseInt(matcher.group(2)));
                         List<StyleMonthlyRow> styles = parseEmbeddedOderStyleSheet(
-                                entry.getValue(), sheetYm, fileName,
+                                entry.getValue(), sheetYm, fileName, account,
                                 exchangeRatesByMonth.getOrDefault(sheetYm.formatted(), BigDecimal.ZERO),
                                 storeRevenueByMonth.get(sheetYm.formatted()));
                         if (!styles.isEmpty()) {
@@ -168,7 +174,7 @@ public class FinanceWorkbookParser {
                     sha256,
                     era,
                     fileYm.formatted(),
-                    TARGET_ACCOUNT_PNK,
+                    account.code(),
                     storeRows,
                     styleMonths
             ));
@@ -179,12 +185,14 @@ public class FinanceWorkbookParser {
             String sheetName,
             List<Map<Integer, String>> rows,
             int fileYear,
-            String fileName
+            String fileName,
+            ImportAccount account
     ) {
         if (rows.size() < 3) return List.of();
         boolean singleAccountLayout = "Walmart-利润表".equals(sheetName.trim());
         String title = cleanText(rows.get(0).get(0));
-        if (singleAccountLayout && !title.toUpperCase(Locale.ROOT).contains(TARGET_ACCOUNT_PNK)) {
+        if (singleAccountLayout && !Pattern.compile("(?<![A-Z0-9_])" + Pattern.quote(account.code()) + "(?![A-Z0-9_])",
+                Pattern.CASE_INSENSITIVE).matcher(title).find()) {
             return List.of();
         }
 
@@ -205,8 +213,8 @@ public class FinanceWorkbookParser {
         }
         if (monthCols.isEmpty()) return List.of();
 
-        String currentAccount = singleAccountLayout ? TARGET_ACCOUNT_PNK : "";
-        Map<String, Map<Integer, String>> pnkItemRows = new LinkedHashMap<>();
+        String currentAccount = singleAccountLayout ? account.code() : "";
+        Map<String, Map<Integer, String>> accountItemRows = new LinkedHashMap<>();
         for (int r = 2; r < rows.size(); r++) {
             Map<Integer, String> row = rows.get(r);
             if (row == null || row.isEmpty()) continue;
@@ -221,39 +229,39 @@ public class FinanceWorkbookParser {
                 }
                 item = cleanText(row.get(1));
             }
-            if (!TARGET_ACCOUNT_PNK.equalsIgnoreCase(currentAccount) || item.isEmpty()) continue;
-            pnkItemRows.put(item, row);
+            if (!account.code().equalsIgnoreCase(currentAccount) || item.isEmpty()) continue;
+            accountItemRows.put(item, row);
         }
-        if (pnkItemRows.isEmpty()) return List.of();
+        if (accountItemRows.isEmpty()) return List.of();
 
         List<StoreMonthlyRow> result = new ArrayList<>();
         for (MonthCol mc : monthCols) {
-            BigDecimal revUsd = decimalAt(pnkItemRows, "销售收入", mc.colIndex());
-            BigDecimal grossProfitCny = decimalAt(pnkItemRows, "毛利", mc.colIndex());
+            BigDecimal revUsd = decimalAt(accountItemRows, "销售收入", mc.colIndex());
+            BigDecimal grossProfitCny = decimalAt(accountItemRows, "毛利", mc.colIndex());
             if (isZero(revUsd) && isZero(grossProfitCny)) {
                 continue;
             }
-            BigDecimal refundUsd = decimalAt(pnkItemRows, "销售订单退款", mc.colIndex());
-            BigDecimal commissionUsd = decimalAt(pnkItemRows, "平台佣金", mc.colIndex());
-            BigDecimal wfsFeeUsd = decimalAt(pnkItemRows, "WFS配送", mc.colIndex());
-            BigDecimal adSpendUsd = decimalAt(pnkItemRows, "广告费", mc.colIndex());
-            BigDecimal storageFeeUsd = decimalAt(pnkItemRows, "仓储费", mc.colIndex());
-            BigDecimal invReimbUsd = decimalAt(pnkItemRows, "库存赔偿费", mc.colIndex());
-            BigDecimal invDispUsd = decimalAt(pnkItemRows, "库存处理费", mc.colIndex());
-            BigDecimal promoUsd = decimalAt(pnkItemRows, "促销折扣", mc.colIndex());
-            BigDecimal otherUsd = decimalAt(pnkItemRows, "平台其他费用", mc.colIndex());
-            BigDecimal netUsd = decimalAt(pnkItemRows, "当月结算款", mc.colIndex());
-            BigDecimal fx = decimalAt(pnkItemRows, "汇率", mc.colIndex());
-            BigDecimal netCny = decimalAt(pnkItemRows, "结算金额（CNY）", mc.colIndex());
+            BigDecimal refundUsd = decimalAt(accountItemRows, "销售订单退款", mc.colIndex());
+            BigDecimal commissionUsd = decimalAt(accountItemRows, "平台佣金", mc.colIndex());
+            BigDecimal wfsFeeUsd = decimalAt(accountItemRows, "WFS配送", mc.colIndex());
+            BigDecimal adSpendUsd = decimalAt(accountItemRows, "广告费", mc.colIndex());
+            BigDecimal storageFeeUsd = decimalAt(accountItemRows, "仓储费", mc.colIndex());
+            BigDecimal invReimbUsd = decimalAt(accountItemRows, "库存赔偿费", mc.colIndex());
+            BigDecimal invDispUsd = decimalAt(accountItemRows, "库存处理费", mc.colIndex());
+            BigDecimal promoUsd = decimalAt(accountItemRows, "促销折扣", mc.colIndex());
+            BigDecimal otherUsd = decimalAt(accountItemRows, "平台其他费用", mc.colIndex());
+            BigDecimal netUsd = decimalAt(accountItemRows, "当月结算款", mc.colIndex());
+            BigDecimal fx = decimalAt(accountItemRows, "汇率", mc.colIndex());
+            BigDecimal netCny = decimalAt(accountItemRows, "结算金额（CNY）", mc.colIndex());
             if (isZero(netCny) && !isZero(netUsd) && !isZero(fx)) {
                 netCny = netUsd.multiply(fx).setScale(4, RoundingMode.HALF_UP);
             }
 
-            BigDecimal rawPur = decimalAt(pnkItemRows, "采购成本", mc.colIndex());
-            BigDecimal rawFl = decimalAt(pnkItemRows, "头程运费", mc.colIndex());
-            BigDecimal rawSelfShip = decimalAt(pnkItemRows, "自配送运费", mc.colIndex());
-            BigDecimal rawOffAd = decimalAt(pnkItemRows, "站外广告费", mc.colIndex());
-            BigDecimal rawOffFee = decimalAt(pnkItemRows, "站外费", mc.colIndex());
+            BigDecimal rawPur = decimalAt(accountItemRows, "采购成本", mc.colIndex());
+            BigDecimal rawFl = decimalAt(accountItemRows, "头程运费", mc.colIndex());
+            BigDecimal rawSelfShip = decimalAt(accountItemRows, "自配送运费", mc.colIndex());
+            BigDecimal rawOffAd = decimalAt(accountItemRows, "站外广告费", mc.colIndex());
+            BigDecimal rawOffFee = decimalAt(accountItemRows, "站外费", mc.colIndex());
 
             // Normalize CNY cost sign using algebraic reconciliation against grossProfitCny:
             // normalized convention: positive = cost expense, negative = cost reversal / rebate.
@@ -269,21 +277,21 @@ public class FinanceWorkbookParser {
 
             BigDecimal settlementRatio = !isZero(revUsd)
                     ? netUsd.divide(revUsd, 6, RoundingMode.HALF_UP)
-                    : decimalAt(pnkItemRows, "当月结算比例", mc.colIndex());
+                    : decimalAt(accountItemRows, "当月结算比例", mc.colIndex());
             BigDecimal revCny = revUsd.multiply(fx);
             BigDecimal profitMargin = !isZero(revCny)
                     ? grossProfitCny.divide(revCny, 6, RoundingMode.HALF_UP)
-                    : decimalAt(pnkItemRows, "利润率", mc.colIndex());
+                    : decimalAt(accountItemRows, "利润率", mc.colIndex());
 
-            int salesQty = Math.abs(intAt(pnkItemRows, "总销量件数", mc.colIndex()));
-            int refundQty = Math.abs(intAt(pnkItemRows, "退款订单数", mc.colIndex()));
-            int returnQty = Math.abs(intAt(pnkItemRows, "退货件数", mc.colIndex()));
-            Integer returnSellableQty = nullableAbsIntAt(pnkItemRows, "退货件数（可售）", mc.colIndex());
+            int salesQty = Math.abs(intAt(accountItemRows, "总销量件数", mc.colIndex()));
+            int refundQty = Math.abs(intAt(accountItemRows, "退款订单数", mc.colIndex()));
+            int returnQty = Math.abs(intAt(accountItemRows, "退货件数", mc.colIndex()));
+            Integer returnSellableQty = nullableAbsIntAt(accountItemRows, "退货件数（可售）", mc.colIndex());
 
             String ym = String.format("%04d-%02d", fileYear, mc.month());
             result.add(new StoreMonthlyRow(
-                    TARGET_ACCOUNT_PNK,
-                    "斐凡",
+                    account.code(),
+                    account.companyName(),
                     fileYear,
                     ym,
                     mc.settlementPeriod().isEmpty() ? null : mc.settlementPeriod(),
@@ -321,6 +329,7 @@ public class FinanceWorkbookParser {
             List<Map<Integer, String>> rows,
             YearMonthKey ym,
             String fileName,
+            ImportAccount account,
             BigDecimal fallbackFx,
             BigDecimal expectedStoreRevUsd
     ) {
@@ -338,16 +347,16 @@ public class FinanceWorkbookParser {
             Map<Integer, String> row = rows.get(r);
             if (row == null || row.isEmpty()) continue;
             String site = cleanText(row.get(siteCol));
-            if (!TARGET_ACCOUNT_PNK.equalsIgnoreCase(site)) continue;
+            if (!account.code().equalsIgnoreCase(site)) continue;
             String sku = cleanText(row.get(skuCol)).toUpperCase(Locale.ROOT);
-            if (!isValidPnkSku(sku)) continue;
+            if (!account.allowsStyle(sku)) continue;
 
             if (hasFormulaError(row, headerCols, "销售净额", "销售净额(CNY)", "利润", "销售额", "销售收入")) {
                 hasBrokenFormula = true;
                 continue;
             }
 
-            StyleMonthlyRow item = buildStyleRow(row, headerCols, ym, fileName, fallbackFx, true);
+            StyleMonthlyRow item = buildStyleRow(row, headerCols, ym, fileName, account, fallbackFx, true);
             totalStyleRev = totalStyleRev.add(item.salesRevenueUsd());
             styles.add(item);
         }
@@ -362,6 +371,7 @@ public class FinanceWorkbookParser {
             List<Map<Integer, String>> rows,
             YearMonthKey ym,
             String fileName,
+            ImportAccount account,
             BigDecimal storeFx,
             BigDecimal expectedStoreRevUsd
     ) {
@@ -386,6 +396,9 @@ public class FinanceWorkbookParser {
             }
         }
 
+        Integer siteCol = headerCols.get("站点");
+        if (siteCol == null && account.skuPrefixes().isEmpty()) return List.of();
+
         List<StyleMonthlyRow> styles = new ArrayList<>();
         boolean hasBrokenFormula = false;
         BigDecimal totalStyleRev = BigDecimal.ZERO;
@@ -396,15 +409,16 @@ public class FinanceWorkbookParser {
             String skuRaw = cleanText(row.get(skuCol));
             if (skuRaw.isEmpty()) continue;
             if (skuRaw.startsWith("合计") || skuRaw.startsWith("核对")) break;
+            if (siteCol != null && !account.code().equalsIgnoreCase(cleanText(row.get(siteCol)))) continue;
             String sku = skuRaw.toUpperCase(Locale.ROOT);
-            if (!isValidPnkSku(sku)) continue;
+            if (!account.allowsStyle(sku)) continue;
 
             if (hasFormulaError(row, headerCols, "销售净额", "销售净额(CNY)", "利润", "平台佣金", "广告费")) {
                 hasBrokenFormula = true;
                 continue;
             }
 
-            StyleMonthlyRow item = buildStyleRow(row, headerCols, ym, fileName, storeFx, false);
+            StyleMonthlyRow item = buildStyleRow(row, headerCols, ym, fileName, account, storeFx, false);
             totalStyleRev = totalStyleRev.add(item.salesRevenueUsd());
             styles.add(item);
         }
@@ -420,12 +434,13 @@ public class FinanceWorkbookParser {
             Map<String, Integer> headerCols,
             YearMonthKey ym,
             String fileName,
+            ImportAccount account,
             BigDecimal fallbackFx,
             boolean dedicatedSheet
     ) {
         String sku = cleanText(cellByHeaders(row, headerCols, "SKU")).toUpperCase(Locale.ROOT);
         String company = nullableMeta(cellByHeaders(row, headerCols, "公司"));
-        if (company == null) company = "斐凡";
+        if (company == null) company = account.companyName();
         String country = nullableMeta(cellByHeaders(row, headerCols, "国家"));
         if (country == null) country = "US";
         String listingStatus = nullableMeta(cellByHeaders(row, headerCols, "Listing状态"));
@@ -487,7 +502,7 @@ public class FinanceWorkbookParser {
                 : BigDecimal.ZERO;
 
         return new StyleMonthlyRow(
-                TARGET_ACCOUNT_PNK,
+                account.code(),
                 company,
                 country,
                 ym.year(),
@@ -636,10 +651,6 @@ public class FinanceWorkbookParser {
     private static String resolveEra(boolean hasSeparateStyleSheet, YearMonthKey ym) {
         if (!hasSeparateStyleSheet) return "ERA1_TEMPLATE";
         return ym.year() >= 2026 ? "ERA3_2026" : "ERA2_2025";
-    }
-
-    private static boolean isValidPnkSku(String sku) {
-        return sku != null && sku.startsWith("PNK") && sku.length() >= 6 && sku.matches("^PNK[A-Z0-9-]+$");
     }
 
     private static boolean isBrokenRelativeToStore(BigDecimal totalStyleRev, BigDecimal expectedStoreRevUsd) {

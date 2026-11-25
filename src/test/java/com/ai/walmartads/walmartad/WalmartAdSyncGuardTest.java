@@ -12,7 +12,7 @@ class WalmartAdSyncGuardTest {
 
     private static final WalmartAdSyncGuard.CoverageKey KEY =
             new WalmartAdSyncGuard.CoverageKey(
-                    LocalDate.of(2026, 9, 16), 323561L, "SP", "REPORT:AD_ITEM");
+                    LocalDate.of(2026, 9, 16), 901L, "SP", "REPORT:AD_ITEM");
 
     @Test
     void rejectsUnexpectedEmptyReplacement() {

@@ -3,6 +3,7 @@ package com.ai.walmartads.finance;
 import com.ai.walmartads.finance.FinanceModels.ParsedFinanceWorkbook;
 import com.ai.walmartads.finance.FinanceModels.StoreMonthlyRow;
 import com.ai.walmartads.finance.FinanceModels.StyleMonthlyRow;
+import com.ai.walmartads.finance.FinanceWorkbookParser.ImportAccount;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
@@ -16,15 +17,17 @@ import java.nio.file.Path;
 import java.sql.PreparedStatement;
 import java.sql.Statement;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Stream;
 
 /**
- * Imports PNK monthly finance profit workbooks directly into MySQL (workspace-scoped).
+ * Imports monthly profit workbooks directly into the selected workspace.
  */
 @Service
 public class FinanceImportService {
@@ -73,14 +76,19 @@ public class FinanceImportService {
      * while preserving valid historical style details.
      */
     public DirectoryImportResult importDirectory(Path directory, long workspaceId) throws Exception {
+        return importDirectory(directory, workspaceId, null);
+    }
+
+    public DirectoryImportResult importDirectory(Path directory, long workspaceId, String requestedAccount) throws Exception {
         if (!Files.isDirectory(directory)) {
             throw new IllegalArgumentException("财务目录不存在：" + directory);
         }
+        ImportAccount account = resolveImportAccount(workspaceId, requestedAccount);
         List<Path> candidates;
         try (Stream<Path> stream = Files.list(directory)) {
             candidates = stream
                     .filter(Files::isRegularFile)
-                    .filter(p -> FinanceWorkbookParser.isPnkProfitCandidate(p.getFileName().toString()))
+                    .filter(p -> FinanceWorkbookParser.isProfitCandidate(p.getFileName().toString()))
                     .sorted(Comparator.comparing(
                                     (Path p) -> FinanceWorkbookParser.extractFileYearMonth(p.getFileName().toString()).orElseThrow())
                             .thenComparing(p -> p.getFileName().toString()))
@@ -90,7 +98,7 @@ public class FinanceImportService {
         List<ParsedFinanceWorkbook> parsedWorkbooks = new ArrayList<>();
         int skipped = 0;
         for (Path file : candidates) {
-            Optional<ParsedFinanceWorkbook> parsed = parser.parsePnkWorkbook(file);
+            Optional<ParsedFinanceWorkbook> parsed = parser.parseWorkbook(file, account);
             if (parsed.isPresent()) {
                 parsedWorkbooks.add(parsed.get());
             } else {
@@ -100,6 +108,11 @@ public class FinanceImportService {
 
         final int filesSkipped = skipped;
         return tx.execute(status -> {
+            // Serialize imports for this workspace and validate the account again after acquiring the lock.
+            jdbc.queryForObject("select id from wm_ads_workspace where id = ? for update", Long.class, workspaceId);
+            if (!account.equals(resolveImportAccount(workspaceId, requestedAccount))) {
+                throw new IllegalStateException("工作区财务账号或款号归属配置已变更，请重新导入。");
+            }
             List<FileImportSummary> summaries = new ArrayList<>();
             for (ParsedFinanceWorkbook wb : parsedWorkbooks) {
                 long batchId = upsertBatch(workspaceId, wb);
@@ -111,7 +124,7 @@ public class FinanceImportService {
                     String month = entry.getKey();
                     List<StyleMonthlyRow> rows = entry.getValue();
                     if (rows.isEmpty()) continue;
-                    // Replace that month's PNK styles atomically with the valid rows from this file
+                    // Replace that month's style rows atomically with the valid rows from this file.
                     jdbc.update("""
                             delete from wm_ads_finance_style_monthly
                              where workspace_id = ? and account_code = ? and report_month = ?
@@ -131,27 +144,27 @@ public class FinanceImportService {
                 ));
             }
 
-            reconcileStoreAndStyleFlags(workspaceId, FinanceWorkbookParser.TARGET_ACCOUNT_PNK);
+            reconcileStoreAndStyleFlags(workspaceId, account.code());
 
             Integer storeMonthsTotal = jdbc.queryForObject(
                     "select count(*) from wm_ads_finance_store_monthly where workspace_id = ? and account_code = ?",
-                    Integer.class, workspaceId, FinanceWorkbookParser.TARGET_ACCOUNT_PNK);
+                    Integer.class, workspaceId, account.code());
             Integer styleMonthsTotal = jdbc.queryForObject(
                     "select count(distinct report_month) from wm_ads_finance_style_monthly where workspace_id = ? and account_code = ?",
-                    Integer.class, workspaceId, FinanceWorkbookParser.TARGET_ACCOUNT_PNK);
+                    Integer.class, workspaceId, account.code());
             Integer styleRowsTotal = jdbc.queryForObject(
                     "select count(*) from wm_ads_finance_style_monthly where workspace_id = ? and account_code = ?",
-                    Integer.class, workspaceId, FinanceWorkbookParser.TARGET_ACCOUNT_PNK);
+                    Integer.class, workspaceId, account.code());
             List<String> missingStyleMonths = jdbc.queryForList("""
                     select report_month
                       from wm_ads_finance_store_monthly
                      where workspace_id = ? and account_code = ? and has_style_detail = false
                      order by report_month
-                    """, String.class, workspaceId, FinanceWorkbookParser.TARGET_ACCOUNT_PNK);
+                    """, String.class, workspaceId, account.code());
 
             return new DirectoryImportResult(
                     workspaceId,
-                    FinanceWorkbookParser.TARGET_ACCOUNT_PNK,
+                    account.code(),
                     candidates.size(),
                     parsedWorkbooks.size(),
                     filesSkipped,
@@ -162,6 +175,45 @@ public class FinanceImportService {
                     summaries
             );
         });
+    }
+
+    private ImportAccount resolveImportAccount(long workspaceId, String requestedAccount) {
+        record WorkspaceImportConfig(String abbreviation, String skuPrefixes) {}
+        WorkspaceImportConfig config = jdbc.query("""
+                select store_abbreviation, sku_prefixes from wm_ads_workspace where id = ?
+                """, (rs, rowNum) -> new WorkspaceImportConfig(rs.getString("store_abbreviation"), rs.getString("sku_prefixes")),
+                workspaceId).stream().findFirst().orElseThrow(() -> new IllegalArgumentException("工作区不存在。"));
+
+        List<String> existingAccounts = jdbc.queryForList("""
+                select distinct account_code from wm_ads_finance_store_monthly where workspace_id = ?
+                """, String.class, workspaceId);
+        if (existingAccounts.size() > 1) {
+            throw new IllegalStateException("工作区存在多个已导入的财务账号，请核对账号归属后再导入。");
+        }
+        String account = requestedAccount == null ? "" : requestedAccount.strip().toUpperCase(Locale.ROOT);
+        if (!existingAccounts.isEmpty()) {
+            String existing = existingAccounts.getFirst();
+            if (!account.isEmpty() && !existing.equalsIgnoreCase(account)) {
+                throw new IllegalArgumentException("指定的财务账号与本工作区已有财务账表不一致。");
+            }
+            account = existing;
+        } else if (account.isEmpty() && config.abbreviation() != null && !config.abbreviation().isBlank()) {
+            account = config.abbreviation().strip().toUpperCase(Locale.ROOT) + "-US";
+        }
+        if (account.isEmpty() || account.length() > 32) {
+            throw new IllegalArgumentException("请通过 --account 指定账表中的财务账号，长度应在 1 至 32 个字符之间。");
+        }
+
+        String company = jdbc.queryForList("""
+                select company_name from wm_ads_finance_store_monthly
+                 where workspace_id = ? and account_code = ? and company_name is not null and trim(company_name) <> ''
+                 order by report_month desc limit 1
+                """, String.class, workspaceId, account).stream().findFirst().orElse(null);
+        List<String> prefixes = config.skuPrefixes() == null ? List.of() : Arrays.stream(config.skuPrefixes().split(","))
+                .map(value -> value.strip().toUpperCase(Locale.ROOT))
+                .filter(value -> !value.isEmpty())
+                .distinct().toList();
+        return new ImportAccount(account, company, prefixes);
     }
 
     private long upsertBatch(long workspaceId, ParsedFinanceWorkbook wb) {

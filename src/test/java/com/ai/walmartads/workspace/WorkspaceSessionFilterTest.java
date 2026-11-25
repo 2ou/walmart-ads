@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.FilterChain;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 
@@ -27,9 +29,10 @@ class WorkspaceSessionFilterTest {
         filter = new WorkspaceSessionFilter(accounts, new ObjectMapper());
     }
 
-    @Test
-    void rejectsRemoteAccessToPinksirEmergencyResetPage() throws Exception {
-        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/pinksir-reset.html");
+    @ParameterizedTest
+    @ValueSource(strings = {"/primary-reset.html", "/primary-reset.js", "/api/auth/primary-reset"})
+    void rejectsRemoteAccessToPrimaryEmergencyReset(String path) throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest(path.startsWith("/api/") ? "POST" : "GET", path);
         request.setRemoteAddr("192.168.1.20");
         MockHttpServletResponse response = new MockHttpServletResponse();
         FilterChain chain = mock(FilterChain.class);
@@ -39,9 +42,10 @@ class WorkspaceSessionFilterTest {
         assertThat(response.getStatus()).isEqualTo(403);
     }
 
-    @Test
-    void allowsLoopbackAccessToPinksirEmergencyResetPage() throws Exception {
-        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/pinksir-reset.html");
+    @ParameterizedTest
+    @ValueSource(strings = {"/primary-reset.html", "/primary-reset.js", "/api/auth/primary-reset"})
+    void allowsLoopbackAccessToPrimaryEmergencyReset(String path) throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest(path.startsWith("/api/") ? "POST" : "GET", path);
         request.setRemoteAddr("127.0.0.1");
         MockHttpServletResponse response = new MockHttpServletResponse();
         FilterChain chain = mock(FilterChain.class);

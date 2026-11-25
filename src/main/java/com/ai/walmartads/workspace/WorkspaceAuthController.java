@@ -111,14 +111,14 @@ public class WorkspaceAuthController {
         return ApiResponse.ok("已退出登录", null);
     }
 
-    @PostMapping("/pinksir-reset")
-    public ApiResponse<Void> resetPinksir(
+    @PostMapping("/primary-reset")
+    public ApiResponse<Void> resetPrimary(
             @RequestBody WorkspaceAccountService.PasswordResetRequest request,
             HttpServletRequest servletRequest
     ) {
         requireLoopback(servletRequest);
-        accounts.emergencyResetPinksir(request, clientIp(servletRequest), servletRequest.getHeader("User-Agent"));
-        return ApiResponse.ok("PINKSIR 密码已重置，现有会话保持有效", null);
+        accounts.emergencyResetPrimary(request, clientIp(servletRequest), servletRequest.getHeader("User-Agent"));
+        return ApiResponse.ok("主工作区密码已重置，现有会话保持有效", null);
     }
 
     private static ResponseCookie sessionCookie(String token, int maxAgeSeconds) {

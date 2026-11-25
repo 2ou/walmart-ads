@@ -7,7 +7,7 @@ import java.math.BigDecimal;
  * 字段直接回写到 {@code wm_ads_product_record} 对应列（按 SKU 全变体匹配）。
  */
 public record WalmartListingRow(
-        /** 商品 SKU（匹配键，如 PNK366067-C-Purple Gray-M-WFS） */
+        /** 商品 SKU，用作匹配键。 */
         String sku,
         /** 父 SKU（品名列，仅参考，不落库） */
         String parentSku,
@@ -23,7 +23,7 @@ public record WalmartListingRow(
         BigDecimal strikethroughPrice,
         /** 上架状态（可空，如 PUBLISHED/UNPUBLISHED） */
         String listingStatus,
-        /** 店铺（可空，如 PINKSIR） */
+        /** 店铺名称，可空。 */
         String store
 ) {
 }

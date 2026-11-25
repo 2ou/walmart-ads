@@ -2,6 +2,7 @@ package com.ai.walmartads.importing.parser;
 
 import com.ai.walmartads.importing.domain.ImportFile;
 import com.ai.walmartads.importing.domain.ProductRecord;
+import com.ai.walmartads.workspace.WorkspaceOwnershipService;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
@@ -16,15 +17,18 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Locale;
 import java.util.LinkedHashMap;
 
 @Component
 public class ProductWorkbookParser {
 
     private final JsonPayloadWriter json;
+    private final WorkspaceOwnershipService ownership;
 
-    public ProductWorkbookParser(JsonPayloadWriter json) {
+    public ProductWorkbookParser(JsonPayloadWriter json, WorkspaceOwnershipService ownership) {
         this.json = json;
+        this.ownership = ownership;
     }
 
     public ParsedRows<ProductRecord> parse(Path path, ImportFile importFile) throws IOException {
@@ -41,6 +45,7 @@ public class ProductWorkbookParser {
 
     private ParsedRows<ProductRecord> parse(InputStream input, ImportFile importFile) throws IOException {
         List<ProductRecord> records = new ArrayList<>();
+        List<String> prefixes = ownership.currentPrefixes();
         int sourceRows = 0;
         try (Workbook workbook = WorkbookFactory.create(input)) {
             Sheet sheet = findProductSheet(workbook);
@@ -52,7 +57,11 @@ public class ProductWorkbookParser {
                 }
                 sourceRows++;
                 String sku = ImportValues.exactText(row.getCell(header.skuColumn()));
-                if (sku == null || !sku.trim().toUpperCase().startsWith("PNK")) {
+                if (sku == null || sku.isBlank()) {
+                    continue;
+                }
+                String normalizedSku = sku.trim().toUpperCase(Locale.ROOT);
+                if (!prefixes.isEmpty() && prefixes.stream().noneMatch(normalizedSku::startsWith)) {
                     continue;
                 }
                 Map<String, Object> raw = new LinkedHashMap<>();

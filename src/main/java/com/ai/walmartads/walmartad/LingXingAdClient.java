@@ -72,10 +72,10 @@ public class LingXingAdClient {
     }
 
     public FetchedDay fetchDay(LocalDate date) {
-        if (!configured()) {
-            throw new IllegalStateException("LingXing MCP is not configured");
-        }
         WorkspaceLingXingConfigService.Config config = workspaceConfig.current();
+        if (!config.configured() || config.advertiserIds().isEmpty()) {
+            throw new IllegalStateException("请在店铺管理中配置领星 MCP 并绑定广告账号");
+        }
         LingXingClient client = new LingXingClient(config.baseUrl(), config.apiKey(), config.pageSize(),
                 10, 180, objectMapper, config.advertiserIds(), "ADS", mcpCoordinator);
         List<FetchedTool> results = new ArrayList<>(TOOLS.size());

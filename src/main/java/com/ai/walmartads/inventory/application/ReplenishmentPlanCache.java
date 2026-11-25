@@ -12,9 +12,11 @@ import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.EnumSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 
 /** Keeps the last completed plan available while imports and recalculations run. */
 @Service
@@ -38,9 +40,19 @@ public class ReplenishmentPlanCache {
     private final Map<CacheKey, ReplenishmentPlanningService.PlanningPayload> byWorkspaceAndDays =
             new ConcurrentHashMap<>();
     private final Set<CacheKey> refreshing = ConcurrentHashMap.newKeySet();
+    private final ConcurrentHashMap<Long, AtomicLong> versionByWorkspace = new ConcurrentHashMap<>();
 
     public ReplenishmentPlanCache(ReplenishmentPlanningService planningService) {
         this.planningService = planningService;
+    }
+
+    public long version(long workspaceId) {
+        AtomicLong counter = versionByWorkspace.get(workspaceId);
+        return counter == null ? 0L : counter.get();
+    }
+
+    private void bumpVersion(long workspaceId) {
+        versionByWorkspace.computeIfAbsent(workspaceId, ignored -> new AtomicLong()).incrementAndGet();
     }
 
     private static int clamp(int targetDays) {
@@ -104,31 +116,56 @@ public class ReplenishmentPlanCache {
 
     public synchronized ReplenishmentPlanningService.PlanningPayload refresh(int targetDays) {
         int days = clamp(targetDays);
+        long workspaceId = WorkspaceContext.requireId();
         ReplenishmentPlanningService.PlanningPayload calculated = planningService.plan(days);
-        byWorkspaceAndDays.put(new CacheKey(WorkspaceContext.requireId(), days), calculated);
+        byWorkspaceAndDays.put(new CacheKey(workspaceId, days), calculated);
+        bumpVersion(workspaceId);
         return calculated;
     }
 
     public void refreshAfterSuccessfulImport(ImportFileType type) {
         if (RELEVANT_IMPORTS.contains(type)) {
             long workspaceId = WorkspaceContext.requireId();
-            new ArrayList<>(byWorkspaceAndDays.keySet()).stream()
+            List<Integer> targetDaysList = new ArrayList<>();
+            byWorkspaceAndDays.keySet().stream()
                     .filter(key -> key.workspaceId() == workspaceId)
                     .map(CacheKey::days)
-                    .forEach(this::refresh);
+                    .forEach(targetDaysList::add);
+            if (targetDaysList.isEmpty()) {
+                targetDaysList.add(ReplenishmentPlanner.DEFAULT_HORIZON_DAYS);
+            }
+            targetDaysList.stream().distinct().forEach(this::refresh);
         }
     }
 
     /**
-     * 使缓存失效，下一次 {@link #current(int)} 访问时惰性重算。
+     * 使缓存失效，并在持有有效店铺上下文时于后台异步预热，避免等到用户打开页面才开始计算。
      *
      * <p>库存来源改为领星 MCP 每小时同步后，库存数据不再经过 {@code import_file} 落账，
      * 因此不能只靠 {@link #refreshAfterSuccessfulImport} 失效，必须由领星库存快照写入方直接触发。
      */
     public void invalidate() {
         long workspaceId = WorkspaceContext.requireId();
+        invalidateForWorkspace(workspaceId, WorkspaceContext.current().isPresent());
+    }
+
+    private void invalidateForWorkspace(long workspaceId, boolean prewarm) {
+        List<Integer> warmDays = new ArrayList<>();
+        byWorkspaceAndDays.keySet().forEach(key -> {
+            if (key.workspaceId() == workspaceId) {
+                warmDays.add(key.days());
+            }
+        });
         byWorkspaceAndDays.keySet().removeIf(key -> key.workspaceId() == workspaceId);
         refreshing.removeIf(key -> key.workspaceId() == workspaceId);
+        bumpVersion(workspaceId);
+        if (prewarm) {
+            if (warmDays.isEmpty()) {
+                refreshAsync(ReplenishmentPlanner.DEFAULT_HORIZON_DAYS);
+            } else {
+                warmDays.stream().distinct().forEach(this::refreshAsync);
+            }
+        }
     }
 
     @EventListener
@@ -144,6 +181,11 @@ public class ReplenishmentPlanCache {
     @EventListener
     public void onTransitTimingChanged(TransitTimingChangedEvent event) {
         invalidate();
+    }
+
+    @EventListener
+    public void onWfsShipmentsSynced(WfsShipmentsSyncedEvent event) {
+        invalidateForWorkspace(event.workspaceId(), WorkspaceContext.current().isPresent());
     }
 
     private record CacheKey(long workspaceId, int days) {

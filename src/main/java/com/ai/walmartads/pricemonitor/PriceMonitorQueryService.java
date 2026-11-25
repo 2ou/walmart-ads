@@ -41,6 +41,14 @@ public class PriceMonitorQueryService {
     private static final Logger log = LoggerFactory.getLogger(PriceMonitorQueryService.class);
     private static final int MAX_CHANGES_PER_STYLE = 20;
 
+    /** 单款内明细排序：未处理异常（红）优先，同级别按发现时间倒序，避免异常被后续大量常规变动挤出前 20 条。 */
+    private static final Comparator<Map<String, Object>> CHANGE_VIEW_ORDER = Comparator
+            .comparing((Map<String, Object> m) -> Boolean.TRUE.equals(m.get("abnormal")))
+            .reversed()
+            .thenComparing(
+                    (Map<String, Object> m) -> (LocalDateTime) m.get("detectedAt"),
+                    Comparator.nullsLast(Comparator.reverseOrder()));
+
     /** 历史分页单页上限，避免一次拉全表。 */
     private static final int MAX_HISTORY_PAGE_SIZE = 100;
 
@@ -148,9 +156,7 @@ public class PriceMonitorQueryService {
         List<Map<String, Object>> out = new ArrayList<>();
         red.forEach(c -> out.add(changeView(c)));
         green.forEach(c -> out.add(changeView(c)));
-        out.sort(Comparator.comparing(
-                (Map<String, Object> m) -> (LocalDateTime) m.get("detectedAt"),
-                Comparator.reverseOrder()));
+        out.sort(CHANGE_VIEW_ORDER);
         return out;
     }
 
@@ -326,9 +332,7 @@ public class PriceMonitorQueryService {
         }
 
         Map<String, Object> toView() {
-            changes.sort(Comparator.comparing(
-                    (Map<String, Object> m) -> (LocalDateTime) m.get("detectedAt"),
-                    Comparator.reverseOrder()));
+            changes.sort(CHANGE_VIEW_ORDER);
             List<Map<String, Object>> limited = changes.size() > MAX_CHANGES_PER_STYLE
                     ? changes.subList(0, MAX_CHANGES_PER_STYLE)
                     : changes;

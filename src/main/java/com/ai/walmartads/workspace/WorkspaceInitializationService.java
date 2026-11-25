@@ -73,10 +73,13 @@ public class WorkspaceInitializationService {
     private void initialize(WorkspacePrincipal principal) {
         long id = principal.workspaceId();
         try {
+            boolean adsConfigured = !configs.current().advertiserIds().isEmpty();
             configs.markInitialization(id, "SYNCING", "正在同步商品与当前库存");
             requireSuccess(listings.syncNow("INITIALIZE").status(), "商品与库存");
             requireSuccess(orders.syncNow("INITIALIZE").status(), "当前销量");
-            requireSuccess(ads.syncNow("INITIALIZE").status(), "当前广告");
+            if (adsConfigured) {
+                requireSuccess(ads.syncNow("INITIALIZE").status(), "当前广告");
+            }
             requireSuccess(comments.syncNow("INITIALIZE").status(), "当前评价");
             configs.markInitialization(id, "READY", "当前数据已可用，历史数据正在后台回填");
 
@@ -84,10 +87,12 @@ public class WorkspaceInitializationService {
             LocalDate salesEnd = UsBusinessDate.usToday();
             requireSuccess(orders.syncWindow("BACKFILL", salesEnd.minusDays(89), salesEnd).status(), "历史销量");
             requireSuccess(comments.backfillAll().status(), "历史评价");
-            // 广告历史不再在这里逐日阻塞（7/21 至今近百天，中途重启就永久卡 RUNNING），
-            // 交给 WalmartAdSyncService 的断点续传：基于 sync_log 的 max(window_end) 分段推进。
-            ads.resumeHistoricalBackfill();
-            configs.markSyncFinished(id, "HISTORY", true, "销量/评价历史已回填；广告历史后台分段续跑");
+            // 根据同步日志的断点继续广告历史回填，初始化无需等全部日期完成。
+            if (adsConfigured) {
+                ads.resumeHistoricalBackfill();
+            }
+            configs.markSyncFinished(id, "HISTORY", true,
+                    adsConfigured ? "销量/评价历史已回填；广告历史后台分段续跑" : "销量/评价历史已回填");
             configs.markInitialization(id, "READY", "当前与历史数据初始化完成");
         } catch (Exception exception) {
             WorkspaceLingXingConfigService.Config config = configs.current();

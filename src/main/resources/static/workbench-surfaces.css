@@ -1,0 +1,558 @@
+/* Shared surfaces for the Workbench shell, legacy views and React mounts. */
+.workbench,
+.workbench-settings {
+  --wb-canvas: #f5f5f7;
+  --wb-surface: #fff;
+  --wb-inset: #f3f3f5;
+  --wb-ink: #1d1d1f;
+  --wb-secondary: #505055;
+  --wb-muted: #626267;
+  --wb-blue: #0071e3;
+  --wb-selected: #e8f2ff;
+  --wb-hairline: rgba(29, 29, 31, .10);
+  --wb-control-border: rgba(29, 29, 31, .19);
+  --wb-radius: 16px;
+  --wb-control-radius: 9px;
+  --wb-surface-shadow: 0 1px 2px rgba(29, 29, 31, .04), 0 4px 14px rgba(29, 29, 31, .035);
+  --wb-sheet-shadow: 0 16px 48px rgba(29, 29, 31, .16);
+  --wb-gap: 16px;
+}
+
+.workbench {
+  --midnight-grid: var(--wb-canvas);
+  --navy-panel: var(--wb-surface);
+  --navy-raised: var(--wb-inset);
+  --frost-ink: var(--wb-ink);
+  --steel-copy: var(--wb-secondary);
+  --slate-dim: var(--wb-muted);
+  --walmart-blue: var(--wb-blue);
+  --line-soft: var(--wb-hairline);
+  --line-strong: var(--wb-control-border);
+  --shadow-panel: var(--wb-surface-shadow);
+  --shadow-card: var(--wb-surface-shadow);
+  --shadow-pop: var(--wb-sheet-shadow);
+  background: var(--wb-canvas);
+  color: var(--wb-ink);
+}
+
+.workbench::before {
+  content: none;
+}
+
+.workbench :focus-visible,
+.workbench-settings :focus-visible {
+  outline-color: var(--wb-blue);
+}
+
+.workbench .content {
+  --wb-gutter: clamp(14px, 2.5vw, 32px);
+  max-inline-size: 1700px;
+  padding-inline: var(--wb-gutter);
+  padding-block: clamp(16px, 2vw, 26px) 48px;
+}
+
+.workbench .view {
+  min-inline-size: 0;
+  container: wb-page / inline-size;
+}
+
+.workbench .view.active {
+  animation: none;
+}
+
+/* Page introductions and status strips carry the same hierarchy on each view. */
+.workbench .view > :is(.section-intro, .sc-command-header, .forecast-command-header, .connector-hero) {
+  margin: 0 0 var(--wb-gap);
+  padding: clamp(16px, 2.1vw, 24px);
+  gap: 18px;
+  align-items: center;
+  border: 1px solid var(--wb-hairline);
+  border-radius: var(--wb-radius);
+  background: var(--wb-surface);
+  box-shadow: var(--wb-surface-shadow);
+}
+
+.workbench .view > :is(.section-intro, .sc-command-header, .forecast-command-header, .connector-hero) h2 {
+  margin: 0;
+  max-inline-size: 45ch;
+  color: var(--wb-ink);
+  font-size: clamp(1.2rem, 1.07rem + .55vw, 1.58rem);
+  font-weight: 680;
+  line-height: 1.2;
+  letter-spacing: -.025em;
+  text-wrap: initial;
+}
+
+.workbench .view > :is(.section-intro, .sc-command-header, .forecast-command-header, .connector-hero) p {
+  max-inline-size: 71ch;
+  margin: 6px 0 0;
+  color: var(--wb-secondary);
+  font-size: .8125rem;
+  line-height: 1.55;
+}
+
+.workbench .section-summary {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  align-self: center;
+  min-inline-size: max-content;
+  padding: 8px 12px;
+  border: 1px solid var(--wb-hairline);
+  border-radius: var(--wb-control-radius);
+  background: var(--wb-inset);
+  color: var(--wb-secondary);
+}
+
+.workbench .section-summary strong {
+  font: 680 1.125rem/1.3 var(--font-sans);
+  font-variant-numeric: tabular-nums;
+  color: var(--wb-ink);
+}
+
+.workbench .view .status-banner {
+  min-block-size: 52px;
+  gap: 10px 12px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--wb-selected);
+}
+
+.workbench .view :is(.status-copy, .status-range, .panel-subtitle, .panel-source-note) {
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+
+.workbench .view .status-range {
+  white-space: normal;
+}
+
+/* Content sections retain their controls and layouts, with shared surfaces and type. */
+.workbench :is(.view, .product-dashboard-screen) :is(.panel, .connector-workspace-card, .agent-workspace) {
+  min-inline-size: 0;
+  border-color: var(--wb-hairline);
+  border-radius: var(--wb-radius);
+  background: var(--wb-surface);
+  box-shadow: var(--wb-surface-shadow);
+}
+
+.workbench :is(.view, .product-dashboard-screen) .panel-header {
+  gap: 8px 16px;
+  flex-wrap: wrap;
+  padding: 14px 16px;
+  border-block-end-color: var(--wb-hairline);
+}
+
+.workbench :is(.view, .product-dashboard-screen) .panel-header > div:first-child {
+  flex-shrink: 1;
+  min-inline-size: 0;
+}
+
+.workbench .view .panel-title {
+  color: var(--wb-ink);
+  font-size: .9375rem;
+  line-height: 1.35;
+  font-weight: 670;
+}
+
+.workbench .view :is(.panel-subtitle, .panel-source-note) {
+  color: var(--wb-muted);
+  font-size: .75rem;
+  line-height: 1.5;
+}
+
+.workbench .view :is(.table-tools, .table-footer, .sales-toolbar, .forecast-table-tools) {
+  flex-wrap: wrap;
+  min-inline-size: 0;
+  max-inline-size: 100%;
+}
+
+.workbench .view :is(.metric-card, .sales-metric, .inventory-metric, .product-metric, .diagnosis-metric, .sc-metric-card, .return-metric) {
+  min-inline-size: 0;
+  min-block-size: 99px;
+  padding: 14px 16px;
+  border-color: var(--wb-hairline);
+  border-radius: var(--wb-radius);
+  background: var(--wb-surface);
+  box-shadow: var(--wb-surface-shadow);
+  text-align: start;
+}
+
+.workbench .view :is(.sales-metric, .inventory-metric, .product-metric, .diagnosis-metric, .sc-metric-card, .return-metric) > strong,
+.workbench .view .metric-value {
+  margin-block-start: 9px;
+  font: 680 clamp(1rem, .86rem + .65vw, 1.44rem)/1.2 var(--font-sans);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -.035em;
+  overflow-wrap: anywhere;
+}
+
+.workbench .view :is(.metric-foot, .sales-metric small, .inventory-metric small, .product-metric small, .diagnosis-metric small, .sc-metric-card small, .return-metric small) {
+  color: var(--wb-muted);
+  font-size: .6875rem;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.workbench .view .metric-foot {
+  flex-wrap: wrap;
+  margin-block-start: 8px;
+}
+
+/* Legacy controls use the same sizes and selected treatment as the React controls. */
+.workbench .view :is(.secondary-button, .primary-button, .danger-button, .filter-button, .pagination button) {
+  min-block-size: 34px;
+  border-radius: var(--wb-control-radius);
+  font-size: .75rem;
+  font-weight: 650;
+}
+
+.workbench .view :is(.filter-button, .pagination button, .secondary-button) {
+  border-color: var(--wb-control-border);
+  background: var(--wb-surface);
+}
+
+.workbench .view :is(.filter-button.active, .filter-button[aria-pressed="true"], .sales-segment-button.active) {
+  border-color: transparent;
+  background: var(--wb-selected);
+  color: #064d9a;
+}
+
+.workbench .view .primary-button {
+  background: var(--wb-blue);
+  color: var(--wb-surface);
+}
+
+.workbench .view .search-input {
+  min-block-size: 36px;
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  border: 1px solid var(--wb-control-border);
+  border-radius: var(--wb-control-radius);
+  background: var(--wb-surface);
+  color: var(--wb-ink);
+  font-size: .8125rem;
+}
+
+.workbench .view .search-input:focus-visible,
+.workbench .table-scroll:focus-visible {
+  outline: 2px solid var(--wb-blue);
+  outline-offset: -2px;
+}
+
+/* Keep wide tables within their panel so sticky cells and sort controls stay usable. */
+.workbench .table-scroll {
+  max-inline-size: 100%;
+  overscroll-behavior-inline: contain;
+}
+
+.workbench .view .table-scroll > table > thead th {
+  background: var(--wb-inset);
+  color: var(--wb-secondary);
+  font-size: .6875rem;
+  font-weight: 700;
+}
+
+.workbench .view .table-scroll > table > tbody > tr:hover {
+  background: #f5f9ff;
+}
+
+.workbench .view .table-footer {
+  border-block-start-color: var(--wb-hairline);
+  background: var(--wb-surface);
+}
+
+.workbench .view :is(.empty-state, .empty-grid-state) {
+  color: var(--wb-muted);
+  padding-inline: min(20px, 6%);
+}
+
+.workbench .view .dashboard-freshness {
+  border-radius: 12px;
+  background: var(--wb-surface);
+}
+
+.workbench .dashboard-freshness > div {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 14px;
+}
+
+.workbench .dashboard-freshness-line {
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+
+.workbench .dashboard-attribution {
+  inline-size: 100%;
+  padding: 14px 16px;
+  border: 1px solid var(--wb-hairline);
+  border-radius: 12px;
+  background: var(--wb-inset);
+}
+
+.workbench .view :is(.diagnosis-date-panel, .sc-bridge-card, .forecast-signal-strip, .rep-kpi-bar, .rep-quality-bar,
+  .connector-workspace-head, .return-scope-panel) {
+  border-color: var(--wb-hairline);
+  background: var(--wb-surface);
+  box-shadow: var(--wb-surface-shadow);
+}
+
+.workbench .view :is(.ad-workspace-tabs, .data-center-tabs) {
+  gap: 5px;
+  padding: 5px;
+  border: 1px solid var(--wb-hairline);
+  border-radius: 12px;
+  background: var(--wb-inset);
+}
+
+.workbench .view :is(.ad-workspace-tab, .data-center-tab) {
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: var(--wb-secondary);
+  box-shadow: none;
+}
+
+.workbench .view :is(.ad-workspace-tab, .data-center-tab)[aria-selected="true"] {
+  border-color: var(--wb-hairline);
+  background: var(--wb-surface);
+  color: #064d9a;
+  box-shadow: 0 1px 2px rgba(29, 29, 31, .08);
+}
+
+.workbench .view .ad-workspace-tab span {
+  color: var(--wb-muted);
+}
+
+.workbench :is(.product-drawer, .operation-drawer, .transit-drawer, .rep-drawer,
+  .domestic-drawer, .product-import-drawer, .product-tags-drawer) {
+  background: var(--wb-surface);
+  border-color: var(--wb-hairline);
+  box-shadow: var(--wb-sheet-shadow);
+}
+
+.workbench :is(.product-drawer-header, .operation-drawer-header, .transit-drawer-header, .rep-drawer-header) {
+  background: var(--wb-surface);
+  border-block-end-color: var(--wb-hairline);
+}
+
+.workbench :is(.rep-low-modal, .export-confirm-dialog, .reminder-modal, .workspace-page-frame) {
+  background: var(--wb-surface);
+  border-color: var(--wb-hairline);
+  border-radius: var(--wb-radius);
+  box-shadow: var(--wb-surface-shadow);
+}
+
+.workbench .agent-workspace .agent-chat-sidebar {
+  background: var(--wb-inset);
+}
+
+.workbench .agent-workspace :is(.agent-chat-context, .agent-chat-composer) {
+  background: var(--wb-surface);
+}
+
+.workbench-settings {
+  background: var(--wb-canvas);
+  color: var(--wb-ink);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", system-ui, sans-serif;
+}
+
+.workbench-settings :is(.identity-hero, .settings-card) {
+  color: var(--wb-ink);
+  background: var(--wb-surface);
+  border: 1px solid var(--wb-hairline);
+  border-radius: var(--wb-radius);
+  box-shadow: var(--wb-surface-shadow);
+}
+
+.workbench-settings :is(.identity-hero h2, .card-heading h3, .settings-topbar h1) {
+  color: var(--wb-ink);
+}
+
+.workbench-settings :is(.identity-hero p, .card-heading p, .settings-topbar p, .settings-card label small) {
+  color: var(--wb-muted);
+}
+
+.workbench-settings .kicker {
+  color: #064d9a;
+}
+
+.workbench-settings .identity-state span {
+  background: var(--wb-selected);
+  border-color: var(--wb-hairline);
+  color: #064d9a;
+}
+
+.workbench-settings .identity-state small {
+  color: var(--wb-muted);
+}
+
+.workbench-settings .card-index {
+  display: none;
+}
+
+.workbench-settings .primary {
+  background: var(--wb-blue);
+}
+
+html[data-embedded="true"] .workbench-settings .settings-sidebar {
+  background: var(--wb-surface);
+  border-color: var(--wb-hairline);
+}
+
+html[data-embedded="true"] .workbench-settings .settings-sidebar nav button.is-active {
+  background: var(--wb-selected);
+  color: #064d9a;
+}
+
+@container wb-page (max-width: 580px) {
+  .workbench .view > :is(.section-intro, .sc-command-header, .forecast-command-header, .connector-hero) {
+    align-items: stretch;
+    flex-direction: column;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+
+  .workbench .view .section-summary {
+    align-self: flex-start;
+  }
+
+  .workbench .view :is(.status-banner, .panel-header) {
+    gap: 8px;
+  }
+
+  .workbench .view .panel-header :is(.legend, .table-tools) {
+    max-inline-size: 100%;
+  }
+}
+
+@container wb-page (min-width: 330px) and (max-width: 560px) {
+  .workbench .view :is(.metric-grid, .sales-metric-grid, .inventory-metric-grid, .product-metric-grid, .diagnosis-metric-grid, .return-metric-grid) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (pointer: coarse) {
+  .workbench .view :is(.secondary-button, .primary-button, .danger-button, .filter-button, .pagination button, .search-input) {
+    min-block-size: 44px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workbench .view :is(.inventory-metric, .sc-sync-dot, .sc-sync-button svg, .product-card, .sc-delivery-flow-card, .data-center-source-card, .style-diagnosis-card) {
+    animation: none;
+    transition: none;
+    transform: none;
+  }
+}
+
+/* =====================================================================
+   Wave 5: Unified Apple HIG Pill Controls, Inputs, Cards & Dialogs
+   ===================================================================== */
+
+/* Apple pill segmented control groups */
+.workbench .view :is(.sales-toolbar-group, .view-mode-toggle, .inventory-range, .sc-tabs, .transit-view-switch, .production-filter-group, .diagnosis-mode-switch, .diagnosis-period-chips),
+.workbench dialog :is(.transit-view-switch, .production-filter-group, .product-import-tabs, .price-tabs) {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  border-radius: 999px;
+  background: rgba(229, 229, 234, 0.78);
+}
+
+.workbench .view :is(.sales-segment-button, .view-mode-btn, .inventory-control-button, .sc-tab, .diagnosis-mode-switch button, .diagnosis-period-chips button),
+.workbench dialog :is(.transit-view-switch button, .production-filter-group button, .product-import-tabs button, .price-tab) {
+  min-block-size: 28px;
+  padding: 4px 12px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--wb-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  box-shadow: none;
+}
+
+.workbench .view :is(.sales-segment-button.active, .view-mode-btn.is-active, .inventory-control-button.active, .sc-tab.active, .sc-tab[aria-selected="true"], .diagnosis-mode-switch button.active, .diagnosis-period-chips button.active),
+.workbench dialog :is(.transit-view-switch button.active, .transit-view-switch button[aria-pressed="true"], .production-filter-group button.active, .product-import-tabs button.active, .price-tab.is-active) {
+  background: #ffffff;
+  color: var(--wb-ink);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.09);
+}
+
+/* Uniform Apple HIG Inputs & Selects across remaining views & dialogs */
+.workbench :is(.view, dialog) :is(select, input[type="search"], input[type="text"], input[type="number"], input[type="date"], input[type="datetime-local"], textarea) {
+  border: 1px solid rgba(29, 29, 31, 0.16);
+  border-radius: 9px;
+  background: #ffffff;
+  color: var(--wb-ink);
+  color-scheme: light;
+}
+
+.workbench :is(.view, dialog) :is(select, input[type="search"], input[type="text"], input[type="number"], input[type="date"], input[type="datetime-local"], textarea):focus-visible {
+  outline: 2px solid var(--wb-blue);
+  outline-offset: -1px;
+  border-color: var(--wb-blue);
+}
+
+/* Unified Card Surfaces across Products, Diagnosis, Forecast, Supply Chain, Data Center & Returns */
+.workbench .view :is(.product-card, .style-diagnosis-card, .diagnosis-campaign-card, .manual-keyword-action-card, .manual-match-card, .ad-type-card, .ad-coverage-item, .ad-source-card, .forecast-signal, .sc-delivery-flow-card, .data-center-source-card, .data-center-sync-plan-card, .data-center-init-card, .return-account-rollup, .return-month-control, .return-parent-control, .return-trend-series-control > summary, .domestic-sync-bar, .connector-browser-note, .connector-audit-row) {
+  border: 1px solid var(--wb-hairline);
+  border-radius: 14px;
+  background: var(--wb-surface);
+  box-shadow: var(--wb-surface-shadow);
+}
+
+@media (prefers-reduced-motion: no-preference) and (hover: hover) {
+  .workbench .view :is(.product-card, .sc-delivery-flow-card, .data-center-source-card, .forecast-signal, .ad-coverage-item) {
+    transition: border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
+  }
+
+  .workbench .view :is(.product-card, .sc-delivery-flow-card, .data-center-source-card, .forecast-signal, .ad-coverage-item):hover {
+    border-color: rgba(0, 113, 227, 0.34);
+    box-shadow: 0 8px 22px rgba(29, 29, 31, 0.08);
+    transform: translateY(-1px);
+  }
+}
+
+.workbench .view .ad-coverage-item strong,
+.workbench .view .sc-delivery-flow-card strong,
+.workbench .view .return-account-rollup-lead strong {
+  color: var(--wb-ink);
+}
+
+/* Native <dialog> Modals & Drawers in Apple HIG Sheet Style */
+.workbench dialog:is(.inv-style-dialog, .forecast-style-dialog, .sc-order-dialog, .available-stock-dialog, .price-monitor-dialog, .operation-dialog, .inventory-dialog, .product-import-drawer, .production-drawer, .domestic-drawer, .transit-drawer, .operation-drawer) {
+  border: 1px solid var(--wb-hairline);
+  border-radius: 18px;
+  background: var(--wb-surface);
+  color: var(--wb-ink);
+  box-shadow: var(--wb-sheet-shadow);
+}
+
+.workbench dialog::backdrop {
+  background: rgba(29, 29, 31, 0.32);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+.workbench dialog :is(.inv-style-head, .forecast-style-head, .sc-order-head, .available-stock-header, .price-monitor-header, .operation-dialog-header, .dialog-header, .product-import-header, .domestic-drawer-header, .transit-drawer-header) {
+  border-bottom: 1px solid var(--wb-hairline);
+  background: rgba(255, 255, 255, 0.94);
+}
+
+.workbench dialog .dialog-close {
+  border-radius: 999px;
+  border: 1px solid var(--wb-hairline);
+  background: var(--wb-inset);
+  color: var(--wb-secondary);
+}
+
+.workbench dialog .dialog-close:hover {
+  background: #e5e5ea;
+  color: var(--wb-ink);
+}

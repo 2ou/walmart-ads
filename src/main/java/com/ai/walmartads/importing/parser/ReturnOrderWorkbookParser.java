@@ -127,7 +127,7 @@ public class ReturnOrderWorkbookParser {
         return new ParsedRows<>(sourceRows, records);
     }
 
-    /** Seller SKU 形如 PNK0079-C-Beige-M-WFS，父款 = 首个 '-' 之前的一段。 */
+    /** Seller SKU 的父款为首个连字符之前的一段。 */
     private static String parentSkuOf(String sellerSku) {
         int cut = sellerSku.indexOf('-');
         return cut > 0 ? sellerSku.substring(0, cut) : sellerSku;

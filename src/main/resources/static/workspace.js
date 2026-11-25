@@ -41,11 +41,11 @@ async function loadAccount() {
   $("#accountUsername").textContent=account.username;
   $("#accountAbbreviation").textContent=account.storeAbbreviation||"—";
   $("#accountStoreId").textContent=account.storeId||"—";
-  $("#accountSupplyChain").textContent=account.supplyChainEnabled?"已启用（PINKSIR）":"未启用";
+  $("#accountSupplyChain").textContent=account.supplyChainEnabled?"已启用":"未启用";
   if(account.storeId){stores=[{storeId:account.storeId,storeName:account.storeName||account.storeId}];renderStoreOptions($("#storeSelect"),stores,account.storeId);}
-  const isPinksir=String(account.username||"").toUpperCase()==="PINKSIR";
-  $("#managedAccountsCard").hidden=!isPinksir;
-  if(isPinksir) await loadManagedAccounts();
+  const canManageAccounts = account.primaryWorkspace && account.status === "ACTIVE";
+  $("#managedAccountsCard").hidden = !canManageAccounts;
+  if (canManageAccounts) await loadManagedAccounts();
 }
 
 async function discoverStores(){
@@ -63,7 +63,7 @@ async function loadSessions(){const rows=await api("/api/workspace/sessions");$(
 async function loadAudit(){const rows=await api("/api/workspace/audit");$("#auditList").innerHTML=rows.map((row)=>`<div class="audit-row"><span>${escapeHtml(row.eventType)}</span><div><strong>${escapeHtml(row.summary||"—")}</strong><small>${escapeHtml(row.ipAddress||"—")} · ${row.success?"成功":"失败"}</small></div><small>${dateTime(row.createdAt)}</small></div>`).join("")||"暂无审计记录";}
 async function loadManagedAccounts(){
   const rows=await api("/api/workspace/managed-accounts");
-  $("#managedAccountList").innerHTML=rows.map((row)=>`<div class="session-row"><div><strong>${escapeHtml(row.username)} ${row.storeAbbreviation?`· ${escapeHtml(row.storeAbbreviation)}`:""}</strong><small>${escapeHtml(row.storeId||"未绑定 Store ID")} · ${row.mcpConfigured?"MCP 已配置":"MCP 未配置"} · ${escapeHtml(row.initializationStatus||row.status)}</small></div>${String(row.username).toUpperCase()==="PINKSIR"?"":`<button data-managed-reset="${row.id}" data-managed-name="${escapeHtml(row.username)}">重置密码</button>`}</div>`).join("")||"暂无店铺账号";
+  $("#managedAccountList").innerHTML=rows.map((row)=>`<div class="session-row"><div><strong>${escapeHtml(row.username)} ${row.storeAbbreviation?`· ${escapeHtml(row.storeAbbreviation)}`:""}</strong><small>${escapeHtml(row.storeId||"未绑定 Store ID")} · ${row.mcpConfigured?"MCP 已配置":"MCP 未配置"} · ${escapeHtml(row.initializationStatus||row.status)}</small></div>${row.primaryWorkspace?"":`<button type="button" data-managed-reset="${row.id}" data-managed-name="${escapeHtml(row.username)}">重置密码</button>`}</div>`).join("")||"暂无店铺账号";
 }
 
 function setCreateAccountOpen(open, restoreFocus=false){
@@ -75,7 +75,18 @@ function setCreateAccountOpen(open, restoreFocus=false){
   else if(restoreFocus)trigger.focus();
 }
 
-$$('[data-tab]').forEach((button)=>button.addEventListener("click",()=>{const tab=button.dataset.tab;$$('[data-tab]').forEach((item)=>item.classList.toggle("is-active",item===button));$$('[data-panel]').forEach((panel)=>panel.classList.toggle("is-active",panel.dataset.panel===tab));if(tab==="security")loadSessions().catch(fail);if(tab==="audit")loadAudit().catch(fail);}));
+const settingsTabs = $$('[data-tab]');
+settingsTabs.forEach((button) => button.addEventListener("click", () => {
+  const tab = button.dataset.tab;
+  settingsTabs.forEach((item) => {
+    item.classList.toggle("is-active", item === button);
+    if (item === button) item.setAttribute("aria-current", "page");
+    else item.removeAttribute("aria-current");
+  });
+  $$('[data-panel]').forEach((panel) => panel.classList.toggle("is-active", panel.dataset.panel === tab));
+  if (tab === "security") loadSessions().catch(fail);
+  if (tab === "audit") loadAudit().catch(fail);
+}));
 $("#testMcp").addEventListener("click",discoverStores);
 $("#toggleCreateAccount").addEventListener("click",()=>setCreateAccountOpen($("#createAccountCard").hidden));
 $("#closeCreateAccount").addEventListener("click",()=>setCreateAccountOpen(false,true));
@@ -83,7 +94,7 @@ $("#discoverNewStore").addEventListener("click",discoverNewStores);
 $("#bindingForm").addEventListener("submit",async(event)=>{event.preventDefault();const selected=stores.find((store)=>store.storeId===$("#storeSelect").value);if(!selected){fail(new Error("请先测试连接并选择当前店铺"));return;}const button=event.submitter;button.disabled=true;try{await api("/api/workspace/binding",{method:"POST",body:JSON.stringify({mcpKey:$("#mcpKey").value||null,baseUrl:$("#mcpBaseUrl").value,storeId:selected.storeId,skuPrefixes:split($("#skuPrefixes").value),advertiserIds:split($("#advertiserIds").value).map(Number).filter(Number.isFinite)})});$("#mcpKey").value="";await loadAccount();toast("领星配置已保存，初始化同步已进入队列");}catch(error){fail(error);}finally{button.disabled=false;}});
 $("#revealKey").addEventListener("click",async()=>{try{const result=await api("/api/workspace/mcp-key?purpose=view");$("#mcpKey").value=result.key;$("#mcpKey").type="text";toast("已显示当前工作区 Key");}catch(error){fail(error);}});
 $("#copyKey").addEventListener("click",async()=>{try{const result=await api("/api/workspace/mcp-key?purpose=copy");await navigator.clipboard.writeText(result.key);toast("MCP Key 已复制");}catch(error){fail(error);}});
-$("#createAccountForm").addEventListener("submit",async(event)=>{event.preventDefault();if($("#newPassword").value!==$("#newPasswordConfirm").value){fail(new Error("两次输入的密码不一致"));return;}const selected=newStores.find((store)=>store.storeId===$("#newStoreSelect").value);if(!selected){fail(new Error("请先测试连接并选择新店铺"));return;}const button=event.submitter;button.disabled=true;try{await api("/api/workspace/accounts",{method:"POST",body:JSON.stringify({password:$("#newPassword").value,confirmPassword:$("#newPasswordConfirm").value,mcpKey:$("#newMcpKey").value,baseUrl:$("#newMcpBaseUrl").value,storeId:selected.storeId,storeAbbreviation:$("#newStoreAbbreviation").value,advertiserIds:split($("#newAdvertiserIds").value).map(Number).filter(Number.isFinite)})});event.target.reset();$("#newMcpBaseUrl").value="https://openmcp.lingxing.com/mcp-servers/lingxing-mcp";$("#newStoreSelect").disabled=true;newStores=[];setCreateAccountOpen(false,true);toast(`店铺 ${selected.storeName} 已创建，可直接登录`);if(String(account.username).toUpperCase()==="PINKSIR")await loadManagedAccounts();}catch(error){fail(error);}finally{button.disabled=false;}});
+$("#createAccountForm").addEventListener("submit",async(event)=>{event.preventDefault();if($("#newPassword").value!==$("#newPasswordConfirm").value){fail(new Error("两次输入的密码不一致"));return;}const selected=newStores.find((store)=>store.storeId===$("#newStoreSelect").value);if(!selected){fail(new Error("请先测试连接并选择新店铺"));return;}const button=event.submitter;button.disabled=true;try{await api("/api/workspace/accounts",{method:"POST",body:JSON.stringify({password:$("#newPassword").value,confirmPassword:$("#newPasswordConfirm").value,mcpKey:$("#newMcpKey").value,baseUrl:$("#newMcpBaseUrl").value,storeId:selected.storeId,storeAbbreviation:$("#newStoreAbbreviation").value,advertiserIds:split($("#newAdvertiserIds").value).map(Number).filter(Number.isFinite)})});event.target.reset();$("#newMcpBaseUrl").value="https://openmcp.lingxing.com/mcp-servers/lingxing-mcp";$("#newStoreSelect").disabled=true;newStores=[];setCreateAccountOpen(false,true);toast(`店铺 ${selected.storeName} 已创建，可直接登录`);if(account.primaryWorkspace && account.status==="ACTIVE")await loadManagedAccounts();}catch(error){fail(error);}finally{button.disabled=false;}});
 $("#passwordForm").addEventListener("submit",async(event)=>{event.preventDefault();if($("#newPasswordOwn").value!==$("#confirmPasswordOwn").value){fail(new Error("两次输入的新密码不一致"));return;}const button=event.submitter;button.disabled=true;try{await api("/api/workspace/password",{method:"POST",body:JSON.stringify({newPassword:$("#newPasswordOwn").value,confirmPassword:$("#confirmPasswordOwn").value})});event.target.reset();toast("密码已修改，现有会话继续有效");}catch(error){fail(error);}finally{button.disabled=false;}});
 $("#sessionList").addEventListener("click",async(event)=>{const button=event.target.closest("[data-revoke]");if(!button)return;await api(`/api/workspace/sessions/${button.dataset.revoke}/revoke`,{method:"POST"});await loadSessions();});
 $("#managedAccountList").addEventListener("click",(event)=>{const button=event.target.closest("[data-managed-reset]");if(!button)return;$("#managedWorkspaceId").value=button.dataset.managedReset;$("#managedPasswordTarget").textContent=`为 ${button.dataset.managedName} 设置新密码；其现有会话不会退出。`;$("#managedPasswordDialog").showModal();});

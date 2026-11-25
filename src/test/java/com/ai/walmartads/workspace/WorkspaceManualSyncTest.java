@@ -1,5 +1,7 @@
 package com.ai.walmartads.workspace;
 
+import com.ai.walmartads.inventory.application.LingxingWfsMcpSyncService;
+import com.ai.walmartads.inventory.application.LingxingWfsShipmentService;
 import com.ai.walmartads.lingxingorder.LingXingOrderSyncService;
 import com.ai.walmartads.pricemonitor.PriceMonitorService;
 import com.ai.walmartads.walmartad.WalmartAdSyncService;
@@ -9,6 +11,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -20,6 +23,7 @@ class WorkspaceManualSyncTest {
     private final WorkspaceLingXingConfigService configs = mock(WorkspaceLingXingConfigService.class);
     private final LingXingMcpCoordinator coordinator = mock(LingXingMcpCoordinator.class);
     private final WalmartListingSyncService listings = mock(WalmartListingSyncService.class);
+    private final LingxingWfsMcpSyncService wfs = mock(LingxingWfsMcpSyncService.class);
     private final WorkspacePrincipal principal = new WorkspacePrincipal(7, "store", "ACTIVE", "7", "store", "S", true, 1);
     private WorkspaceSyncScheduler scheduler;
 
@@ -27,7 +31,7 @@ class WorkspaceManualSyncTest {
     void setup() {
         scheduler = new WorkspaceSyncScheduler(configs, listings, mock(LingXingOrderSyncService.class),
                 mock(WalmartAdSyncService.class), mock(WalmartCommentSyncService.class), mock(PriceMonitorService.class),
-                mock(WorkspaceInitializationService.class), coordinator);
+                mock(WorkspaceInitializationService.class), coordinator, wfs);
         WorkspaceContext.set(principal);
         when(configs.current()).thenReturn(new WorkspaceLingXingConfigService.Config(7, "https://example.com", "key", "7", 50, List.of()));
         when(coordinator.status(anyString(), anyString(), anyString()))
@@ -67,11 +71,30 @@ class WorkspaceManualSyncTest {
     }
 
     @Test
+    void manualAdsRequiresAnAdvertiserBoundToTheWorkspace() {
+        assertThatThrownBy(() -> scheduler.startManualSync("ADS")).hasMessageContaining("绑定广告账号");
+        verify(configs, never()).tryStartSync(anyLong(), anyString(), anyString());
+    }
+
+    @Test
     void coolingDownDoesNotAcquireLeaseOrCallMcp() {
         when(coordinator.status(anyString(), anyString(), anyString())).thenReturn(
                 new LingXingMcpCoordinator.RuntimeStatus(true, LocalDateTime.now().plusMinutes(1), null, null, 1));
         assertThatThrownBy(() -> scheduler.startManualSync("PRODUCTS")).hasMessageContaining("冷却");
         verify(configs, never()).tryStartSync(anyLong(), anyString(), anyString());
         verify(listings, never()).syncNow(anyString());
+    }
+
+    @Test
+    void manualWfsUsesSameCategoryLeaseAndRecordsCargoRows() {
+        String category = WorkspaceSyncScheduler.WFS_SHIPMENTS;
+        var lease = new WorkspaceLingXingConfigService.SyncLease(7, category, "token", 4, System.nanoTime());
+        when(configs.tryStartSync(7, category, "MANUAL")).thenReturn(lease);
+        when(wfs.syncNow()).thenReturn(new LingxingWfsShipmentService.ImportSummary(3, 2, 6, 1,
+                BigDecimal.ONE, LocalDateTime.now(), "LINGXING_MCP"));
+        scheduler.startManualSync(category);
+        verify(configs, timeout(3000)).finishSync(eq(lease), eq("SUCCESS"), contains("2 票货件"),
+                eq(3L), eq(6L), eq("VALID"), isNull());
+        verifyNoInteractions(listings);
     }
 }

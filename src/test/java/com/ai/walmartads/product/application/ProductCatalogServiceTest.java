@@ -71,6 +71,7 @@ class ProductCatalogServiceTest {
                     listing_status varchar(40),
                     store varchar(40),
                     delivery_fee decimal(18,6),
+                    purchase_cost decimal(18,6),
                     raw_payload text,
                     source_updated_at timestamp
                 )

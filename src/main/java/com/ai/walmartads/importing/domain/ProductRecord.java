@@ -141,7 +141,7 @@ public class ProductRecord extends com.ai.walmartads.workspace.WorkspaceOwnedEnt
     @Column(name = "listing_status", length = 40)
     private String listingStatus;
 
-    /** 店铺（可空，如 PINKSIR），由「沃尔玛商品」扫描回写。 */
+    /** 店铺名称，由「沃尔玛商品」扫描回写，可空。 */
     @Column(length = 40)
     private String store;
 
@@ -200,6 +200,10 @@ public class ProductRecord extends com.ai.walmartads.workspace.WorkspaceOwnedEnt
     /** 单件实际配送费（USD，可空），由 WFS 配送费报表 qty=1 标准行回填；利润计算兜底用。 */
     @Column(name = "delivery_fee", columnDefinition = "decimal(18,6)")
     private BigDecimal deliveryFee;
+
+    /** 领星 WFS 采购成本单价（RMB，可空），由领星 wfs_stock_v2_list 同步回写。 */
+    @Column(name = "purchase_cost", columnDefinition = "decimal(18,6)")
+    private BigDecimal purchaseCost;
 
     @Column(nullable = false, columnDefinition = "json")
     /** 原始报文（JSON） */
@@ -606,5 +610,13 @@ public class ProductRecord extends com.ai.walmartads.workspace.WorkspaceOwnedEnt
 
     public void setDeliveryFee(BigDecimal deliveryFee) {
         this.deliveryFee = deliveryFee;
+    }
+
+    public BigDecimal getPurchaseCost() {
+        return purchaseCost;
+    }
+
+    public void setPurchaseCost(BigDecimal purchaseCost) {
+        this.purchaseCost = purchaseCost;
     }
 }

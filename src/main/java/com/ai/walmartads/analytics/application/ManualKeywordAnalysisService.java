@@ -1,6 +1,7 @@
 package com.ai.walmartads.analytics.application;
 
 import com.ai.walmartads.common.UsBusinessDate;
+import com.ai.walmartads.workspace.WorkspaceOwnershipService;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -18,27 +19,28 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import java.util.function.UnaryOperator;
 
 /** Decision-oriented analysis of LingXing manual-ad keyword performance. */
 @Service
 public class ManualKeywordAnalysisService {
 
     private static final Set<String> AD_TYPES = Set.of("SP", "SB", "SV");
-    private static final Pattern PARENT_SKU = Pattern.compile("(PNK\\d+)", Pattern.CASE_INSENSITIVE);
     private static final DecisionThresholds DEFAULT_THRESHOLDS =
             new DecisionThresholds(5.0, 1.5, 20, 10.0);
 
     private final NamedParameterJdbcTemplate jdbc;
     private final CampaignDecisionConfigRepository configRepository;
+    private final WorkspaceOwnershipService ownership;
 
     public ManualKeywordAnalysisService(
             NamedParameterJdbcTemplate jdbc,
-            CampaignDecisionConfigRepository configRepository
+            CampaignDecisionConfigRepository configRepository,
+            WorkspaceOwnershipService ownership
     ) {
         this.jdbc = jdbc;
         this.configRepository = configRepository;
+        this.ownership = ownership;
     }
 
     public Analysis analyze(LocalDate requestedStart, LocalDate requestedEnd, String requestedAdType) {
@@ -78,8 +80,9 @@ public class ManualKeywordAnalysisService {
         }
 
         Map<String, String> parentByCampaign = loadCampaignParentSkus();
+        var findParentSku = ownership.currentParentSkuFinder();
         List<KeywordRow> keywords = grouped.values().stream()
-                .map(keyword -> keyword.toRow(thresholds, parentByCampaign))
+                .map(keyword -> keyword.toRow(thresholds, parentByCampaign, findParentSku))
                 .sorted(Comparator.comparing(KeywordRow::spend).reversed()
                         .thenComparing(KeywordRow::keywordText, Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER)))
                 .toList();
@@ -220,12 +223,6 @@ public class ManualKeywordAnalysisService {
 
     private static double round(double value, int scale) {
         return BigDecimal.valueOf(value).setScale(scale, RoundingMode.HALF_UP).doubleValue();
-    }
-
-    private static String parentSku(String campaignName) {
-        if (campaignName == null) return null;
-        Matcher matcher = PARENT_SKU.matcher(campaignName);
-        return matcher.find() ? matcher.group(1).toUpperCase(Locale.ROOT) : null;
     }
 
     private static String action(String decision, boolean serving) {
@@ -417,12 +414,13 @@ public class ManualKeywordAnalysisService {
             }
         }
 
-        private KeywordRow toRow(DecisionThresholds thresholds, Map<String, String> parentByCampaign) {
+        private KeywordRow toRow(DecisionThresholds thresholds, Map<String, String> parentByCampaign,
+                                 UnaryOperator<String> findParentSku) {
             String decision = decide(metrics.spend, metrics.sales, metrics.orders, metrics.clicks, thresholds);
             boolean serving = "enabled".equalsIgnoreCase(keywordState)
                     && "approved".equalsIgnoreCase(keywordStatus)
                     && (adGroupStatus == null || "enabled".equalsIgnoreCase(adGroupStatus));
-            String resolvedParent = parentSku(campaignName);
+            String resolvedParent = findParentSku.apply(campaignName);
             if (resolvedParent == null && parentByCampaign != null) {
                 resolvedParent = parentByCampaign.get(adType + "|" + campaignId);
             }

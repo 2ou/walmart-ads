@@ -5,7 +5,7 @@ const vm = require("node:vm");
 
 function worker() {
   const local = { walmartWorkbenchCurrentBrowserBridge: { key: "test", baseUrl: "http://localhost:8081" } };
-  const session = { "lingxingRequestTemplate:LINGXING_INVENTORY": { body: "legacy" } };
+  const session = { "lingxingRequestTemplate:LINGXING_INVENTORY": { body: "legacy" }, "lingxingRequestTemplate:LINGXING_WFS": { body: "legacy" } };
   const calls = { created: 0, createdUrls: [], reloaded: 0, failures: [], filters: [] };
   const event = { addListener() {} };
   const storage = (data) => ({
@@ -14,7 +14,7 @@ function worker() {
       return Object.fromEntries(keys.filter((item) => item in data).map((item) => [item, data[item]]));
     },
     async set(values) { Object.assign(data, values); },
-    async remove(key) { delete data[key]; }
+    async remove(key) { for (const item of Array.isArray(key) ? key : [key]) delete data[item]; }
   });
   const context = vm.createContext({
     chrome: {
@@ -43,17 +43,12 @@ function worker() {
   return { context, calls, session };
 }
 
-test("missing Lingxing page and supply session pause without opening tabs", async () => {
+test("missing supply session pauses without opening tabs", async () => {
   const { context, calls } = worker();
-  for (const source of ["LINGXING_WFS"]) {
-    await assert.rejects(vm.runInContext(`syncLingxing('${source}')`, context), /尚未读取/);
-    await assert.rejects(vm.runInContext(`syncLingxing('${source}')`, context), /尚未读取/);
-  }
   await assert.rejects(vm.runInContext("syncSupply()", context), /自动同步已暂停/);
   assert.equal(calls.created, 0);
   assert.equal(calls.reloaded, 0);
-  assert.ok(calls.failures.filter((failure) => failure.source.startsWith("LINGXING"))
-    .every((failure) => failure.pageRequired && !failure.loginRequired));
+  assert.equal(calls.failures.at(-1).source, "SUPPLY_CHAIN");
   assert.equal(calls.failures.at(-1).loginRequired, true);
 });
 
@@ -63,27 +58,21 @@ test("an explicit login action opens one page", async () => {
   assert.equal(calls.created, 1);
 });
 
-test("opening the WFS page is an explicit action", async () => {
+test("old WFS commands never open a browser page", async () => {
   const { context, calls } = worker();
-  await vm.runInContext("runCommand({action:'OPEN_PAGE', source:'LINGXING_WFS'})", context);
-  assert.equal(calls.created, 1);
+  await assert.rejects(vm.runInContext("runCommand({action:'OPEN_PAGE', source:'LINGXING_WFS'})", context), /MCP/);
+  await assert.rejects(vm.runInContext("runCommand({action:'LOGIN', system:'LINGXING'})", context), /MCP/);
+  await vm.runInContext("runCommand({action:'SYNC', source:'LINGXING_WFS'})", context);
+  assert.equal(calls.created, 0);
 });
 
-test("domestic warehouse requests are no longer captured or scheduled", async () => {
+test("Lingxing inventory and cargo requests are no longer captured or scheduled", async () => {
   const { context, calls, session } = worker();
   await vm.runInContext("bootstrap()", context);
-  assert.equal(vm.runInContext("sourceForUrl('https://czyx.lingxing.com/api/storage/lists')", context), null);
-  assert.equal(vm.runInContext("sourceForUrl('https://czyx.lingxing.com/mp-platform-warehouse-api/api/cargo/list')", context), "LINGXING_WFS");
-  assert.ok(calls.filters.every((url) => !url.includes("/api/storage/lists")));
+  assert.deepEqual(calls.filters, ["https://czyxgyl.shangyiku.top/prod-api/*"]);
   assert.equal(session["lingxingRequestTemplate:LINGXING_INVENTORY"], undefined);
+  assert.equal(session["lingxingRequestTemplate:LINGXING_WFS"], undefined);
   await vm.runInContext("runCommand({action:'SYNC', source:'LINGXING_INVENTORY'})", context);
   assert.equal(calls.created, 0);
   assert.equal(calls.failures.length, 0);
-});
-
-test("Lingxing login opens the WFS page", async () => {
-  const { context, calls } = worker();
-  await vm.runInContext("runCommand({action:'LOGIN', system:'LINGXING'})", context);
-  assert.equal(calls.created, 1);
-  assert.equal(calls.createdUrls[0], "https://czyx.lingxing.com/erp/mmulti/pwShipment");
 });

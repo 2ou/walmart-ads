@@ -40,7 +40,8 @@ public class InventoryDataService {
     private static final BigDecimal ZERO = BigDecimal.ZERO;
     private static final int MIN_COMPLETE_SNAPSHOT_ROWS = 100;
     private static final double MIN_COMPLETE_SNAPSHOT_RATIO = 0.60;
-    private static final long WINDOW_CACHE_NANOS = java.time.Duration.ofSeconds(20).toNanos();
+    private static final long WINDOW_CACHE_NANOS = java.time.Duration.ofMinutes(10).toNanos();
+    private static final long TREND_CACHE_NANOS = java.time.Duration.ofMinutes(10).toNanos();
     private static final long REFUND_CACHE_NANOS = java.time.Duration.ofMinutes(5).toNanos();
 
     private final NamedParameterJdbcTemplate jdbc;
@@ -51,27 +52,46 @@ public class InventoryDataService {
     private final ReplenishmentPlanCache replenishmentPlanCache;
     private final ReturnAnalyticsService returnAnalyticsService;
     private final Map<WindowCacheKey, WindowCacheEntry> windowCache = new ConcurrentHashMap<>();
+    private final Map<Long, TrendCacheEntry> trendCache = new ConcurrentHashMap<>();
     private final Map<Long, RefundCacheEntry> refundCache = new ConcurrentHashMap<>();
 
     private record RefundCacheEntry(Map<String, Double> rateByParent, long createdAtNanos) {
     }
 
-    @EventListener
-    public void onSupplyChainSynced(SupplyChainSyncedEvent event) {
+    private record TrendCacheEntry(
+            LocalDateTime snapshotAt,
+            double productionUnits,
+            int shipmentCount,
+            long createdAtNanos,
+            List<TrendRow> rows
+    ) {
+    }
+
+    public void invalidateCache() {
         long workspaceId = WorkspaceContext.requireId();
         windowCache.keySet().removeIf(key -> key.workspaceId() == workspaceId);
+        trendCache.remove(workspaceId);
+    }
+
+    @EventListener
+    public void onSupplyChainSynced(SupplyChainSyncedEvent event) {
+        invalidateCache();
     }
 
     @EventListener
     public void onDomesticInventorySynced(DomesticInventorySyncedEvent event) {
-        long workspaceId = WorkspaceContext.requireId();
-        windowCache.keySet().removeIf(key -> key.workspaceId() == workspaceId);
+        invalidateCache();
     }
 
     @EventListener
     public void onTransitTimingChanged(TransitTimingChangedEvent event) {
-        long workspaceId = WorkspaceContext.requireId();
-        windowCache.keySet().removeIf(key -> key.workspaceId() == workspaceId);
+        invalidateCache();
+    }
+
+    @EventListener
+    public void onWfsShipmentsSynced(WfsShipmentsSyncedEvent event) {
+        windowCache.keySet().removeIf(key -> key.workspaceId() == event.workspaceId());
+        trendCache.remove(event.workspaceId());
     }
 
     public InventoryDataService(
@@ -99,7 +119,24 @@ public class InventoryDataService {
 
     @Transactional(readOnly = true)
     public InventoryPayload load(int days, int targetDays, LocalDate requestedStart, LocalDate requestedEnd) {
-        return loadPayload(days, targetDays, requestedStart, requestedEnd, true);
+        InventoryPayload base = quickPayload(days, targetDays, requestedStart, requestedEnd);
+        List<TrendRow> trend = loadCachedTrend(
+                base.summary().productionUnits(),
+                base.transit().shipments(),
+                base.meta().snapshotAt()
+        );
+        return new InventoryPayload(
+                base.meta(),
+                base.summary(),
+                base.riskCounts(),
+                trend,
+                base.rows(),
+                base.transit(),
+                base.domesticStock(),
+                base.unmatchedStock(),
+                base.planningReady(),
+                base.planningRefreshing()
+        );
     }
 
     private InventoryPayload loadPayload(
@@ -137,7 +174,7 @@ public class InventoryDataService {
                 select sku, max(parent_sku) as parent_sku, max(product_id) as item_id,
                        max(product_name) as item_name, max(main_image_url) as main_image_url,
                        max(color) as color, max(size) as size, max(cutting_yield) as cutting_yield,
-                       max(launch_date) as launch_date
+                       max(launch_date) as launch_date, max(purchase_cost) as purchase_cost
                   from wm_ads_product_record where current_version = true group by sku
                 """, new MapSqlParameterSource());
         InventorySkuMatcher matcher = new InventorySkuMatcher(productRows.stream().map(row -> text(row, "sku")).toList());
@@ -167,7 +204,24 @@ public class InventoryDataService {
                        inventory.surplus_units,
                        inventory.sell_through_rate,
                        inventory.publishing_status,
-                       inventory.item_lifecycle
+                       inventory.item_lifecycle,
+                       inventory.inbound_units,
+                       inventory.onhand_units,
+                       inventory.unabled_warehousing_units,
+                       inventory.inventory_review_units,
+                       inventory.damaged_units,
+                       inventory.ats_0_3m,
+                       inventory.ats_3_6m,
+                       inventory.ats_6_9m,
+                       inventory.ats_9_12m,
+                       inventory.ats_1y_plus,
+                       inventory.first_in_stock_date,
+                       inventory.sales_forecast_w1_4,
+                       inventory.sales_forecast_w5_8,
+                       inventory.sales_forecast_w9_12,
+                       inventory.wfs_stock_status,
+                       inventory.customer_favorite,
+                       inventory.purchase_cost
                   from wm_ads_inventory_unified inventory
                  where inventory.snapshot_at = :snapshotAt
                  order by inventory.parent_sku, inventory.sku
@@ -220,6 +274,14 @@ public class InventoryDataService {
             Double cumulativeRefundRate = refundRateByParent == null
                     ? null
                     : refundRateByParent.getOrDefault(parentSku, 0.0);
+            double ats03 = round(number(source, "ats_0_3m"));
+            double ats36 = round(number(source, "ats_3_6m"));
+            double ats69 = round(number(source, "ats_6_9m"));
+            double ats912 = round(number(source, "ats_9_12m"));
+            double ats1Y = round(number(source, "ats_1y_plus"));
+            double aged180Plus = round(ats69 + ats912 + ats1Y);
+            Double purchaseCost = doubleOrNull(source.get("purchase_cost"));
+            double unitCost = purchaseCost == null ? 0.0 : purchaseCost;
             rows.add(new InventoryRow(
                     sku,
                     text(source, "parent_sku"),
@@ -259,7 +321,28 @@ public class InventoryDataService {
                     forecast.forecastSuggestedUnits() > 0
                             ? ProductionPlanAllocator.Status.MISSING_COLOR.name()
                             : ProductionPlanAllocator.Status.NOT_NEEDED.name(),
-                    cumulativeRefundRate
+                    cumulativeRefundRate,
+                    round(surplusUnits),
+                    round(number(source, "inbound_units")),
+                    round(number(source, "onhand_units")),
+                    round(number(source, "unabled_warehousing_units")),
+                    round(number(source, "inventory_review_units")),
+                    round(number(source, "damaged_units")),
+                    ats03,
+                    ats36,
+                    ats69,
+                    ats912,
+                    ats1Y,
+                    aged180Plus,
+                    localDate(source.get("first_in_stock_date")),
+                    round(number(source, "sales_forecast_w1_4")),
+                    round(number(source, "sales_forecast_w5_8")),
+                    round(number(source, "sales_forecast_w9_12")),
+                    text(source, "wfs_stock_status"),
+                    boolOrNull(source.get("customer_favorite")),
+                    purchaseCost,
+                    round(availableUnits * unitCost),
+                    round(aged180Plus * unitCost)
             ));
         }
         rows = applyProductionPlans(rows);
@@ -324,10 +407,15 @@ public class InventoryDataService {
                 continue;
             }
             Map<String, Object> item = productBySku.get(sku);
-            for (String field : List.of("daily_units_sold", "available_units", "reserved_units", "suggested_units", "surplus_units")) {
+            for (String field : List.of("daily_units_sold", "available_units", "reserved_units", "suggested_units", "surplus_units",
+                    "inbound_units", "onhand_units", "unabled_warehousing_units", "inventory_review_units", "damaged_units",
+                    "ats_0_3m", "ats_3_6m", "ats_6_9m", "ats_9_12m", "ats_1y_plus",
+                    "sales_forecast_w1_4", "sales_forecast_w5_8", "sales_forecast_w9_12")) {
                 item.put(field, number(item, field) + number(source, field));
             }
-            for (String field : List.of("status", "forecasted_days_supply", "out_of_stock_date", "sell_through_rate", "publishing_status", "item_lifecycle")) {
+            for (String field : List.of("status", "forecasted_days_supply", "out_of_stock_date", "sell_through_rate",
+                    "publishing_status", "item_lifecycle", "first_in_stock_date", "wfs_stock_status",
+                    "customer_favorite", "purchase_cost")) {
                 if (source.get(field) != null) item.put(field, source.get(field));
             }
         }
@@ -368,7 +456,7 @@ public class InventoryDataService {
         }
         if (risk != null && !risk.isBlank() && !"all".equalsIgnoreCase(risk)) {
             Set<String> risks = Set.of(risk.toUpperCase(Locale.ROOT).split(","));
-            styles = styles.stream().filter(style -> risks.contains(style.systemRisk())).toList();
+            styles = styles.stream().filter(style -> matchesRiskFilter(style, risks)).toList();
         }
         List<InventoryStyleSummary> ordered = new ArrayList<>(styles);
         ordered.sort(styleComparator(sort, direction));
@@ -425,7 +513,35 @@ public class InventoryDataService {
 
     @Transactional(readOnly = true)
     public List<TrendRow> trend() {
-        return loadTrend(0, List.of());
+        return loadCachedTrend(0, List.of(), latestSnapshotAt());
+    }
+
+    private List<TrendRow> loadCachedTrend(
+            double productionUnits,
+            List<TransitInventoryService.TransitShipment> transitShipments,
+            LocalDateTime snapshotAt
+    ) {
+        Long workspaceId = WorkspaceContext.current()
+                .map(com.ai.walmartads.workspace.WorkspacePrincipal::workspaceId)
+                .orElse(null);
+        int shipmentCount = transitShipments == null ? 0 : transitShipments.size();
+        if (workspaceId != null) {
+            TrendCacheEntry cached = trendCache.get(workspaceId);
+            long now = System.nanoTime();
+            if (cached != null
+                    && now - cached.createdAtNanos() < TREND_CACHE_NANOS
+                    && java.util.Objects.equals(cached.snapshotAt(), snapshotAt)
+                    && Double.compare(cached.productionUnits(), productionUnits) == 0
+                    && cached.shipmentCount() == shipmentCount) {
+                return cached.rows();
+            }
+        }
+        List<TrendRow> rows = loadTrend(productionUnits, transitShipments);
+        if (workspaceId != null) {
+            trendCache.put(workspaceId, new TrendCacheEntry(
+                    snapshotAt, productionUnits, shipmentCount, System.nanoTime(), rows));
+        }
+        return rows;
     }
 
     private InventoryPayload quickPayload(
@@ -449,15 +565,18 @@ public class InventoryDataService {
         WindowCacheEntry cached = windowCache.get(key);
         long now = System.nanoTime();
         boolean planReady = replenishmentPlanCache.peek(safeTargetDays) != null;
+        long currentPlanVersion = replenishmentPlanCache.version(workspaceId);
         if (cached != null
                 && now - cached.createdAtNanos() < WINDOW_CACHE_NANOS
+                && cached.planVersion() == currentPlanVersion
                 && (cached.planningReady() || !planReady)) {
             return cached.payload();
         }
         InventoryPayload payload = loadPayload(safeDays, safeTargetDays, requestedStart, requestedEnd, false);
         boolean readyAfterLoad = payload.planningReady();
-        windowCache.put(key, new WindowCacheEntry(payload, now, readyAfterLoad));
-        windowCache.keySet().removeIf(cacheKey -> cacheKey.workspaceId() == workspaceId && !cacheKey.equals(key));
+        long versionAfterLoad = replenishmentPlanCache.version(workspaceId);
+        windowCache.put(key, new WindowCacheEntry(payload, now, readyAfterLoad, versionAfterLoad));
+        windowCache.entrySet().removeIf(entry -> now - entry.getValue().createdAtNanos() >= WINDOW_CACHE_NANOS);
         return payload;
     }
 
@@ -491,6 +610,21 @@ public class InventoryDataService {
                     continuousDays == null ? 0 : continuousDays * riskDaily,
                     riskDaily, forecastSuggested, payload.meta().targetDays());
             InventoryRow representative = rows.getFirst();
+            double reservedUnits = sum(rows, InventoryRow::reservedUnits);
+            double surplusUnits = sum(rows, InventoryRow::surplusUnits);
+            double systemSuggestedUnits = sum(rows, InventoryRow::systemSuggestedUnits);
+            double unabledWarehousingUnits = sum(rows, InventoryRow::unabledWarehousingUnits);
+            double inventoryReviewUnits = sum(rows, InventoryRow::inventoryReviewUnits);
+            double ats03Months = sum(rows, InventoryRow::ats03Months);
+            double ats36Months = sum(rows, InventoryRow::ats36Months);
+            double ats69Months = sum(rows, InventoryRow::ats69Months);
+            double ats912Months = sum(rows, InventoryRow::ats912Months);
+            double ats1YearPlus = sum(rows, InventoryRow::ats1YearPlus);
+            double aged180PlusUnits = sum(rows, InventoryRow::aged180PlusUnits);
+            Double purchaseCost = rows.stream().map(InventoryRow::purchaseCost)
+                    .filter(java.util.Objects::nonNull).findFirst().orElse(null);
+            double wfsStockValueRmb = sum(rows, InventoryRow::wfsStockValueRmb);
+            double aged180PlusValueRmb = sum(rows, InventoryRow::aged180PlusValueRmb);
             result.add(new InventoryStyleSummary(
                     parentSku,
                     representative.itemName(),
@@ -512,10 +646,37 @@ public class InventoryDataService {
                     continuousDays,
                     rows.stream().map(InventoryRow::cumulativeRefundRate).filter(java.util.Objects::nonNull).findFirst().orElse(null),
                     coverageLowerBound,
-                    rows.stream().map(InventoryDataService::searchableRow).toList()
+                    rows.stream().map(InventoryDataService::searchableRow).toList(),
+                    round(reservedUnits),
+                    round(surplusUnits),
+                    round(systemSuggestedUnits),
+                    round(unabledWarehousingUnits),
+                    round(inventoryReviewUnits),
+                    round(ats03Months),
+                    round(ats36Months),
+                    round(ats69Months),
+                    round(ats912Months),
+                    round(ats1YearPlus),
+                    round(aged180PlusUnits),
+                    purchaseCost,
+                    round(wfsStockValueRmb),
+                    round(aged180PlusValueRmb)
             ));
         });
         return result;
+    }
+
+    private static boolean matchesRiskFilter(InventoryStyleSummary style, Set<String> filters) {
+        if (filters.contains("AGED_180")) {
+            return style.aged180PlusUnits() > 0;
+        }
+        if (filters.contains("WFS_SURPLUS")) {
+            return style.surplusUnits() > 0;
+        }
+        if (filters.contains("WFS_LOCKED")) {
+            return style.reservedUnits() > 0;
+        }
+        return filters.contains(style.systemRisk());
     }
 
     private static double sum(List<InventoryRow> rows, java.util.function.ToDoubleFunction<InventoryRow> mapper) {
@@ -628,11 +789,16 @@ public class InventoryDataService {
 
     private LocalDateTime latestSnapshotAt() {
         List<SnapshotCandidate> candidates = jdbc.queryForList("""
-                select inventory.snapshot_at, count(*) as row_count
-                  from wm_ads_inventory_unified inventory
-                 group by inventory.snapshot_at
-                 order by inventory.snapshot_at desc
-                 limit 2
+                select recent.snapshot_at, count(*) as row_count
+                  from wm_ads_inventory_unified recent
+                  join (
+                        select distinct snapshot_at
+                          from wm_ads_inventory_unified
+                         order by snapshot_at desc
+                         limit 2
+                  ) latest on latest.snapshot_at = recent.snapshot_at
+                 group by recent.snapshot_at
+                 order by recent.snapshot_at desc
                 """, new MapSqlParameterSource()).stream()
                 .map(row -> new SnapshotCandidate(
                         localDateTime(row.get("snapshot_at")),
@@ -807,17 +973,20 @@ public class InventoryDataService {
             List<TransitInventoryService.TransitShipment> transitShipments
     ) {
         return jdbc.queryForList("""
-                with rep as (
-                  select snapshot_at,
-                         case when sum(source_type = 'LINGXING') > 0 then 'LINGXING'
-                              when sum(source_type = 'LEGACY')   > 0 then 'LEGACY'
-                              when sum(source_type = 'WEEKLY')   > 0 then 'WEEKLY'
-                              else min(source_type) end as source_type
-                    from wm_ads_inventory_unified
-                   where parent_sku in (select p.parent_sku
-                                          from wm_ads_product_record p
-                                         where p.current_version = 1)
-                   group by snapshot_at
+                with valid_parents as (
+                  select distinct p.parent_sku
+                    from wm_ads_product_record p
+                   where p.current_version = 1
+                ),
+                rep as (
+                  select i.snapshot_at,
+                         case when sum(i.source_type = 'LINGXING') > 0 then 'LINGXING'
+                              when sum(i.source_type = 'LEGACY')   > 0 then 'LEGACY'
+                              when sum(i.source_type = 'WEEKLY')   > 0 then 'WEEKLY'
+                              else min(i.source_type) end as source_type
+                    from wm_ads_inventory_unified i
+                    join valid_parents vp on vp.parent_sku = i.parent_sku
+                   group by i.snapshot_at
                 )
                 select inventory.snapshot_at,
                        sum(inventory.available_units) as available_units,
@@ -826,9 +995,7 @@ public class InventoryDataService {
                   from wm_ads_inventory_unified inventory
                   join rep on rep.snapshot_at = inventory.snapshot_at
                           and rep.source_type = inventory.source_type
-                 where inventory.parent_sku in (select p.parent_sku
-                                                  from wm_ads_product_record p
-                                                 where p.current_version = 1)
+                  join valid_parents vp on vp.parent_sku = inventory.parent_sku
                  group by inventory.snapshot_at
                  order by inventory.snapshot_at
                 """, new MapSqlParameterSource()).stream().map(row -> new TrendRow(
@@ -923,7 +1090,18 @@ public class InventoryDataService {
                 round(rows.stream().mapToDouble(InventoryRow::forecastSuggestedUnits).sum()),
                 round(rows.stream().mapToDouble(InventoryRow::productionSuggestedUnits).sum()),
                 rows.stream().filter(row -> row.risk().equals("OUT_OF_STOCK")).count(),
-                rows.stream().filter(row -> List.of("URGENT", "LOW").contains(row.risk())).count()
+                rows.stream().filter(row -> List.of("URGENT", "LOW").contains(row.risk())).count(),
+                round(rows.stream().mapToDouble(InventoryRow::surplusUnits).sum()),
+                round(rows.stream().mapToDouble(InventoryRow::unabledWarehousingUnits).sum()),
+                round(rows.stream().mapToDouble(InventoryRow::inventoryReviewUnits).sum()),
+                round(rows.stream().mapToDouble(InventoryRow::ats03Months).sum()),
+                round(rows.stream().mapToDouble(InventoryRow::ats36Months).sum()),
+                round(rows.stream().mapToDouble(InventoryRow::ats69Months).sum()),
+                round(rows.stream().mapToDouble(InventoryRow::ats912Months).sum()),
+                round(rows.stream().mapToDouble(InventoryRow::ats1YearPlus).sum()),
+                round(rows.stream().mapToDouble(InventoryRow::aged180PlusUnits).sum()),
+                round(rows.stream().mapToDouble(InventoryRow::wfsStockValueRmb).sum()),
+                round(rows.stream().mapToDouble(InventoryRow::aged180PlusValueRmb).sum())
         );
     }
 
@@ -1019,7 +1197,7 @@ public class InventoryDataService {
     private static InventoryPayload emptyPayload(int days, int targetDays) {
         return new InventoryPayload(
                 new Meta(null, null, null, 0, days, targetDays, 0, false),
-                new Summary(0, 0, 0, 0, 0, 0, 0, 0, 0),
+                new Summary(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
                 Map.of(),
                 List.of(),
                 List.of(),
@@ -1037,6 +1215,41 @@ public class InventoryDataService {
             return decimal;
         }
         return new BigDecimal(String.valueOf(value));
+    }
+
+    private static Double doubleOrNull(Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof Number number) {
+            return number.doubleValue();
+        }
+        String text = String.valueOf(value).trim();
+        if (text.isEmpty()) {
+            return null;
+        }
+        try {
+            return Double.valueOf(text);
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
+    }
+
+    private static Boolean boolOrNull(Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof Boolean bool) {
+            return bool;
+        }
+        if (value instanceof Number number) {
+            return number.intValue() != 0;
+        }
+        String text = String.valueOf(value).trim().toLowerCase(Locale.ROOT);
+        if (text.isEmpty()) {
+            return null;
+        }
+        return "true".equals(text) || "1".equals(text);
     }
 
     private static double number(Map<String, Object> row, String key) {
@@ -1159,7 +1372,21 @@ public class InventoryDataService {
             Double projectedDays,
             Double cumulativeRefundRate,
             boolean coverageLowerBound,
-            @JsonIgnore List<SearchableInventoryRow> searchableRows
+            @JsonIgnore List<SearchableInventoryRow> searchableRows,
+            double reservedUnits,
+            double surplusUnits,
+            double systemSuggestedUnits,
+            double unabledWarehousingUnits,
+            double inventoryReviewUnits,
+            double ats03Months,
+            double ats36Months,
+            double ats69Months,
+            double ats912Months,
+            double ats1YearPlus,
+            double aged180PlusUnits,
+            Double purchaseCost,
+            double wfsStockValueRmb,
+            double aged180PlusValueRmb
     ) {
         boolean matches(String query) {
             return searchableRows.stream().anyMatch(row -> row.matches(query));
@@ -1175,7 +1402,7 @@ public class InventoryDataService {
     ) {
     }
 
-    private record WindowCacheEntry(InventoryPayload payload, long createdAtNanos, boolean planningReady) {
+    private record WindowCacheEntry(InventoryPayload payload, long createdAtNanos, boolean planningReady, long planVersion) {
     }
 
     /**
@@ -1241,7 +1468,18 @@ public class InventoryDataService {
             double forecastSuggestedUnits,
             double productionSuggestedUnits,
             long outOfStockSkus,
-            long lowStockSkus
+            long lowStockSkus,
+            double surplusUnits,
+            double unabledWarehousingUnits,
+            double inventoryReviewUnits,
+            double ats03Months,
+            double ats36Months,
+            double ats69Months,
+            double ats912Months,
+            double ats1YearPlus,
+            double aged180PlusUnits,
+            double wfsStockValueRmb,
+            double aged180PlusValueRmb
     ) {
     }
 
@@ -1282,7 +1520,28 @@ public class InventoryDataService {
             double productionSuggestedUnits,
             double colorProductionSuggestedUnits,
             String productionSuggestionStatus,
-            Double cumulativeRefundRate
+            Double cumulativeRefundRate,
+            double surplusUnits,
+            double inboundUnits,
+            double onhandUnits,
+            double unabledWarehousingUnits,
+            double inventoryReviewUnits,
+            double damagedUnits,
+            double ats03Months,
+            double ats36Months,
+            double ats69Months,
+            double ats912Months,
+            double ats1YearPlus,
+            double aged180PlusUnits,
+            LocalDate firstInStockDate,
+            double salesForecastW1To4,
+            double salesForecastW5To8,
+            double salesForecastW9To12,
+            String wfsStockStatus,
+            Boolean customerFavorite,
+            Double purchaseCost,
+            double wfsStockValueRmb,
+            double aged180PlusValueRmb
     ) {
         InventoryRow withProductionPlan(
                 double skuProductionSuggestedUnits,
@@ -1326,7 +1585,28 @@ public class InventoryDataService {
                     round(skuProductionSuggestedUnits),
                     round(colorProductionSuggestedUnits),
                     status.name(),
-                    cumulativeRefundRate
+                    cumulativeRefundRate,
+                    surplusUnits,
+                    inboundUnits,
+                    onhandUnits,
+                    unabledWarehousingUnits,
+                    inventoryReviewUnits,
+                    damagedUnits,
+                    ats03Months,
+                    ats36Months,
+                    ats69Months,
+                    ats912Months,
+                    ats1YearPlus,
+                    aged180PlusUnits,
+                    firstInStockDate,
+                    salesForecastW1To4,
+                    salesForecastW5To8,
+                    salesForecastW9To12,
+                    wfsStockStatus,
+                    customerFavorite,
+                    purchaseCost,
+                    wfsStockValueRmb,
+                    aged180PlusValueRmb
             );
         }
 
@@ -1386,7 +1666,28 @@ public class InventoryDataService {
                     round(plan.productionUnits()),
                     round(plan.colorProductionUnits()),
                     plan.status(),
-                    cumulativeRefundRate
+                    cumulativeRefundRate,
+                    surplusUnits,
+                    inboundUnits,
+                    onhandUnits,
+                    unabledWarehousingUnits,
+                    inventoryReviewUnits,
+                    damagedUnits,
+                    ats03Months,
+                    ats36Months,
+                    ats69Months,
+                    ats912Months,
+                    ats1YearPlus,
+                    aged180PlusUnits,
+                    firstInStockDate,
+                    salesForecastW1To4,
+                    salesForecastW5To8,
+                    salesForecastW9To12,
+                    wfsStockStatus,
+                    customerFavorite,
+                    purchaseCost,
+                    wfsStockValueRmb,
+                    aged180PlusValueRmb
             );
         }
 

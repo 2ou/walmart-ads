@@ -7,15 +7,16 @@
   <script>if(new URLSearchParams(location.search).get("embedded")==="1")document.documentElement.dataset.embedded="true";</script>
   <title>店铺管理 · 沃尔玛工作台</title>
   <link rel="stylesheet" href="workspace.css?v=20261028-store-management">
+  <link rel="stylesheet" href="workbench-surfaces.css?v=20261125-ui">
 </head>
-<body>
+<body class="workbench-settings">
   <div class="settings-shell">
     <aside class="settings-sidebar">
       <a class="settings-brand" href="/"><span>W</span><strong>沃尔玛工作台</strong></a>
-      <nav>
-        <button class="is-active" data-tab="store" type="button"><i>01</i><span>店铺与领星</span></button>
-        <button data-tab="security" type="button"><i>02</i><span>账号安全</span></button>
-        <button data-tab="audit" type="button"><i>03</i><span>运行审计</span></button>
+      <nav aria-label="店铺管理">
+        <button class="is-active" data-tab="store" type="button" aria-controls="settingsStore" aria-current="page">店铺与领星</button>
+        <button data-tab="security" type="button" aria-controls="settingsSecurity">账号安全</button>
+        <button data-tab="audit" type="button" aria-controls="settingsAudit">运行审计</button>
       </nav>
       <div class="sidebar-account"><span class="status-dot"></span><div><strong id="sideStore">读取中…</strong><small id="sideUser"></small></div></div>
     </aside>
@@ -29,7 +30,7 @@
       <div id="pageError" class="notice error" role="alert" hidden></div>
       <div id="pendingNotice" class="notice pending" hidden><strong>这个账号还没有绑定店铺</strong><span>完成领星连接与店铺确认后，商品、广告、销量等业务页面才会解锁。</span></div>
 
-      <section class="settings-tab is-active" data-panel="store">
+      <section class="settings-tab is-active" id="settingsStore" data-panel="store">
         <div class="identity-hero">
           <div><span class="kicker">CURRENT WORKSPACE</span><h2 id="heroStore">读取中…</h2><p id="heroMeta">正在确认店铺身份</p></div>
           <div class="identity-state"><span id="heroStatus">—</span><small id="heroInit">—</small></div>
@@ -73,13 +74,13 @@
             </form>
           </section>
           <section class="settings-card wide" id="managedAccountsCard" hidden>
-            <div class="card-heading"><div><span class="card-index">PINKSIR</span><h3>账号管理</h3><p>仅 PINKSIR 可查看其他店铺并重置密码；重置后现有会话继续有效。</p></div><button class="secondary small" id="refreshManagedAccounts" type="button">刷新</button></div>
+            <div class="card-heading"><div><h3>账号管理</h3><p>主工作区管理员可查看店铺账号并重置密码。重置后现有会话继续有效。</p></div><button class="secondary small" id="refreshManagedAccounts" type="button">刷新</button></div>
             <div id="managedAccountList" class="list-stack"></div>
           </section>
         </div>
       </section>
 
-      <section class="settings-tab" data-panel="security">
+      <section class="settings-tab" id="settingsSecurity" data-panel="security">
         <div class="section-heading"><div><span class="kicker">ACCOUNT SECURITY</span><h2>账号安全</h2><p>修改密码只需输入两次新密码；已登录浏览器会话继续有效。</p></div></div>
         <div class="settings-grid">
           <form id="passwordForm" class="settings-card"><div class="card-heading"><div><span class="card-index">01</span><h3>修改密码</h3></div></div><div class="compact-form"><label>新密码<input id="newPasswordOwn" type="password" autocomplete="new-password" required minlength="8"></label><label>确认新密码<input id="confirmPasswordOwn" type="password" autocomplete="new-password" required minlength="8"></label><button class="primary" type="submit">确认修改密码</button></div></form>
@@ -87,15 +88,15 @@
         </div>
       </section>
 
-      <section class="settings-tab" data-panel="audit">
+      <section class="settings-tab" id="settingsAudit" data-panel="audit">
         <div class="section-heading"><div><span class="kicker">SECURITY AUDIT</span><h2>当前账号审计</h2><p>只显示本账号的登录、密钥、绑定、同步与安全操作；敏感值永不进入日志。</p></div><button class="secondary" id="refreshAudit" type="button">刷新</button></div>
         <section class="settings-card"><div id="auditList" class="audit-list"></div></section>
       </section>
     </main>
   </div>
 
-  <dialog id="managedPasswordDialog"><form id="managedPasswordForm" class="dialog-card"><span class="kicker">PINKSIR ACCOUNT ADMIN</span><h2>重置店铺密码</h2><p id="managedPasswordTarget">—</p><input id="managedWorkspaceId" type="hidden"><div class="compact-form"><label>新密码<input id="managedNewPassword" type="password" autocomplete="new-password" required minlength="8"></label><label>确认密码<input id="managedConfirmPassword" type="password" autocomplete="new-password" required minlength="8"></label></div><div><button class="secondary" id="cancelManagedPassword" type="button">取消</button><button class="primary" type="submit">确认重置</button></div></form></dialog>
+  <dialog id="managedPasswordDialog"><form id="managedPasswordForm" class="dialog-card"><h2>重置店铺密码</h2><p id="managedPasswordTarget">—</p><input id="managedWorkspaceId" type="hidden"><div class="compact-form"><label>新密码<input id="managedNewPassword" type="password" autocomplete="new-password" required minlength="8"></label><label>确认密码<input id="managedConfirmPassword" type="password" autocomplete="new-password" required minlength="8"></label></div><div><button class="secondary" id="cancelManagedPassword" type="button">取消</button><button class="primary" type="submit">确认重置</button></div></form></dialog>
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
-  <script src="workspace.js?v=20261028-store-management"></script>
+  <script src="workspace.js?v=workspace-identity"></script>
 </body>
 </html>

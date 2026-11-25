@@ -333,7 +333,7 @@ public class OperationRecordService {
      * 运营记录的款号 / SKU 候选池。
      *
      * <p>数据源统一为产品库 {@code wm_ads_product_record}（= 领星在线商品同步来的在售清单），
-     * 与 {@link #skusOfParent}、{@link #nameOfParent} 同源；已淘汰款（如 PK1001 / PNK366067~073）
+     * 与 {@link #skusOfParent}、{@link #nameOfParent} 同源；已淘汰款
      * 不再出现在下拉里。
      *
      * <p>{@code targetType} 让类型过滤与分页下推到 SQL：此前是「两类全量查 → 内存按 limit 截断」，

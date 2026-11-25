@@ -22,6 +22,9 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.function.UnaryOperator;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 /** Enforces the configured SKU/style prefixes before non-LingXing data enters a workspace. */
 @Service
@@ -50,6 +53,22 @@ public class WorkspaceOwnershipService {
                 .map(value -> value.toUpperCase(Locale.ROOT))
                 .distinct()
                 .toList();
+    }
+
+    /** Resolves a parent SKU in a campaign name using only the current workspace's configured prefixes. */
+    public UnaryOperator<String> currentParentSkuFinder() {
+        List<String> prefixes = currentPrefixes();
+        if (prefixes.isEmpty()) return campaignName -> null;
+        String alternatives = prefixes.stream()
+                .sorted((a, b) -> Integer.compare(b.length(), a.length()))
+                .map(Pattern::quote)
+                .collect(Collectors.joining("|"));
+        Pattern pattern = Pattern.compile("(?:" + alternatives + ")\\d+", Pattern.CASE_INSENSITIVE);
+        return campaignName -> {
+            if (campaignName == null) return null;
+            var match = pattern.matcher(campaignName);
+            return match.find() ? match.group().toUpperCase(Locale.ROOT) : null;
+        };
     }
 
     public boolean belongsToCurrent(String... identifiers) {

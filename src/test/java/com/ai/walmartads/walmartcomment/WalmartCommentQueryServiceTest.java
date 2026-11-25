@@ -306,14 +306,14 @@ class WalmartCommentQueryServiceTest {
 
     private WalmartComment comment(String id, String parentSku, LocalDate date, int star,
                                    String title, String content) {
-        return new WalmartComment("walmart", id, "110358320595211264", "PINKSIR",
+        return new WalmartComment("walmart", id, "900000000000000002", "Sample Shop",
                 "item-" + id, parentSku, date, star, title, content, "buyer-" + id,
                 "product title", null, null, "US", null, LocalDateTime.now(), LocalDateTime.now());
     }
 
     private WalmartComment commentWithBuyer(String id, String parentSku, LocalDate date, int star,
                                             String title, String content, String buyer) {
-        return new WalmartComment("walmart", id, "110358320595211264", "PINKSIR",
+        return new WalmartComment("walmart", id, "900000000000000002", "Sample Shop",
                 "item-" + id, parentSku, date, star, title, content, buyer,
                 "product title", null, null, "US", null, LocalDateTime.now(), LocalDateTime.now());
     }

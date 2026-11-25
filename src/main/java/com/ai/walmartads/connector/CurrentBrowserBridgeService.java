@@ -1,7 +1,5 @@
 package com.ai.walmartads.connector;
 
-import com.ai.walmartads.inventory.application.LingxingDomesticInventoryService;
-import com.ai.walmartads.inventory.application.LingxingWfsShipmentService;
 import com.ai.walmartads.supplychain.SupplyChainSyncService;
 import com.ai.walmartads.workspace.WorkspaceContext;
 import com.ai.walmartads.workspace.WorkspaceLingXingConfigService;
@@ -11,7 +9,6 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
-import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -28,36 +25,25 @@ import java.util.List;
 public class CurrentBrowserBridgeService {
 
     private static final SecureRandom RANDOM = new SecureRandom();
-    private static final com.fasterxml.jackson.databind.ObjectMapper JSON_MAPPER =
-            new com.fasterxml.jackson.databind.ObjectMapper();
 
     private final JdbcTemplate jdbc;
     private final WorkspaceLingXingConfigService workspaces;
     private final DataConnectorStore connectorStore;
     private final DataConnectorSessionService sessions;
-    private final LingxingDomesticInventoryService inventory;
-    private final LingxingWfsShipmentService wfs;
     private final SupplyChainSyncService supplyChain;
-    private final com.ai.walmartads.config.DataConnectorProperties connectorProperties;
 
     public CurrentBrowserBridgeService(
             JdbcTemplate jdbc,
             WorkspaceLingXingConfigService workspaces,
             DataConnectorStore connectorStore,
             DataConnectorSessionService sessions,
-            LingxingDomesticInventoryService inventory,
-            LingxingWfsShipmentService wfs,
-            SupplyChainSyncService supplyChain,
-            com.ai.walmartads.config.DataConnectorProperties connectorProperties
+            SupplyChainSyncService supplyChain
     ) {
         this.jdbc = jdbc;
         this.workspaces = workspaces;
         this.connectorStore = connectorStore;
         this.sessions = sessions;
-        this.inventory = inventory;
-        this.wfs = wfs;
         this.supplyChain = supplyChain;
-        this.connectorProperties = connectorProperties;
     }
 
     public Bootstrap bootstrap(WorkspacePrincipal principal) {
@@ -89,14 +75,16 @@ public class CurrentBrowserBridgeService {
                    and bridge_key.created_at<date_sub(now(6),interval 7 day)
                 """, principal.workspaceId());
         List<String> sources = principal.supplyChainEnabled()
-                ? List.of(ConnectorSource.LINGXING_WFS.name(),
-                ConnectorSource.SUPPLY_CHAIN.name())
-                : List.of(ConnectorSource.LINGXING_WFS.name());
+                ? List.of(ConnectorSource.SUPPLY_CHAIN.name()) : List.of();
         return new Bootstrap(key, principal.workspaceId(), principal.storeName(),
                 principal.storeAbbreviation(), sources);
     }
 
     public WorkspacePrincipal authenticate(String rawKey, String extensionId) {
+        return authenticate(rawKey, extensionId, true);
+    }
+
+    private WorkspacePrincipal authenticate(String rawKey, String extensionId, boolean refreshBridge) {
         if (!StringUtils.hasText(rawKey) || !StringUtils.hasText(extensionId)) {
             throw new BridgeAuthenticationException("当前 Chrome 尚未与工作台连接");
         }
@@ -116,16 +104,18 @@ public class CurrentBrowserBridgeService {
         if (StringUtils.hasText(row.extensionId()) && !row.extensionId().equals(extensionId)) {
             throw new BridgeAuthenticationException("连接令牌已绑定到另一扩展实例");
         }
-        jdbc.update("""
-                update wm_ads_browser_bridge
-                   set extension_id=coalesce(extension_id,?),status='CONNECTED',connected_at=coalesce(connected_at,now(6)),
-                       last_seen_at=now(6),last_message='当前 Chrome 已连接'
-                 where workspace_id=?
-                """, extensionId, row.workspaceId());
-        jdbc.update("""
-                update wm_ads_browser_bridge_key set last_seen_at=now(6)
-                 where workspace_id=? and bridge_key_hash=?
-                """, row.workspaceId(), hash(rawKey));
+        if (refreshBridge) {
+            jdbc.update("""
+                    update wm_ads_browser_bridge
+                       set extension_id=coalesce(extension_id,?),status='CONNECTED',connected_at=coalesce(connected_at,now(6)),
+                           last_seen_at=now(6),last_message='当前 Chrome 已连接'
+                     where workspace_id=?
+                    """, extensionId, row.workspaceId());
+            jdbc.update("""
+                    update wm_ads_browser_bridge_key set last_seen_at=now(6)
+                     where workspace_id=? and bridge_key_hash=?
+                    """, row.workspaceId(), hash(rawKey));
+        }
         return new WorkspacePrincipal(row.workspaceId(), row.username(), row.status(), row.storeId(),
                 row.storeName(), row.storeAbbreviation(), row.supplyChainEnabled(), 0L);
     }
@@ -211,98 +201,19 @@ public class CurrentBrowserBridgeService {
 
     public SyncResult importWfs(WorkspacePrincipal principal, String sourceUrl,
                                 JsonNode response, LocalDateTime capturedAt, String triggeredBy) {
-        long runId = connectorStore.startRun(principal.workspaceId(), ConnectorSource.LINGXING_WFS, triggeredBy);
-        try {
-            var summary = WorkspaceContext.callAs(principal,
-                    () -> wfs.replaceFromConnector(sourceUrl, response, capturedAt));
-            String message = "同步 " + summary.importedShipments() + " 个货件、"
-                    + summary.importedRows() + " 行明细";
-            connectorStore.finishRun(runId, principal.workspaceId(), ConnectorSource.LINGXING_WFS,
-                    "SUCCESS", summary.importedRows(), message);
-            sessions.save(principal.workspaceId(), ConnectorSystem.LINGXING, null, null,
-                    true, "已识别当前 Chrome 的领星登录会话");
-            touch(principal.workspaceId(), "领星 WFS 货件已从当前 Chrome 同步");
-            return new SyncResult(summary.importedRows(), message);
-        } catch (RuntimeException exception) {
-            connectorStore.finishRun(runId, principal.workspaceId(), ConnectorSource.LINGXING_WFS,
-                    "FAILED", 0, rootMessage(exception));
-            throw exception;
-        }
+        return new SyncResult(0, "WFS 货件已改由领星 MCP 同步，已忽略旧插件货件数据");
     }
 
     public void recordFailure(WorkspacePrincipal principal, ConnectorSource source, String message, boolean loginRequired,
                               boolean pageRequired) {
-        if (source == ConnectorSource.LINGXING_INVENTORY) return;
+        if (!source.usesBrowser() || !principal.supplyChainEnabled()) return;
         long runId = connectorStore.startRun(principal.workspaceId(), source, "CURRENT_CHROME");
-        // 2.0.4 reported a missing request template as a login failure; recognize that
-        // message until the user has reloaded the extension.
-        boolean legacyMissingPage = source.system() == ConnectorSystem.LINGXING
-                && message.startsWith("等待领星登录或刷新对应业务页面");
-        boolean needsPage = pageRequired || legacyMissingPage;
-        String status = needsPage ? "WAITING_PAGE" : loginRequired ? "LOGIN_REQUIRED" : "FAILED";
-        if (legacyMissingPage) message = "尚未读取对应领星业务页面，请点击打开页面并刷新";
+        String status = pageRequired ? "WAITING_PAGE" : loginRequired ? "LOGIN_REQUIRED" : "FAILED";
         connectorStore.finishRun(runId, principal.workspaceId(), source, status, 0, message);
-        if (loginRequired && !needsPage) {
-            sessions.requireLogin(principal.workspaceId(), source.system(), message,
-                    source.system() == ConnectorSystem.SUPPLY_CHAIN);
+        if (loginRequired && !pageRequired) {
+            sessions.requireLogin(principal.workspaceId(), source.system(), message, true);
         }
         touch(principal.workspaceId(), message);
-    }
-
-    /**
-     * 把扩展重放时用的真实请求体落盘。国内仓库存的返回范围完全由这个 body 里的筛选条件决定，
-     * 页面上的搜索/仓库选择一旦变化，结果集就会从「PNK 的 1130 行」变成「全库 63 万行的第 1 页」。
-     */
-    private void dumpRequest(String tag, String requestBody, String sourceUrl) {
-        if (connectorProperties == null || !StringUtils.hasText(requestBody)) return;
-        try {
-            java.nio.file.Path dir = connectorProperties.resolvedDataDir().resolve("diagnostics");
-            java.nio.file.Files.createDirectories(dir);
-            String stamp = LocalDateTime.now()
-                    .format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"));
-            String content = "// capturedAt=" + LocalDateTime.now() + "\n// sourceUrl=" + sourceUrl
-                    + "\n" + requestBody;
-            java.nio.file.Files.writeString(
-                    dir.resolve(tag.toLowerCase(java.util.Locale.ROOT) + "-request-" + stamp + ".json"),
-                    content, StandardCharsets.UTF_8);
-        } catch (Exception exception) {
-            // 仅诊断用途，失败不影响同步
-        }
-    }
-
-    /** 领星仓库明细是全账号混装列表；插件必须按当前店铺 SKU 前缀重放，不能依赖页面筛选。 */
-    private void assertInventoryScope(String requestBody, String storeAbbreviation) {
-        if (!StringUtils.hasText(requestBody) || !StringUtils.hasText(storeAbbreviation)) {
-            throw new IllegalArgumentException("没有收到当前店铺的库存查询范围，已保留原库存");
-        }
-        java.util.Map<String, String> fields = new java.util.LinkedHashMap<>();
-        try {
-            JsonNode body = JSON_MAPPER.readTree(requestBody);
-            body.fields().forEachRemaining(entry -> fields.put(entry.getKey(), entry.getValue().asText("")));
-        } catch (Exception notJson) {
-            try {
-                for (String part : requestBody.split("&")) {
-                    int separator = part.indexOf('=');
-                    String key = separator < 0 ? part : part.substring(0, separator);
-                    String value = separator < 0 ? "" : part.substring(separator + 1);
-                    fields.put(java.net.URLDecoder.decode(key, StandardCharsets.UTF_8),
-                            java.net.URLDecoder.decode(value, StandardCharsets.UTF_8));
-                }
-            } catch (RuntimeException malformed) {
-                throw new IllegalArgumentException("领星库存查询范围无法识别，已保留原库存");
-            }
-        }
-        String expected = storeAbbreviation.trim().toUpperCase(java.util.Locale.ROOT);
-        String searchField = fields.getOrDefault("search_field", "").trim();
-        String searchValue = fields.getOrDefault("search_value", "").trim().toUpperCase(java.util.Locale.ROOT);
-        String hideZero = fields.getOrDefault("is_hide_zero_stock", "0").trim();
-        if (!"sku".equalsIgnoreCase(searchField) || !expected.equals(searchValue)) {
-            throw new IllegalArgumentException("领星库存查询未限定当前店铺 SKU 前缀 " + expected
-                    + "，已保留原库存");
-        }
-        if (!(hideZero.isEmpty() || "0".equals(hideZero) || "false".equalsIgnoreCase(hideZero))) {
-            throw new IllegalArgumentException("领星库存查询启用了隐藏零库存，快照不完整，已保留原库存");
-        }
     }
 
     private void touch(long workspaceId, String message) {
@@ -323,6 +234,11 @@ public class CurrentBrowserBridgeService {
         return principal(authenticated.workspaceId());
     }
 
+    /** Authenticate ignored callbacks without refreshing or changing the live supply bridge badge. */
+    public WorkspacePrincipal authenticateRetiredSource(String rawKey, String extensionId) {
+        return authenticate(rawKey, extensionId, false);
+    }
+
     private static String hash(String value) {
         try {
             byte[] digest = MessageDigest.getInstance("SHA-256")
@@ -331,12 +247,6 @@ public class CurrentBrowserBridgeService {
         } catch (NoSuchAlgorithmException exception) {
             throw new IllegalStateException("SHA-256 不可用", exception);
         }
-    }
-
-    private static String rootMessage(Throwable throwable) {
-        Throwable current = throwable;
-        while (current.getCause() != null && current.getCause() != current) current = current.getCause();
-        return StringUtils.hasText(current.getMessage()) ? current.getMessage() : current.getClass().getSimpleName();
     }
 
     private static String truncate(String value, int max) {

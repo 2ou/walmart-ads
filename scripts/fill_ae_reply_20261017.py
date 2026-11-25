@@ -2,13 +2,12 @@
 """按规则把「卖家回复」简短备注写入 Holiday Event 1 库存检查表 AE 列。
 直接改写 xlsx 内的 sheet XML，仅追加 AE 单元格，不改动其它列与格式。
 """
+import argparse
 import re
 import shutil
 import zipfile
 from xml.etree import ElementTree as ET
 
-SRC = r"C:/Users/Administrator/Desktop/1016-Holiday Event 1-活动资格库存检查_10001456058_2026-10-16.xlsx"
-TMP = r"D:/Tools/Code/walmart-ads/backups/_tmp_ae.xlsx"
 NS = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
 
 COLS = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P",
@@ -84,8 +83,8 @@ def esc(s):
     return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
-def main():
-    z = zipfile.ZipFile(SRC)
+def main(src):
+    z = zipfile.ZipFile(src)
     xml = z.read("xl/worksheets/sheet1.xml").decode("utf-8")
     names = z.namelist()
 
@@ -157,18 +156,16 @@ def main():
 
 
     # 重写 zip（保留其他条目不变）
-    shutil.copyfile(SRC, TMP)
-    zin = zipfile.ZipFile(TMP, "r")
-    zout = zipfile.ZipFile(SRC + ".new", "w", zipfile.ZIP_DEFLATED)
-    for item in zin.infolist():
-        data = zin.read(item.filename)
+    zout = zipfile.ZipFile(src + ".new", "w", zipfile.ZIP_DEFLATED)
+    for item in z.infolist():
+        data = z.read(item.filename)
         if item.filename == "xl/worksheets/sheet1.xml":
             data = new_xml.encode("utf-8")
         zout.writestr(item, data)
     zout.close()
-    zin.close()
-    shutil.move(SRC + ".new", SRC)
-    print("saved ->", SRC)
+    z.close()
+    shutil.move(src + ".new", src)
+    print("saved ->", src)
 
     # 统计
     from collections import Counter
@@ -182,8 +179,11 @@ def main():
     print(dict(c))
     print("max len:", max(len(v) for v in notes.values()))
     for r in (2, 4, 45, 111, 162, 183, 187, 275, 298):
-        print(r, notes[r])
+        if r in notes:
+            print(r, notes[r])
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("workbook", help="库存检查工作簿路径")
+    main(parser.parse_args().workbook)

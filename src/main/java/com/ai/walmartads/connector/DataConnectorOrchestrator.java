@@ -3,8 +3,8 @@ package com.ai.walmartads.connector;
 import com.ai.walmartads.config.DataConnectorProperties;
 import com.ai.walmartads.inventory.application.LingxingDomesticInventoryService;
 import com.ai.walmartads.inventory.application.LingxingDomesticMcpSyncService;
-import com.ai.walmartads.inventory.application.LingxingWfsShipmentService;
 import com.ai.walmartads.supplychain.SupplyChainSyncService;
+import com.ai.walmartads.workspace.WorkspaceAccountService;
 import com.ai.walmartads.workspace.WorkspaceContext;
 import com.ai.walmartads.workspace.WorkspaceLingXingConfigService;
 import com.ai.walmartads.workspace.WorkspacePrincipal;
@@ -17,7 +17,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 import jakarta.annotation.PreDestroy;
-import java.nio.file.Path;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -40,11 +39,10 @@ public class DataConnectorOrchestrator {
     private final DataConnectorProperties properties;
     private final DataConnectorStore store;
     private final WorkspaceLingXingConfigService workspaces;
-    private final EmbeddedBrowserConnector browser;
+    private final WorkspaceAccountService accounts;
     private final DataConnectorSessionService sessions;
     private final LingxingDomesticInventoryService inventory;
     private final LingxingDomesticMcpSyncService domesticMcp;
-    private final LingxingWfsShipmentService wfs;
     private final SupplyChainSyncService supplyChain;
     private final CurrentBrowserBridgeService currentBrowserBridge;
     private final ExecutorService executor = Executors.newCachedThreadPool(
@@ -56,22 +54,20 @@ public class DataConnectorOrchestrator {
             DataConnectorProperties properties,
             DataConnectorStore store,
             WorkspaceLingXingConfigService workspaces,
-            EmbeddedBrowserConnector browser,
+            WorkspaceAccountService accounts,
             DataConnectorSessionService sessions,
             LingxingDomesticInventoryService inventory,
             LingxingDomesticMcpSyncService domesticMcp,
-            LingxingWfsShipmentService wfs,
             SupplyChainSyncService supplyChain,
             CurrentBrowserBridgeService currentBrowserBridge
     ) {
         this.properties = properties;
         this.store = store;
         this.workspaces = workspaces;
-        this.browser = browser;
+        this.accounts = accounts;
         this.sessions = sessions;
         this.inventory = inventory;
         this.domesticMcp = domesticMcp;
-        this.wfs = wfs;
         this.supplyChain = supplyChain;
         this.currentBrowserBridge = currentBrowserBridge;
     }
@@ -113,21 +109,6 @@ public class DataConnectorOrchestrator {
         workspaces.connectorWorkspaces().forEach(principal -> startDue(principal, "CRON"));
     }
 
-    /** WFS 货件保持每小时通过浏览器桥接同步。 */
-    @Scheduled(cron = "0 5 * * * *", zone = "${walmart.ads.data-connector.zone:Asia/Shanghai}")
-    public void scheduledHourlyLingxingSync() {
-        if (!properties.enabled()) return;
-        ensureAllWorkspaces();
-        LocalDateTime cutoff = LocalDateTime.now(zone()).minusMinutes(50);
-        for (WorkspacePrincipal principal : workspaces.connectorWorkspaces()) {
-            EnumSet<ConnectorSource> due = EnumSet.of(ConnectorSource.LINGXING_WFS);
-            due.removeIf(source -> store.succeededSince(principal.workspaceId(), source, cutoff));
-            if (!due.isEmpty()) {
-                store.requestBrowserSync(principal.workspaceId(), due, "HOURLY_CRON");
-            }
-        }
-    }
-
     /** 国内仓库存每 6 小时通过 MCP 同步，与浏览器采集任务独立。 */
     @Scheduled(cron = "0 5 0/6 * * *", zone = "${walmart.ads.data-connector.zone:Asia/Shanghai}")
     public void scheduledSixHourlyDomesticSync() {
@@ -149,6 +130,9 @@ public class DataConnectorOrchestrator {
     public StartResult startManual(WorkspacePrincipal actor, Long workspaceId, String sourceName) {
         WorkspacePrincipal target = resolveTarget(actor, workspaceId);
         EnumSet<ConnectorSource> sources = parseSources(target, sourceName);
+        if (sources.contains(ConnectorSource.LINGXING_WFS)) {
+            throw new IllegalArgumentException("WFS 货件已改由领星 MCP 同步，请在领星 MCP 同步计划中操作");
+        }
         boolean accepted = start(target, sources, "MANUAL", true);
         return new StartResult(accepted, target.workspaceId(), target.storeName(),
                 sources.stream().map(Enum::name).toList(),
@@ -161,8 +145,12 @@ public class DataConnectorOrchestrator {
         try {
             system = ConnectorSystem.valueOf(value(systemName).toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException exception) {
-            throw new IllegalArgumentException("登录系统仅支持 LINGXING 或 SUPPLY_CHAIN");
+            throw new IllegalArgumentException("浏览器登录只支持供应链");
         }
+        if (system != ConnectorSystem.SUPPLY_CHAIN) {
+            throw new IllegalArgumentException("领星数据由 MCP 同步，无需登录领星浏览器页面");
+        }
+        if (!target.supplyChainEnabled()) throw new IllegalArgumentException("当前店铺未启用供应链同步");
         store.ensureWorkspace(target);
         return new StartResult(true, target.workspaceId(), target.storeName(), List.of(system.name()),
                 "将使用当前 Chrome 检查" + system.label() + "登录状态");
@@ -181,11 +169,12 @@ public class DataConnectorOrchestrator {
             store.ensureWorkspace(target);
             store.expireStaleBrowserRequests(target.workspaceId(), properties.loginTimeout().toMinutes());
             List<SystemStatus> systems = Arrays.stream(ConnectorSystem.values())
-                    .filter(system -> system != ConnectorSystem.SUPPLY_CHAIN || target.supplyChainEnabled())
+                    .filter(system -> system == ConnectorSystem.SUPPLY_CHAIN && target.supplyChainEnabled())
                     .map(system -> toSystemStatus(target.workspaceId(), system))
                     .toList();
             List<DataConnectorStore.SourceState> sources = store.sourceStates(target.workspaceId()).stream()
                     .filter(DataConnectorStore.SourceState::enabled)
+                    .filter(row -> !ConnectorSource.LINGXING_WFS.name().equals(row.sourceCode()))
                     .toList();
             boolean abnormal = sources.stream().anyMatch(row -> row.enabled()
                     && ("FAILED".equals(row.status()) || "LOGIN_REQUIRED".equals(row.status())
@@ -196,10 +185,6 @@ public class DataConnectorOrchestrator {
                     store.recentRuns(target.workspaceId(), 20), currentBrowserBridge.status(target.workspaceId())));
         }
         return result;
-    }
-
-    public Path chromeExecutable() {
-        return browser.chromeExecutable();
     }
 
     private void ensureAllWorkspaces() {
@@ -266,13 +251,6 @@ public class DataConnectorOrchestrator {
                 var summary = domesticMcp.syncNow();
                 count = summary.importedSkus();
                 message = "同步 " + count + " 个 SKU，可用库存 " + summary.availableUnits();
-            } else if (source == ConnectorSource.LINGXING_WFS) {
-                progress(runId, principal.workspaceId(), source, "正在启动 Chrome，打开领星 WFS 货件页面");
-                EmbeddedBrowserConnector.LingxingSnapshot snapshot = browser.readLingxing(principal, source);
-                progress(runId, principal.workspaceId(), source, "页面数据已读取，正在更新货件数据库");
-                var summary = wfs.replaceFromConnector(snapshot.sourceUrl(), snapshot.response(), snapshot.capturedAt());
-                count = summary.importedRows();
-                message = "同步 " + summary.importedShipments() + " 张货件、" + count + " 行明细";
             } else {
                 if (!sessions.currentSupplyConfigured()) {
                     throw new ConnectorLoginRequiredException("供应链登录已失效，请点击“登录供应链”完成一次登录");
@@ -337,8 +315,7 @@ public class DataConnectorOrchestrator {
     }
 
     private static EnumSet<ConnectorSource> enabledSources(WorkspacePrincipal principal) {
-        EnumSet<ConnectorSource> values = EnumSet.of(
-                ConnectorSource.LINGXING_INVENTORY, ConnectorSource.LINGXING_WFS);
+        EnumSet<ConnectorSource> values = EnumSet.of(ConnectorSource.LINGXING_INVENTORY);
         if (principal.supplyChainEnabled()) values.add(ConnectorSource.SUPPLY_CHAIN);
         return values;
     }
@@ -347,8 +324,8 @@ public class DataConnectorOrchestrator {
         return ZoneId.of(properties.resolvedZone());
     }
 
-    private static boolean isAdmin(WorkspacePrincipal principal) {
-        return principal.username() != null && principal.username().equalsIgnoreCase("PINKSIR");
+    private boolean isAdmin(WorkspacePrincipal principal) {
+        return accounts.isPrimaryWorkspace(principal.workspaceId());
     }
 
     private static String value(String value) {

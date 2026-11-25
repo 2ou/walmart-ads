@@ -1,12 +1,16 @@
 package com.ai.walmartads.finance;
 
+import com.ai.walmartads.product.application.RefundRateService;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.sql.Date;
+import java.sql.Timestamp;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.time.temporal.ChronoUnit;
@@ -27,7 +31,7 @@ import java.util.regex.Pattern;
  *
  * <p>Combines live workspace data (LingXing orders &amp; ad spend, plus WFS settlement/storage if already
  * uploaded for the period) with recency-weighted per-style historical finance calibration rates
- * (and {@code wm_ads_profit_assumption} / {@code wm_ads_product_record} fallbacks for new styles).</p>
+ * and current catalog or manually maintained assumptions.</p>
  */
 @Service
 public class FinanceEstimateService {
@@ -39,15 +43,33 @@ public class FinanceEstimateService {
     private static final BigDecimal ZERO = BigDecimal.ZERO;
     private static final BigDecimal ONE = BigDecimal.ONE;
     private static final BigDecimal DEFAULT_FX = new BigDecimal("6.8000");
-    private static final BigDecimal NEW_SKU_RETURN_COGS_FACTOR = new BigDecimal("0.96");
+    static final BigDecimal REFUND_COST_RECOVERY_RATE = new BigDecimal("0.70");
     private static final BigDecimal NEW_SKU_RETURN_WFS_FACTOR = new BigDecimal("0.45");
+    private static final BigDecimal MIN_HISTORICAL_REVENUE = new BigDecimal("250");
+    private static final BigDecimal LOW_PRICE_COMMISSION = new BigDecimal("0.05");
+    private static final BigDecimal MID_PRICE_COMMISSION = new BigDecimal("0.10");
+    private static final BigDecimal HIGH_PRICE_COMMISSION = new BigDecimal("0.15");
+    private static final BigDecimal LOW_PRICE_THRESHOLD = new BigDecimal("15");
+    private static final BigDecimal MID_PRICE_THRESHOLD = new BigDecimal("20");
+    private static final String UNASSIGNED_STYLE = "未归属";
     private static final int CYCLE_DAYS = 28;
     private static final Pattern PERIOD_END_MD = Pattern.compile("(\\d{1,2})\\.(\\d{1,2})\\s*$");
 
     private final JdbcTemplate jdbc;
+    private final RefundRateService refundRateService;
+    private final FinanceCommissionRuleService commissionRules;
 
     public FinanceEstimateService(JdbcTemplate jdbc) {
+        this(jdbc, new RefundRateService(new NamedParameterJdbcTemplate(jdbc)),
+                new FinanceCommissionRuleService(jdbc));
+    }
+
+    @Autowired
+    public FinanceEstimateService(JdbcTemplate jdbc, RefundRateService refundRateService,
+                                  FinanceCommissionRuleService commissionRules) {
         this.jdbc = jdbc;
+        this.refundRateService = refundRateService;
+        this.commissionRules = commissionRules;
     }
 
     public record EstimateOptions(
@@ -79,6 +101,11 @@ public class FinanceEstimateService {
             BigDecimal offsiteFeeCny,
             boolean wfsActualUsed,
             boolean storageActualUsed,
+            int adCoveredDays,
+            int wfsCoveredDays,
+            int storageCoveredDays,
+            LocalDate wfsCoveredThrough,
+            LocalDate storageCoveredThrough,
             EstimatedStore store,
             List<EstimatedStyle> styles
     ) {
@@ -139,7 +166,9 @@ public class FinanceEstimateService {
             BigDecimal firstLegCostCny,
             BigDecimal offsiteFeeCny,
             BigDecimal profitCny,
-            String costBasis
+            String costBasis,
+            String refundBasis,
+            String commissionBasis
     ) {
     }
 
@@ -154,51 +183,63 @@ public class FinanceEstimateService {
         if (latestFinalMonth == null || latestFinalMonth.isBlank()) {
             return List.of();
         }
-        LocalDate latestOrderDate = queryMaxDate("select max(order_date) from wm_ads_order_record_valid");
+        LocalDate latestOrderDate = queryMaxDate("""
+                select max(o.order_date)
+                  from wm_ads_order_record_valid o
+                  join wm_ads_import_file f on f.id = o.import_file_id and f.active = true
+                """);
         if (latestOrderDate == null) {
             return List.of();
         }
-        LocalDate latestAdDate = queryMaxDate("select max(report_date) from wm_ads_dashboard_ad_daily");
         LocalDate lastFinalEnd = resolveFinalPeriodEnd(latestFinalMonth, latestFinalSettlementPeriod);
         if (!latestOrderDate.isAfter(lastFinalEnd)) {
             return List.of();
         }
+        SourceCutoffs sourceCutoffs = new SourceCutoffs(latestOrderDate,
+                queryMaxDate("select max(report_date) from wm_ads_dashboard_ad_daily"),
+                queryMaxDate("select max(period_end) from wm_ads_wfs_fulfillment_fee where txn_date is not null"),
+                queryMaxDate("select max(period_end) from wm_ads_wfs_storage_fee"));
 
+        LocalDate firstPendingDay = lastFinalEnd.plusDays(1);
+        DateRange custom = customRange(options, firstPendingDay, latestOrderDate);
         Calibration calibration = buildCalibration(latestFinalExchangeRate);
         YearMonth baseYm = YearMonth.parse(latestFinalMonth);
-        LocalDate cursorStart = lastFinalEnd.plusDays(1);
+        LocalDate cursorStart = firstPendingDay;
         List<EstimatedCycle> cycles = new ArrayList<>();
         int step = 1;
 
         while (!cursorStart.isAfter(latestOrderDate) && step <= 6) {
             String monthCode = baseYm.plusMonths(step).toString();
             LocalDate plannedEnd = cursorStart.plusDays(CYCLE_DAYS - 1L);
-            boolean isTargetOverride = options != null
-                    && monthCode.equals(options.targetEstimateMonth())
-                    && options.customStartDate() != null
-                    && options.customEndDate() != null;
+            boolean targetMonth = options != null && monthCode.equals(options.targetEstimateMonth());
+            boolean isTargetOverride = custom != null && targetMonth;
+            LocalDate effectiveStart = cursorStart;
+            LocalDate effectiveEnd = earlier(latestOrderDate, plannedEnd);
+            cursorStart = plannedEnd.plusDays(1);
+            step++;
 
-            LocalDate effectiveStart = isTargetOverride ? options.customStartDate() : cursorStart;
-            LocalDate effectiveEnd = isTargetOverride
-                    ? options.customEndDate()
-                    : (latestOrderDate.isBefore(plannedEnd) ? latestOrderDate : plannedEnd);
-            if (effectiveStart.isAfter(effectiveEnd)) {
-                LocalDate tmp = effectiveStart;
-                effectiveStart = effectiveEnd;
-                effectiveEnd = tmp;
+            if (isTargetOverride) {
+                effectiveStart = custom.start();
+                effectiveEnd = custom.end();
+            } else if (custom != null && monthCode.compareTo(options.targetEstimateMonth()) < 0) {
+                effectiveEnd = earlier(effectiveEnd, custom.start().minusDays(1));
+            } else if (custom != null) {
+                effectiveStart = later(effectiveStart, custom.end().plusDays(1));
             }
+            if (effectiveStart.isAfter(effectiveEnd)) continue;
 
             boolean inProgress = !isTargetOverride && latestOrderDate.isBefore(plannedEnd);
             String stage = inProgress ? STAGE_IN_PROGRESS : STAGE_COMPLETED;
             int elapsedDays = (int) ChronoUnit.DAYS.between(effectiveStart, effectiveEnd) + 1;
-            int plannedDays = isTargetOverride ? elapsedDays : CYCLE_DAYS;
+            LocalDate effectivePlannedEnd = custom == null || inProgress ? plannedEnd : effectiveEnd;
+            int plannedDays = Math.toIntExact(ChronoUnit.DAYS.between(effectiveStart, effectivePlannedEnd) + 1);
 
-            BigDecimal fx = (options != null && options.overrideExchangeRate() != null
+            boolean appliesOverride = options != null && (options.targetEstimateMonth() == null || targetMonth);
+            BigDecimal fx = (appliesOverride && options.overrideExchangeRate() != null
                     && options.overrideExchangeRate().compareTo(ZERO) > 0)
                     ? options.overrideExchangeRate()
                     : calibration.defaultExchangeRate();
-            BigDecimal offsiteCny = (options != null && options.overrideOffsiteFeeCny() != null
-                    && (options.targetEstimateMonth() == null || monthCode.equals(options.targetEstimateMonth())))
+            BigDecimal offsiteCny = (appliesOverride && options.overrideOffsiteFeeCny() != null)
                     ? options.overrideOffsiteFeeCny()
                     : ZERO;
 
@@ -208,12 +249,11 @@ public class FinanceEstimateService {
                     companyName,
                     effectiveStart,
                     effectiveEnd,
-                    plannedEnd,
+                    effectivePlannedEnd,
                     elapsedDays,
                     plannedDays,
                     stage,
-                    latestOrderDate,
-                    latestAdDate,
+                    sourceCutoffs,
                     calibration,
                     fx,
                     offsiteCny
@@ -221,11 +261,21 @@ public class FinanceEstimateService {
             if (cycle != null) {
                 cycles.add(cycle);
             }
-
-            cursorStart = plannedEnd.plusDays(1);
-            step++;
         }
         return cycles;
+    }
+
+    private static DateRange customRange(EstimateOptions options, LocalDate firstPendingDay, LocalDate lastOrderDay) {
+        if (options == null || options.targetEstimateMonth() == null
+                || options.customStartDate() == null || options.customEndDate() == null) {
+            return null;
+        }
+        LocalDate start = later(firstPendingDay, earlier(options.customStartDate(), options.customEndDate()));
+        LocalDate end = earlier(lastOrderDay, later(options.customStartDate(), options.customEndDate()));
+        if (start.isAfter(end)) {
+            throw new IllegalArgumentException("自定义账期与可用的未结账订单日期没有交集");
+        }
+        return new DateRange(start, end);
     }
 
     private EstimatedCycle computeCycle(
@@ -238,41 +288,37 @@ public class FinanceEstimateService {
             int elapsedDays,
             int plannedDays,
             String stage,
-            LocalDate latestOrderDate,
-            LocalDate latestAdDate,
+            SourceCutoffs sourceCutoffs,
             Calibration cal,
             BigDecimal fx,
             BigDecimal offsiteTotalCny
     ) {
-        Map<String, OrderAgg> ordersBySku = loadLiveOrders(startDate, endDate);
+        WfsActuals wfsActual = loadWfsActuals(startDate, endDate);
+        StorageActuals storageActual = loadStorageActuals(startDate, endDate);
+        Map<String, OrderAgg> ordersBySku = loadLiveOrders(startDate, endDate,
+                wfsActual.coverage(), storageActual.coverage(), cal.commissionRules(), cal.itemsBySku());
         Map<String, BigDecimal> adsBySku = loadLiveAdsBySku(startDate, endDate);
         BigDecimal totalLiveAds = loadLiveAdsTotal(startDate, endDate);
+        int adCoveredDays = countAdCoveredDays(startDate, endDate);
 
-        if (ordersBySku.isEmpty() && isZero(totalLiveAds)) {
+        if (ordersBySku.isEmpty() && adsBySku.isEmpty() && isZero(totalLiveAds) && isZero(offsiteTotalCny)
+                && wfsActual.bySku().isEmpty() && storageActual.bySku().isEmpty()) {
             return null;
         }
 
-        // Auto-upgrade to exact WFS settlement/storage actuals if the user already uploaded them for this cycle
-        WfsActuals wfsActual = loadWfsActualsIfCovered(startDate, endDate);
-        Map<String, BigDecimal> storageActualBySku = loadStorageActualsIfCovered(startDate, endDate);
-        boolean wfsActualUsed = wfsActual != null;
-        boolean storageActualUsed = storageActualBySku != null && !storageActualBySku.isEmpty();
-
         Set<String> allSkus = new LinkedHashSet<>(ordersBySku.keySet());
         allSkus.addAll(adsBySku.keySet());
-        if (wfsActualUsed) {
-            allSkus.addAll(wfsActual.bySku().keySet());
-        }
+        allSkus.addAll(wfsActual.bySku().keySet());
+        allSkus.addAll(storageActual.bySku().keySet());
 
         BigDecimal totalRevUsd = ordersBySku.values().stream()
                 .map(OrderAgg::revUsd)
                 .reduce(ZERO, BigDecimal::add);
         BigDecimal sumAttributedAds = adsBySku.values().stream().reduce(ZERO, BigDecimal::add);
-        BigDecimal unattributedAds = totalLiveAds.subtract(sumAttributedAds);
-
-        BigDecimal totalActualStorage = storageActualUsed
-                ? storageActualBySku.values().stream().reduce(ZERO, BigDecimal::add)
-                : ZERO;
+        BigDecimal unattributedAds = adCoveredDays > 0 ? totalLiveAds.subtract(sumAttributedAds) : ZERO;
+        if (isZero(totalRevUsd) && (!isZero(unattributedAds) || !isZero(offsiteTotalCny))) {
+            allSkus.add(UNASSIGNED_STYLE);
+        }
 
         List<EstimatedStyle> styleRows = new ArrayList<>();
         BigDecimal sRevUsd = ZERO;
@@ -283,6 +329,7 @@ public class FinanceEstimateService {
         BigDecimal sStorageUsd = ZERO;
         BigDecimal sReimbUsd = ZERO;
         BigDecimal sDispUsd = ZERO;
+        BigDecimal sOtherUsd = ZERO;
         BigDecimal sNetUsd = ZERO;
         BigDecimal sNetCny = ZERO;
         BigDecimal sPurCny = ZERO;
@@ -294,92 +341,64 @@ public class FinanceEstimateService {
         int sRetQty = 0;
 
         for (String sku : allSkus) {
-            OrderAgg o = ordersBySku.getOrDefault(sku, new OrderAgg(0, ZERO));
-            int qty = o.qty();
+            OrderAgg o = ordersBySku.getOrDefault(sku, OrderAgg.EMPTY);
+            int qty = o.qty().setScale(0, RoundingMode.HALF_UP).intValue();
             BigDecimal revUsd = o.revUsd();
             BigDecimal revShare = !isZero(totalRevUsd) ? revUsd.divide(totalRevUsd, 8, RoundingMode.HALF_UP) : ZERO;
-            BigDecimal aspUsd = qty > 0 ? revUsd.divide(BigDecimal.valueOf(qty), 4, RoundingMode.HALF_UP) : ZERO;
+            BigDecimal aspUsd = safeDiv(revUsd, o.qty());
 
             SkuCalibration sc = cal.bySku().get(sku);
             AssumptionCost pa = cal.assumptions().get(sku);
             BigDecimal prodDeliveryFee = cal.productDeliveryFees().get(sku);
 
-            // 1. Refund rate & amount
-            BigDecimal refAmtRate = (sc != null && sc.revUsd().compareTo(new BigDecimal("250")) >= 0)
-                    ? sc.refundAmountRate()
-                    : cal.storeRefundAmountRate();
-            BigDecimal unitRefRate = (sc != null && sc.qty() >= 15)
-                    ? sc.unitRefundRate()
-                    : cal.storeUnitRefundRate();
+            RefundRates refundRates = refundRates(sku, sc, pa, cal);
+            BigDecimal refAmtRate = refundRates.amount();
+            BigDecimal unitRefRate = refundRates.units();
             BigDecimal refundUsd = revUsd.multiply(refAmtRate).negate();
             int refundQty = BigDecimal.valueOf(qty).multiply(unitRefRate).setScale(0, RoundingMode.HALF_UP).intValue();
             int returnQty = BigDecimal.valueOf(qty).multiply(cal.storeReturnRate()).setScale(0, RoundingMode.HALF_UP).intValue();
 
-            // 2. Commission USD (tier-aware when new style, else recency-weighted net commission rate)
-            BigDecimal commRate;
-            if (sc != null && sc.revUsd().compareTo(new BigDecimal("250")) >= 0) {
-                commRate = sc.commissionRate();
-            } else {
-                BigDecimal baseTier = aspUsd.compareTo(new BigDecimal("20")) >= 0 ? new BigDecimal("0.15")
-                        : (aspUsd.compareTo(new BigDecimal("15")) >= 0 ? new BigDecimal("0.10") : new BigDecimal("0.05"));
-                commRate = baseTier.multiply(ONE.subtract(refAmtRate));
-            }
-            BigDecimal commUsd = revUsd.multiply(commRate).negate();
+            BigDecimal commUsd = o.grossCommission().multiply(ONE.subtract(refAmtRate)).negate();
 
-            // 3. WFS Fee, Reimbursements, Disposal (WFS actual if uploaded, else per-SKU finance unit rate)
-            BigDecimal wfsUsd;
-            BigDecimal reimbUsd;
-            BigDecimal dispUsd;
-            if (wfsActualUsed) {
-                WfsSkuFee wf = wfsActual.bySku().getOrDefault(sku, WfsSkuFee.ZERO_FEE);
-                wfsUsd = wf.wfsFeeUsd().add(wfsActual.unattributedWfsUsd().multiply(revShare));
-                reimbUsd = wf.reimbUsd().add(wfsActual.unattributedReimbUsd().multiply(revShare));
-                dispUsd = wf.disposalUsd().add(wfsActual.unattributedDispUsd().multiply(revShare));
-            } else {
-                BigDecimal wfsUnit;
-                if (sc != null && sc.qty() >= 15) {
-                    wfsUnit = sc.wfsUnitFeeUsd();
-                } else if (prodDeliveryFee != null && prodDeliveryFee.compareTo(ZERO) > 0) {
-                    wfsUnit = prodDeliveryFee.multiply(ONE.add(unitRefRate.multiply(NEW_SKU_RETURN_WFS_FACTOR)));
-                } else if (pa != null && pa.deliveryFee() != null && pa.deliveryFee().compareTo(ZERO) > 0) {
-                    wfsUnit = pa.deliveryFee().multiply(ONE.add(unitRefRate.multiply(NEW_SKU_RETURN_WFS_FACTOR)));
-                } else {
-                    wfsUnit = cal.storeWfsUnitFeeUsd();
-                }
-                wfsUsd = BigDecimal.valueOf(qty).multiply(wfsUnit).negate();
-                reimbUsd = revUsd.multiply(cal.storeReimbRate());
-                dispUsd = revUsd.multiply(cal.storeDispRate());
-            }
+            WfsSkuFee wf = wfsActual.bySku().getOrDefault(sku, WfsSkuFee.ZERO_FEE);
+            BigDecimal wfsUnit = estimatedWfsUnit(prodDeliveryFee, pa, sc, unitRefRate, cal.storeWfsUnitFeeUsd());
+            BigDecimal wfsUsd = wf.wfsFeeUsd().subtract(o.qtyWithoutWfs().multiply(wfsUnit));
+            BigDecimal reimbUsd = wf.reimbUsd();
+            BigDecimal dispUsd = wf.disposalUsd();
+            BigDecimal otherUsd = wf.otherUsd();
 
             // 4. Live Ad Spend (exact SKU ad spend + finance-style revenue-share apportionment of any unattributed diff)
-            BigDecimal skuAd = adsBySku.getOrDefault(sku, ZERO).add(unattributedAds.multiply(revShare));
+            BigDecimal skuAd = adsBySku.getOrDefault(sku, ZERO).add(
+                    isZero(totalRevUsd) && UNASSIGNED_STYLE.equals(sku) ? unattributedAds : unattributedAds.multiply(revShare));
             BigDecimal adUsd = skuAd.negate();
 
-            // 5. Storage Fee (actual if uploaded, else revenue-rate estimate)
-            BigDecimal storageUsd = storageActualUsed
-                    ? storageActualBySku.getOrDefault(sku, ZERO).negate()
-                    : revUsd.multiply(cal.storeStorageRate()).negate();
-            if (storageActualUsed && !storageActualBySku.containsKey(sku) && isZero(totalActualStorage)) {
-                storageUsd = ZERO;
-            }
+            BigDecimal storageUsd = storageActual.bySku().getOrDefault(sku, ZERO)
+                    .add(o.revWithoutStorage().multiply(cal.storeStorageRate())).negate();
 
             // 6. Net Settlement USD & CNY
             BigDecimal netUsd = revUsd.add(refundUsd).add(commUsd).add(wfsUsd).add(adUsd)
-                    .add(storageUsd).add(reimbUsd).add(dispUsd);
+                    .add(storageUsd).add(reimbUsd).add(dispUsd).add(otherUsd);
             BigDecimal netCny = netUsd.multiply(fx);
 
             // 7. Purchase Cost & First-Leg Cost CNY
             BigDecimal purCny;
             BigDecimal flCny;
             String costBasis;
-            if (sc != null && sc.qty() >= 15 && sc.purchaseUnitCny().compareTo(ZERO) > 0) {
-                purCny = BigDecimal.valueOf(qty).multiply(sc.purchaseUnitCny());
-                flCny = BigDecimal.valueOf(qty).multiply(sc.firstLegUnitCny());
-                costBasis = "FINANCE_HIST";
-            } else if (pa != null && pa.purchaseCost() != null && pa.purchaseCost().compareTo(ZERO) > 0) {
-                purCny = BigDecimal.valueOf(qty).multiply(pa.purchaseCost()).multiply(NEW_SKU_RETURN_COGS_FACTOR);
-                flCny = BigDecimal.valueOf(qty).multiply(pa.firstLeg() == null ? ZERO : pa.firstLeg()).multiply(NEW_SKU_RETURN_COGS_FACTOR);
+            boolean historyCost = sc != null && sc.qty() >= 15 && positive(sc.purchaseUnitCny());
+            if (pa != null && positive(pa.purchaseCost())) {
+                BigDecimal paidUnits = o.qty().multiply(ONE.subtract(unitRefRate.multiply(REFUND_COST_RECOVERY_RATE)));
+                purCny = paidUnits.multiply(pa.purchaseCost());
+                if (pa.firstLeg() != null && pa.firstLeg().signum() >= 0) {
+                    flCny = paidUnits.multiply(pa.firstLeg());
+                } else {
+                    flCny = historyCost ? o.qty().multiply(sc.firstLegUnitCny())
+                            : revUsd.multiply(fx).multiply(cal.storeFirstLegRate());
+                }
                 costBasis = "PROFIT_ASSUMPTION";
+            } else if (historyCost) {
+                purCny = o.qty().multiply(sc.purchaseUnitCny());
+                flCny = o.qty().multiply(sc.firstLegUnitCny());
+                costBasis = "FINANCE_HIST";
             } else {
                 BigDecimal revCny = revUsd.multiply(fx);
                 purCny = revCny.multiply(cal.storePurchaseRate());
@@ -388,7 +407,8 @@ public class FinanceEstimateService {
             }
 
             // 8. Optional user-entered offsite fee apportioned by revenue share
-            BigDecimal skuOffsiteCny = offsiteTotalCny.multiply(revShare);
+            BigDecimal skuOffsiteCny = isZero(totalRevUsd) && UNASSIGNED_STYLE.equals(sku)
+                    ? offsiteTotalCny : offsiteTotalCny.multiply(revShare);
             BigDecimal profitCny = netCny.subtract(purCny).subtract(flCny).subtract(skuOffsiteCny);
 
             styleRows.add(new EstimatedStyle(
@@ -408,14 +428,16 @@ public class FinanceEstimateService {
                     scale2(storageUsd),
                     scale2(reimbUsd),
                     scale2(dispUsd),
-                    ZERO,
+                    scale2(otherUsd),
                     scale2(netUsd),
                     scale2(netCny),
                     scale2(purCny),
                     scale2(flCny),
                     scale2(skuOffsiteCny),
                     scale2(profitCny),
-                    costBasis
+                    costBasis,
+                    refundRates.basis(),
+                    o.commissionBasis()
             ));
 
             sQty += qty;
@@ -429,6 +451,7 @@ public class FinanceEstimateService {
             sStorageUsd = sStorageUsd.add(storageUsd);
             sReimbUsd = sReimbUsd.add(reimbUsd);
             sDispUsd = sDispUsd.add(dispUsd);
+            sOtherUsd = sOtherUsd.add(otherUsd);
             sNetUsd = sNetUsd.add(netUsd);
             sNetCny = sNetCny.add(netCny);
             sPurCny = sPurCny.add(purCny);
@@ -460,7 +483,7 @@ public class FinanceEstimateService {
                 scale2(sReimbUsd),
                 scale2(sDispUsd),
                 ZERO,
-                ZERO,
+                scale2(sOtherUsd),
                 scale2(sNetUsd),
                 settlementRatio,
                 scale2(sNetCny),
@@ -483,17 +506,53 @@ public class FinanceEstimateService {
                 elapsedDays,
                 plannedDays,
                 stage,
-                latestOrderDate,
-                latestAdDate,
+                sourceCutoffs.orders(),
+                sourceCutoffs.ads(),
                 cal.calibrationMonths(),
                 scale4(cal.defaultExchangeRate()),
                 scale4(fx),
                 scale2(offsiteTotalCny),
-                wfsActualUsed,
-                storageActualUsed,
+                wfsActual.coverage().days() > 0,
+                storageActual.coverage().days() > 0,
+                adCoveredDays,
+                wfsActual.coverage().days(),
+                storageActual.coverage().days(),
+                sourceCutoffs.wfs(),
+                sourceCutoffs.storage(),
                 store,
                 styleRows
         );
+    }
+
+    private static RefundRates refundRates(String sku, SkuCalibration sc, AssumptionCost pa, Calibration cal) {
+        BigDecimal manual = pa == null ? null : pa.refundRate();
+        if (pa != null && pa.preferManualRefundRate() && validRate(manual)) {
+            return new RefundRates(manual, manual, "MANUAL");
+        }
+        BigDecimal cumulative = cal.refundRatesBySku().get(sku);
+        if (validRate(cumulative)) {
+            return new RefundRates(cumulative, cumulative, "CUMULATIVE");
+        }
+        boolean styleAmount = sc != null && sc.revUsd().compareTo(MIN_HISTORICAL_REVENUE) >= 0
+                && validRate(sc.refundAmountRate());
+        boolean styleUnits = sc != null && sc.qty() >= 15 && validRate(sc.unitRefundRate());
+        if (!styleAmount && !styleUnits && validRate(manual)) {
+            return new RefundRates(manual, manual, "MANUAL_FALLBACK");
+        }
+        BigDecimal amount = styleAmount ? sc.refundAmountRate() : cal.storeRefundAmountRate();
+        BigDecimal units = styleUnits ? sc.unitRefundRate() : cal.storeUnitRefundRate();
+        String basis = styleAmount && styleUnits ? "FINANCE_HIST"
+                : (styleAmount || styleUnits ? "FINANCE_STORE_MIX" : "STORE_FALLBACK");
+        return new RefundRates(amount, units, basis);
+    }
+
+    private static BigDecimal estimatedWfsUnit(BigDecimal catalogFee, AssumptionCost pa, SkuCalibration sc,
+                                               BigDecimal refundRate, BigDecimal accountFee) {
+        BigDecimal baseFee = pa != null && positive(pa.deliveryFee()) ? pa.deliveryFee() : catalogFee;
+        if (positive(baseFee)) {
+            return baseFee.multiply(ONE.add(refundRate.multiply(NEW_SKU_RETURN_WFS_FACTOR)));
+        }
+        return sc != null && sc.qty() >= 15 && positive(sc.wfsUnitFeeUsd()) ? sc.wfsUnitFeeUsd() : accountFee;
     }
 
     private Calibration buildCalibration(BigDecimal latestFinalExchangeRate) {
@@ -517,14 +576,14 @@ public class FinanceEstimateService {
 
         // Store-level weighted calibration
         BigDecimal wRev = ZERO, wRevCny = ZERO, wRefUsd = ZERO, wWfs = ZERO, wSto = ZERO;
-        BigDecimal wReimb = ZERO, wDisp = ZERO, wPur = ZERO, wFl = ZERO;
+        BigDecimal wPur = ZERO, wFl = ZERO;
         BigDecimal wQty = ZERO, wRefQty = ZERO, wRetQty = ZERO;
 
         if (!chronological.isEmpty()) {
             String inClause = String.join(",", chronological.stream().map(m -> "'" + m + "'").toList());
             List<Map<String, Object>> storeRows = jdbc.queryForList(
                     "select report_month, exchange_rate, sales_revenue_usd, refund_usd, wfs_fee_usd, "
-                            + "storage_fee_usd, inventory_reimbursement_usd, inventory_disposal_usd, "
+                            + "storage_fee_usd, "
                             + "purchase_cost_cny, first_leg_freight_cny, sales_qty, refund_qty, return_qty "
                             + "from wm_ads_finance_store_monthly where report_month in (" + inClause + ")");
             for (Map<String, Object> r : storeRows) {
@@ -536,8 +595,6 @@ public class FinanceEstimateService {
                 wRefUsd = wRefUsd.add(bd(r.get("refund_usd")).abs().multiply(w));
                 wWfs = wWfs.add(bd(r.get("wfs_fee_usd")).abs().multiply(w));
                 wSto = wSto.add(bd(r.get("storage_fee_usd")).abs().multiply(w));
-                wReimb = wReimb.add(bd(r.get("inventory_reimbursement_usd")).multiply(w));
-                wDisp = wDisp.add(bd(r.get("inventory_disposal_usd")).multiply(w));
                 wPur = wPur.add(bd(r.get("purchase_cost_cny")).multiply(w));
                 wFl = wFl.add(bd(r.get("first_leg_freight_cny")).multiply(w));
                 wQty = wQty.add(bd(r.get("sales_qty")).multiply(w));
@@ -552,7 +609,7 @@ public class FinanceEstimateService {
             String inClause = String.join(",", chronological.stream().map(m -> "'" + m + "'").toList());
             List<Map<String, Object>> styleRows = jdbc.queryForList(
                     "select report_month, parent_sku, sales_qty, sales_revenue_usd, refund_qty, refund_usd, "
-                            + "commission_usd, wfs_fee_usd, purchase_cost_cny, first_leg_cost_cny "
+                            + "wfs_fee_usd, purchase_cost_cny, first_leg_cost_cny "
                             + "from wm_ads_finance_style_monthly where report_month in (" + inClause + ")");
             for (Map<String, Object> r : styleRows) {
                 String sku = String.valueOf(r.get("parent_sku")).trim().toUpperCase(Locale.ROOT);
@@ -565,7 +622,6 @@ public class FinanceEstimateService {
                 acc.wRev = acc.wRev.add(bd(r.get("sales_revenue_usd")).multiply(w));
                 acc.wRefQty = acc.wRefQty.add(bd(r.get("refund_qty")).multiply(w));
                 acc.wRefUsd = acc.wRefUsd.add(bd(r.get("refund_usd")).abs().multiply(w));
-                acc.wCommUsd = acc.wCommUsd.add(bd(r.get("commission_usd")).abs().multiply(w));
                 acc.wWfsUsd = acc.wWfsUsd.add(bd(r.get("wfs_fee_usd")).abs().multiply(w));
                 acc.wPurCny = acc.wPurCny.add(bd(r.get("purchase_cost_cny")).multiply(w));
                 acc.wFlCny = acc.wFlCny.add(bd(r.get("first_leg_cost_cny")).multiply(w));
@@ -577,16 +633,17 @@ public class FinanceEstimateService {
             SkuAcc a = entry.getValue();
             BigDecimal refAmtRate = safeDiv(a.wRefUsd, a.wRev);
             BigDecimal unitRefRate = safeDiv(a.wRefQty, a.wQty);
-            BigDecimal commRate = safeDiv(a.wCommUsd, a.wRev);
             BigDecimal wfsUnit = safeDiv(a.wWfsUsd, a.wQty);
             BigDecimal purUnit = safeDiv(a.wPurCny, a.wQty);
             BigDecimal flUnit = safeDiv(a.wFlCny, a.wQty).max(ZERO);
             bySku.put(entry.getKey(), new SkuCalibration(
-                    a.rawQty, a.rawRev, refAmtRate, unitRefRate, commRate, wfsUnit, purUnit, flUnit));
+                    a.rawQty, a.rawRev, refAmtRate, unitRefRate, wfsUnit, purUnit, flUnit));
         }
 
         Map<String, AssumptionCost> assumptions = loadProfitAssumptions();
         Map<String, BigDecimal> productDeliveryFees = loadProductDeliveryFees();
+        Map<String, List<FinanceCommissionRuleService.Rule>> approvedRules = commissionRules.loadApprovedRules();
+        Map<String, String> itemsBySku = approvedRules.isEmpty() ? Map.of() : loadProductItemIds();
 
         BigDecimal fx = (latestFinalExchangeRate != null && latestFinalExchangeRate.compareTo(ZERO) > 0)
                 ? latestFinalExchangeRate : DEFAULT_FX;
@@ -594,45 +651,62 @@ public class FinanceEstimateService {
         return new Calibration(
                 chronological,
                 fx,
-                safeDiv(wRefUsd, wRev),
-                safeDiv(wRefQty, wQty),
-                safeDiv(wRetQty, wQty),
+                safeDiv(wRefUsd, wRev).max(ZERO).min(ONE),
+                safeDiv(wRefQty, wQty).max(ZERO).min(ONE),
+                safeDiv(wRetQty, wQty).max(ZERO).min(ONE),
                 safeDiv(wWfs, wQty),
                 safeDiv(wSto, wRev),
-                safeDiv(wReimb, wRev),
-                safeDiv(wDisp, wRev),
-                safeDiv(wPur, wRevCny),
-                safeDiv(wFl, wRevCny),
+                safeDiv(wPur, wRevCny).max(ZERO),
+                safeDiv(wFl, wRevCny).max(ZERO),
                 bySku,
                 assumptions,
-                productDeliveryFees
+                productDeliveryFees,
+                loadRefundRates(),
+                approvedRules,
+                itemsBySku
         );
     }
 
-    private Map<String, OrderAgg> loadLiveOrders(LocalDate startDate, LocalDate endDate) {
+    private Map<String, OrderAgg> loadLiveOrders(LocalDate startDate, LocalDate endDate,
+                                                Coverage wfsCoverage, Coverage storageCoverage,
+                                                Map<String, List<FinanceCommissionRuleService.Rule>> approved,
+                                                Map<String, String> itemsBySku) {
         Map<String, OrderAgg> map = new LinkedHashMap<>();
         try {
             jdbc.query("""
-                    select upper(trim(parent_sku)) as parent_sku,
-                           coalesce(sum(quantity), 0) as qty,
-                           coalesce(sum(item_cost), 0) as rev_usd
-                      from wm_ads_order_record_valid
-                     where order_date between ? and ?
-                       and parent_sku is not null and trim(parent_sku) <> ''
-                     group by upper(trim(parent_sku))
+                    select o.order_date, upper(trim(o.parent_sku)) as parent_sku, upper(trim(o.sku)) as seller_sku,
+                           coalesce(sum(o.quantity), 0) as qty, o.item_cost as unit_price
+                      from wm_ads_order_record_valid o
+                      join wm_ads_import_file f on f.id = o.import_file_id and f.active = true
+                     where o.order_date between ? and ?
+                       and o.parent_sku is not null and trim(o.parent_sku) <> ''
+                     group by o.order_date, upper(trim(o.parent_sku)), upper(trim(o.sku)), o.item_cost
                     """, rs -> {
                 String sku = rs.getString("parent_sku");
-                if (sku != null && !sku.isBlank()) {
-                    map.put(sku, new OrderAgg(
-                            bd(rs.getBigDecimal("qty")).setScale(0, RoundingMode.HALF_UP).intValue(),
-                            bd(rs.getBigDecimal("rev_usd"))
-                    ));
-                }
+                LocalDate day = rs.getDate("order_date").toLocalDate();
+                BigDecimal qty = bd(rs.getBigDecimal("qty"));
+                BigDecimal unitPrice = bd(rs.getBigDecimal("unit_price"));
+                BigDecimal revenue = qty.multiply(unitPrice);
+                String sellerSku = rs.getString("seller_sku");
+                String itemId = sellerSku == null ? "" : itemsBySku.getOrDefault(sellerSku, "");
+                var approvedRate = FinanceCommissionRuleService.matchRate(approved, itemId, day, unitPrice);
+                BigDecimal commissionRate = approvedRate.orElseGet(() -> standardCommissionRate(unitPrice));
+                BigDecimal commission = unitPrice.multiply(commissionRate)
+                        .setScale(2, RoundingMode.HALF_UP).multiply(qty);
+                OrderAgg row = new OrderAgg(qty, revenue, commission, approvedRate.isPresent() ? qty : ZERO,
+                        wfsCoverage.covers(day) ? ZERO : qty, storageCoverage.covers(day) ? ZERO : revenue);
+                map.merge(sku, row, OrderAgg::plus);
             }, Date.valueOf(startDate), Date.valueOf(endDate));
         } catch (DataAccessException ignored) {
             // Minimal test schemas may not include order tables
         }
         return map;
+    }
+
+    private static BigDecimal standardCommissionRate(BigDecimal unitPrice) {
+        if (unitPrice.compareTo(LOW_PRICE_THRESHOLD) <= 0) return LOW_PRICE_COMMISSION;
+        if (unitPrice.compareTo(MID_PRICE_THRESHOLD) <= 0) return MID_PRICE_COMMISSION;
+        return HIGH_PRICE_COMMISSION;
     }
 
     private Map<String, BigDecimal> loadLiveAdsBySku(LocalDate startDate, LocalDate endDate) {
@@ -670,22 +744,44 @@ public class FinanceEstimateService {
         }
     }
 
-    private WfsActuals loadWfsActualsIfCovered(LocalDate startDate, LocalDate endDate) {
+    private int countAdCoveredDays(LocalDate startDate, LocalDate endDate) {
         try {
+            Integer days = jdbc.queryForObject("""
+                    select count(distinct report_date)
+                      from wm_ads_dashboard_ad_daily
+                     where report_date between ? and ?
+                    """, Integer.class, Date.valueOf(startDate), Date.valueOf(endDate));
+            return days == null ? 0 : days;
+        } catch (DataAccessException ignored) {
+            return 0;
+        }
+    }
+
+    private WfsActuals loadWfsActuals(LocalDate startDate, LocalDate endDate) {
+        try {
+            Set<LocalDate> days = new LinkedHashSet<>();
+            jdbc.query("""
+                    select distinct period_start, period_end
+                      from wm_ads_wfs_fulfillment_fee
+                     where period_start <= ? and period_end >= ? and txn_date is not null
+                    """, rs -> {
+                DateRange period = new DateRange(rs.getDate("period_start").toLocalDate(),
+                        rs.getDate("period_end").toLocalDate());
+                period.addDays(days, startDate, endDate);
+            }, Date.valueOf(endDate), Date.valueOf(startDate));
+
             List<Map<String, Object>> rows = jdbc.queryForList("""
                     select upper(trim(coalesce(parent_sku, ''))) as parent_sku,
-                           transaction_type,
+                           txn_date, transaction_type,
                            coalesce(sum(net_payable), 0) as net_payable
                       from wm_ads_wfs_fulfillment_fee
-                     where period_start <= ? and period_end >= ?
-                     group by upper(trim(coalesce(parent_sku, ''))), transaction_type
-                    """, Date.valueOf(startDate.plusDays(2)), Date.valueOf(endDate.minusDays(2)));
-            if (rows.isEmpty()) return null;
+                     where txn_date between ? and ?
+                     group by upper(trim(coalesce(parent_sku, ''))), txn_date, transaction_type
+                    """, Date.valueOf(startDate), Date.valueOf(endDate));
 
             Map<String, BigDecimal[]> bySkuRaw = new HashMap<>();
-            BigDecimal unWfs = ZERO, unReimb = ZERO, unDisp = ZERO;
             for (Map<String, Object> r : rows) {
-                String sku = (String) r.get("parent_sku");
+                String sku = feeParent((String) r.get("parent_sku"));
                 String type = String.valueOf(r.get("transaction_type"));
                 BigDecimal payable = bd(r.get("net_payable")); // positive = fee charged to seller, negative = credit to seller
                 BigDecimal signedPnl = payable.negate();
@@ -693,52 +789,77 @@ public class FinanceEstimateService {
                 int slot;
                 if ("FulfillmentFee".equalsIgnoreCase(type) || "ReturnProcessingFee".equalsIgnoreCase(type)) {
                     slot = 0; // wfsFeeUsd
-                } else if ("LostInventory".equalsIgnoreCase(type) || "FoundInventory".equalsIgnoreCase(type)
-                        || "Refund".equalsIgnoreCase(type) || "Charge".equalsIgnoreCase(type)) {
+                    days.add(((Date) r.get("txn_date")).toLocalDate());
+                } else if ("LostInventory".equalsIgnoreCase(type) || "FoundInventory".equalsIgnoreCase(type)) {
                     slot = 1; // reimbUsd
-                } else if ("RC_InventoryDisposalFee".equalsIgnoreCase(type)) {
+                } else if ("RC_InventoryDisposalFee".equalsIgnoreCase(type)
+                        || "InventoryDisposalOrder".equalsIgnoreCase(type)) {
                     slot = 2; // dispUsd
-                } else {
+                } else if ("StorageFee".equalsIgnoreCase(type) || "LongTermStorageFee".equalsIgnoreCase(type)) {
+                    // Storage comes from the item-level storage report to avoid charging it twice.
                     continue;
+                } else {
+                    slot = 3; // return adjustments and other WFS fees remain in operating profit
                 }
 
-                if (sku == null || sku.isBlank()) {
-                    if (slot == 0) unWfs = unWfs.add(signedPnl);
-                    else if (slot == 1) unReimb = unReimb.add(signedPnl);
-                    else unDisp = unDisp.add(signedPnl);
-                } else {
-                    BigDecimal[] arr = bySkuRaw.computeIfAbsent(sku, ignored -> new BigDecimal[]{ZERO, ZERO, ZERO});
-                    arr[slot] = arr[slot].add(signedPnl);
-                }
+                BigDecimal[] arr = bySkuRaw.computeIfAbsent(sku, ignored -> new BigDecimal[]{ZERO, ZERO, ZERO, ZERO});
+                arr[slot] = arr[slot].add(signedPnl);
             }
             Map<String, WfsSkuFee> bySku = new HashMap<>();
-            bySkuRaw.forEach((k, v) -> bySku.put(k, new WfsSkuFee(v[0], v[1], v[2])));
-            return new WfsActuals(bySku, unWfs, unReimb, unDisp);
+            bySkuRaw.forEach((k, v) -> bySku.put(k, new WfsSkuFee(v[0], v[1], v[2], v[3])));
+            return new WfsActuals(bySku, new Coverage(days));
         } catch (DataAccessException ignored) {
-            return null;
+            return new WfsActuals(Map.of(), Coverage.EMPTY);
         }
     }
 
-    private Map<String, BigDecimal> loadStorageActualsIfCovered(LocalDate startDate, LocalDate endDate) {
+    private StorageActuals loadStorageActuals(LocalDate startDate, LocalDate endDate) {
         try {
-            List<Map<String, Object>> rows = jdbc.queryForList("""
-                    select upper(trim(coalesce(parent_sku, ''))) as parent_sku,
-                           coalesce(sum(final_storage_fee), 0) as fee
-                      from wm_ads_wfs_storage_fee
-                     where period_start <= ? and period_end >= ?
-                     group by upper(trim(coalesce(parent_sku, '')))
-                    """, Date.valueOf(startDate.plusDays(2)), Date.valueOf(endDate.minusDays(2)));
-            if (rows.isEmpty()) return null;
-            Map<String, BigDecimal> map = new HashMap<>();
-            for (Map<String, Object> r : rows) {
-                String sku = (String) r.get("parent_sku");
-                if (sku != null && !sku.isBlank()) {
-                    map.put(sku, bd(r.get("fee")));
-                }
+            Map<DateRange, StorageWindow> windows = new HashMap<>();
+            jdbc.query("""
+                    with ranked_storage as (
+                        select period_start, period_end, parent_sku, final_storage_fee, imported_at,
+                               row_number() over (
+                                   partition by period_start, period_end,
+                                                coalesce(nullif(upper(trim(sku)), ''), concat('#', id))
+                                   order by imported_at desc, id desc
+                               ) as row_rank
+                          from wm_ads_wfs_storage_fee
+                         where period_start <= ? and period_end >= ?
+                    )
+                    select period_start, period_end, upper(trim(coalesce(parent_sku, ''))) as parent_sku,
+                           coalesce(sum(final_storage_fee), 0) as fee, max(imported_at) as latest_imported_at
+                      from ranked_storage
+                     where row_rank = 1
+                     group by period_start, period_end, upper(trim(coalesce(parent_sku, '')))
+                    """, rs -> {
+                DateRange period = new DateRange(rs.getDate("period_start").toLocalDate(),
+                        rs.getDate("period_end").toLocalDate());
+                if (period.start().isAfter(period.end())) return;
+                StorageWindow window = windows.computeIfAbsent(period, StorageWindow::new);
+                window.addFee(feeParent(rs.getString("parent_sku")), bd(rs.getBigDecimal("fee")),
+                        rs.getTimestamp("latest_imported_at"));
+            }, Date.valueOf(endDate), Date.valueOf(startDate));
+
+            // Only one report period contributes to a given day. Prefer the most recently uploaded period.
+            List<StorageWindow> ordered = windows.values().stream()
+                    .sorted(Comparator.comparing(StorageWindow::latestImport,
+                                    Comparator.nullsLast(Comparator.reverseOrder()))
+                            .thenComparingInt(w -> w.period.days())
+                            .thenComparing(w -> w.period.start(), Comparator.reverseOrder()))
+                    .toList();
+            Set<LocalDate> days = new LinkedHashSet<>();
+            Map<String, BigDecimal> bySku = new HashMap<>();
+            for (StorageWindow window : ordered) {
+                int appliedDays = window.period.addDays(days, startDate, endDate);
+                if (appliedDays == 0) continue;
+                BigDecimal factor = BigDecimal.valueOf(appliedDays).divide(
+                        BigDecimal.valueOf(window.period.days()), 12, RoundingMode.HALF_UP);
+                window.fees.forEach((sku, fee) -> bySku.merge(sku, fee.multiply(factor), BigDecimal::add));
             }
-            return map;
+            return new StorageActuals(bySku, new Coverage(days));
         } catch (DataAccessException ignored) {
-            return null;
+            return new StorageActuals(Map.of(), Coverage.EMPTY);
         }
     }
 
@@ -746,7 +867,8 @@ public class FinanceEstimateService {
         Map<String, AssumptionCost> map = new HashMap<>();
         try {
             jdbc.query("""
-                    select upper(trim(parent_sku)) as parent_sku, purchase_cost, first_leg, delivery_fee
+                    select upper(trim(parent_sku)) as parent_sku, purchase_cost, first_leg, delivery_fee,
+                           refund_rate, prefer_manual_refund_rate
                       from wm_ads_profit_assumption
                     """, rs -> {
                 String sku = rs.getString("parent_sku");
@@ -754,7 +876,9 @@ public class FinanceEstimateService {
                     map.put(sku, new AssumptionCost(
                             rs.getBigDecimal("purchase_cost"),
                             rs.getBigDecimal("first_leg"),
-                            rs.getBigDecimal("delivery_fee")
+                            rs.getBigDecimal("delivery_fee"),
+                            rs.getBigDecimal("refund_rate"),
+                            rs.getBoolean("prefer_manual_refund_rate")
                     ));
                 }
             });
@@ -762,6 +886,32 @@ public class FinanceEstimateService {
             // Optional fallback table
         }
         return map;
+    }
+
+    private Map<String, String> loadProductItemIds() {
+        Map<String, String> map = new HashMap<>();
+        jdbc.query("""
+                select upper(trim(sku)) as seller_sku, min(trim(product_id)) as item_id
+                  from wm_ads_product_record
+                 where current_version = true and product_id is not null and trim(product_id) <> ''
+                 group by upper(trim(sku))
+                having count(distinct trim(product_id)) = 1
+                """, rs -> {
+            map.put(rs.getString("seller_sku"), rs.getString("item_id"));
+        });
+        return map;
+    }
+
+    private Map<String, BigDecimal> loadRefundRates() {
+        try {
+            Map<String, BigDecimal> result = new HashMap<>();
+            refundRateService.ratesByParent().forEach((sku, rate) -> result.put(
+                    sku.trim().toUpperCase(Locale.ROOT), rate));
+            return result;
+        } catch (DataAccessException ignored) {
+            // Historical finance rates remain available when no comparable return tables exist.
+            return Map.of();
+        }
     }
 
     private Map<String, BigDecimal> loadProductDeliveryFees() {
@@ -831,6 +981,26 @@ public class FinanceEstimateService {
         return v == null || v.abs().compareTo(new BigDecimal("0.000001")) < 0;
     }
 
+    private static boolean positive(BigDecimal value) {
+        return value != null && value.signum() > 0;
+    }
+
+    private static boolean validRate(BigDecimal value) {
+        return value != null && value.signum() >= 0 && value.compareTo(ONE) <= 0;
+    }
+
+    private static String feeParent(String value) {
+        return value == null || value.isBlank() ? UNASSIGNED_STYLE : value;
+    }
+
+    private static LocalDate earlier(LocalDate a, LocalDate b) {
+        return a.isBefore(b) ? a : b;
+    }
+
+    private static LocalDate later(LocalDate a, LocalDate b) {
+        return a.isAfter(b) ? a : b;
+    }
+
     private static BigDecimal safeDiv(BigDecimal num, BigDecimal den) {
         if (isZero(den)) return ZERO;
         return num.divide(den, 6, RoundingMode.HALF_UP);
@@ -844,13 +1014,82 @@ public class FinanceEstimateService {
         return (v == null ? ZERO : v).setScale(4, RoundingMode.HALF_UP);
     }
 
-    private record OrderAgg(int qty, BigDecimal revUsd) {}
-    private record AssumptionCost(BigDecimal purchaseCost, BigDecimal firstLeg, BigDecimal deliveryFee) {}
-    private record WfsSkuFee(BigDecimal wfsFeeUsd, BigDecimal reimbUsd, BigDecimal disposalUsd) {
-        static final WfsSkuFee ZERO_FEE = new WfsSkuFee(ZERO, ZERO, ZERO);
+    private record DateRange(LocalDate start, LocalDate end) {
+        int days() {
+            return Math.toIntExact(ChronoUnit.DAYS.between(start, end) + 1);
+        }
+
+        int addDays(Set<LocalDate> covered, LocalDate lower, LocalDate upper) {
+            LocalDate last = earlier(end, upper);
+            int before = covered.size();
+            for (LocalDate day = later(start, lower); !day.isAfter(last); day = day.plusDays(1)) {
+                covered.add(day);
+            }
+            return covered.size() - before;
+        }
     }
-    private record WfsActuals(Map<String, WfsSkuFee> bySku, BigDecimal unattributedWfsUsd,
-                              BigDecimal unattributedReimbUsd, BigDecimal unattributedDispUsd) {}
+
+    private record Coverage(Set<LocalDate> dates) {
+        static final Coverage EMPTY = new Coverage(Set.of());
+
+        boolean covers(LocalDate day) {
+            return dates.contains(day);
+        }
+
+        int days() {
+            return dates.size();
+        }
+
+    }
+
+    private record SourceCutoffs(LocalDate orders, LocalDate ads, LocalDate wfs, LocalDate storage) {}
+
+    private record OrderAgg(BigDecimal qty, BigDecimal revUsd, BigDecimal grossCommission, BigDecimal promotedQty,
+                            BigDecimal qtyWithoutWfs, BigDecimal revWithoutStorage) {
+        static final OrderAgg EMPTY = new OrderAgg(ZERO, ZERO, ZERO, ZERO, ZERO, ZERO);
+
+        OrderAgg plus(OrderAgg other) {
+            return new OrderAgg(qty.add(other.qty), revUsd.add(other.revUsd), grossCommission.add(other.grossCommission),
+                    promotedQty.add(other.promotedQty), qtyWithoutWfs.add(other.qtyWithoutWfs),
+                    revWithoutStorage.add(other.revWithoutStorage));
+        }
+
+        String commissionBasis() {
+            if (qty.signum() == 0) return "NO_SALES";
+            if (promotedQty.signum() == 0) return "STANDARD_TIER";
+            return promotedQty.compareTo(qty) == 0 ? "ITEM_PROMOTION" : "ITEM_PROMOTION_MIX";
+        }
+    }
+
+    private record AssumptionCost(BigDecimal purchaseCost, BigDecimal firstLeg, BigDecimal deliveryFee,
+                                  BigDecimal refundRate, boolean preferManualRefundRate) {}
+    private record RefundRates(BigDecimal amount, BigDecimal units, String basis) {}
+    private record WfsSkuFee(BigDecimal wfsFeeUsd, BigDecimal reimbUsd, BigDecimal disposalUsd, BigDecimal otherUsd) {
+        static final WfsSkuFee ZERO_FEE = new WfsSkuFee(ZERO, ZERO, ZERO, ZERO);
+    }
+    private record WfsActuals(Map<String, WfsSkuFee> bySku, Coverage coverage) {}
+    private record StorageActuals(Map<String, BigDecimal> bySku, Coverage coverage) {}
+
+    private static final class StorageWindow {
+        final DateRange period;
+        final Map<String, BigDecimal> fees = new HashMap<>();
+        private Timestamp latestImport;
+
+        StorageWindow(DateRange period) {
+            this.period = period;
+        }
+
+        void addFee(String sku, BigDecimal fee, Timestamp uploadedAt) {
+            fees.merge(sku, fee, BigDecimal::add);
+            if (uploadedAt != null && (latestImport == null || uploadedAt.after(latestImport))) {
+                latestImport = uploadedAt;
+            }
+        }
+
+        Timestamp latestImport() {
+            return latestImport;
+        }
+    }
 
     private static final class SkuAcc {
         int rawQty;
@@ -859,7 +1098,6 @@ public class FinanceEstimateService {
         BigDecimal wRev = ZERO;
         BigDecimal wRefQty = ZERO;
         BigDecimal wRefUsd = ZERO;
-        BigDecimal wCommUsd = ZERO;
         BigDecimal wWfsUsd = ZERO;
         BigDecimal wPurCny = ZERO;
         BigDecimal wFlCny = ZERO;
@@ -870,7 +1108,6 @@ public class FinanceEstimateService {
             BigDecimal revUsd,
             BigDecimal refundAmountRate,
             BigDecimal unitRefundRate,
-            BigDecimal commissionRate,
             BigDecimal wfsUnitFeeUsd,
             BigDecimal purchaseUnitCny,
             BigDecimal firstLegUnitCny
@@ -884,12 +1121,13 @@ public class FinanceEstimateService {
             BigDecimal storeReturnRate,
             BigDecimal storeWfsUnitFeeUsd,
             BigDecimal storeStorageRate,
-            BigDecimal storeReimbRate,
-            BigDecimal storeDispRate,
             BigDecimal storePurchaseRate,
             BigDecimal storeFirstLegRate,
             Map<String, SkuCalibration> bySku,
             Map<String, AssumptionCost> assumptions,
-            Map<String, BigDecimal> productDeliveryFees
+            Map<String, BigDecimal> productDeliveryFees,
+            Map<String, BigDecimal> refundRatesBySku,
+            Map<String, List<FinanceCommissionRuleService.Rule>> commissionRules,
+            Map<String, String> itemsBySku
     ) {}
 }

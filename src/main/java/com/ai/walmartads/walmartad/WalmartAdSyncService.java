@@ -125,7 +125,7 @@ public class WalmartAdSyncService {
     /**
      * 续跑广告历史回填：从 {@code wm_ads_lx_ad_sync_log} 里最后一天 SUCCESS 的 BACKFILL 之后接着跑。
      *
-     * <p>单批最多推进 {@link #BACKFILL_BATCH_DAYS} 天：一次跑完整段（7/21 至今近百天）会在
+     * <p>单批最多推进 {@link #BACKFILL_BATCH_DAYS} 天：一次拉取很长的历史区间会在
      * 中途撞限流并长时间占着同步锁，改为小批量后每个整点推进一段，被限流也只是本轮不推进。
      */
     public void resumeHistoricalBackfill() {
@@ -223,7 +223,7 @@ public class WalmartAdSyncService {
 
     private SyncSummary syncWindowUnlocked(String triggeredBy, LocalDate start, LocalDate end) {
         if (!client.configured()) {
-            throw new IllegalStateException("LingXing MCP is not configured");
+            throw new IllegalStateException("请在店铺管理中配置领星 MCP 并绑定广告账号");
         }
         validateWindow(start, end);
         long started = System.currentTimeMillis();

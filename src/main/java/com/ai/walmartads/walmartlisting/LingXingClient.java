@@ -40,6 +40,7 @@ public class LingXingClient {
 
     private static final Logger log = LoggerFactory.getLogger(LingXingClient.class);
     private static final String LISTING_TOOL_ID = "platform_listing_walmart_list";
+    private static final String WFS_STOCK_V2_TOOL_ID = "wfs_stock_v2_list";
 
     /**
      * 单次工具调用的最大尝试次数与退避间隔（毫秒）。
@@ -211,6 +212,54 @@ public class LingXingClient {
             }
         }
         log.info("领星 MCP 沃尔玛在线商品拉取完成：reportedTotal={}, fetched={}", reportedTotal, all.size());
+        return all;
+    }
+
+    /**
+     * 拉取领星 {@code wfs_stock_v2_list} 全量 WFS 库存明细（含 5 档库龄、预留拆解、官方预测、采购成本）。
+     * 分页参数：{@code current}（1 基）、{@code size}（最大 200）、{@code storeIdList}。
+     */
+    public List<WalmartWfsStockDto> fetchAllWfsStockV2(String storeId) {
+        if (storeId == null || storeId.isBlank()) {
+            throw new IllegalArgumentException("Walmart 店铺 ID 不能为空");
+        }
+        int effectiveSize = Math.min(200, Math.max(1, pageSize));
+        List<WalmartWfsStockDto> all = new ArrayList<>();
+        Set<String> pageFingerprints = new HashSet<>();
+        Integer reportedTotal = null;
+        for (int current = 1; current <= 500; current++) {
+            JsonNode data = callTool(WFS_STOCK_V2_TOOL_ID, Map.of(
+                    "storeIdList", List.of(storeId),
+                    "current", current,
+                    "size", effectiveSize
+            ));
+            JsonNode pageNode = data.path("page");
+            JsonNode recordsNode = pageNode.path("records");
+            List<WalmartWfsStockDto> page = recordsNode.isArray()
+                    ? objectMapper.convertValue(recordsNode, new TypeReference<List<WalmartWfsStockDto>>() {
+                    })
+                    : List.of();
+            if (page == null || page.isEmpty()) {
+                break;
+            }
+            reportedTotal = listingTotal(pageNode, reportedTotal);
+            WalmartWfsStockDto first = page.getFirst();
+            WalmartWfsStockDto last = page.getLast();
+            String fingerprint = page.size() + "|" + first.msku + "|" + first.itemId + "|" + last.msku + "|" + last.itemId;
+            if (!pageFingerprints.add(fingerprint)) {
+                throw new IllegalStateException("领星 WFS 库存分页重复，跳过本次 WFS 扩展同步");
+            }
+            for (WalmartWfsStockDto row : page) {
+                if (row.storeId == null || !storeId.equals(row.storeId.trim())) {
+                    throw new IllegalStateException("领星 WFS 库存返回了不属于当前店铺的数据");
+                }
+                all.add(row);
+            }
+            if (page.size() < effectiveSize) {
+                break;
+            }
+        }
+        log.info("领星 MCP WFS 库存 v2 拉取完成：reportedTotal={}, fetched={}", reportedTotal, all.size());
         return all;
     }
 

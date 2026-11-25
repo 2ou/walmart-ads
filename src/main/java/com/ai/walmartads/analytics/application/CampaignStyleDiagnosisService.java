@@ -1,6 +1,7 @@
 package com.ai.walmartads.analytics.application;
 
 import com.ai.walmartads.workspace.WorkspaceContext;
+import com.ai.walmartads.workspace.WorkspaceOwnershipService;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -20,8 +21,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * Joins the latest Walmart campaign configuration snapshot to imported daily performance.
@@ -31,7 +30,6 @@ import java.util.regex.Pattern;
 @Service
 public class CampaignStyleDiagnosisService {
 
-    private static final Pattern PARENT_SKU = Pattern.compile("(PNK\\d+)", Pattern.CASE_INSENSITIVE);
     private static final String UNMAPPED_PARENT = "未映射款号";
 
     private static final DecisionThresholds DEFAULT_THRESHOLDS =
@@ -47,16 +45,19 @@ public class CampaignStyleDiagnosisService {
 
     private final NamedParameterJdbcTemplate jdbc;
     private final CampaignDecisionConfigRepository configRepository;
+    private final WorkspaceOwnershipService ownership;
     private final Map<CacheKey, CacheEntry> cache = new ConcurrentHashMap<>();
     private final Map<HistoryCacheKey, HistoryCacheEntry> historyCache = new ConcurrentHashMap<>();
     private final Map<Long, HistoricalConfigCacheEntry> historicalConfigCache = new ConcurrentHashMap<>();
 
     public CampaignStyleDiagnosisService(
             NamedParameterJdbcTemplate jdbc,
-            CampaignDecisionConfigRepository configRepository
+            CampaignDecisionConfigRepository configRepository,
+            WorkspaceOwnershipService ownership
     ) {
         this.jdbc = jdbc;
         this.configRepository = configRepository;
+        this.ownership = ownership;
     }
 
     public DiagnosisResponse diagnose(LocalDate requestedStart, LocalDate requestedEnd) {
@@ -85,9 +86,11 @@ public class CampaignStyleDiagnosisService {
         List<ConfigRow> configurations = loadConfigurations();
         Map<PerformanceKey, Performance> performanceByItem = loadPerformance(startDate, endDate);
         TreeMap<String, MutableStyle> styles = new TreeMap<>();
+        var findParentSku = ownership.currentParentSkuFinder();
 
         for (ConfigRow config : configurations) {
-            String parentSku = resolveParentSku(config);
+            String parentSku = notBlank(config.parentSku()) ? config.parentSku() : findParentSku.apply(config.campaignName());
+            if (parentSku == null) parentSku = UNMAPPED_PARENT;
             MutableStyle style = styles.computeIfAbsent(parentSku, MutableStyle::new);
             MutableCampaign campaign = style.campaigns.computeIfAbsent(
                     new CampaignKey(config.advertiserId(), config.adType(), config.campaignId()),
@@ -188,9 +191,10 @@ public class CampaignStyleDiagnosisService {
         }
 
         Set<HistoryCampaignKey> campaignKeys = new LinkedHashSet<>(itemsByCampaign.keySet());
+        var findParentSku = ownership.currentParentSkuFinder();
         configurations.forEach((key, config) -> {
             if (!isCurrentCampaignStatus(campaignStatus(config.sourceCampaignStatus()))
-                    && parentSku.equals(extractParentSku(config.campaignName()))) {
+                    && parentSku.equals(findParentSku.apply(config.campaignName()))) {
                 campaignKeys.add(key);
             }
         });
@@ -360,14 +364,6 @@ public class CampaignStyleDiagnosisService {
                     );
                 })
                 .toList();
-    }
-
-    private static String extractParentSku(String campaignName) {
-        if (!notBlank(campaignName)) {
-            return null;
-        }
-        Matcher matcher = PARENT_SKU.matcher(campaignName);
-        return matcher.find() ? matcher.group(1).toUpperCase(Locale.ROOT) : null;
     }
 
     private static <T> String fallbackText(T value, java.util.function.Function<T, String> extractor) {
@@ -735,19 +731,6 @@ public class CampaignStyleDiagnosisService {
                 """, new MapSqlParameterSource()
                 .addValue("startDate", startDate)
                 .addValue("endDate", endDate), LocalDate.class);
-    }
-
-    private static String resolveParentSku(ConfigRow row) {
-        if (notBlank(row.parentSku())) {
-            return row.parentSku();
-        }
-        if (notBlank(row.campaignName())) {
-            Matcher matcher = PARENT_SKU.matcher(row.campaignName());
-            if (matcher.find()) {
-                return matcher.group(1).toUpperCase(Locale.ROOT);
-            }
-        }
-        return UNMAPPED_PARENT;
     }
 
     private static String campaignStatus(String sourceStatus) {

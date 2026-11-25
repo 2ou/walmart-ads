@@ -9,16 +9,20 @@ import com.ai.walmartads.inventory.domain.TransitShipmentEta;
 import com.ai.walmartads.inventory.repository.TransitChannelLeadTimeRepository;
 import com.ai.walmartads.inventory.repository.TransitShipmentEtaRepository;
 import com.ai.walmartads.supplychain.LogisticsRegisterSource;
+import com.ai.walmartads.supplychain.SupplyChainSyncedEvent;
+import com.ai.walmartads.workspace.WorkspaceContext;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.DayOfWeek;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.temporal.TemporalAdjusters;
@@ -30,6 +34,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 /**
@@ -59,14 +64,41 @@ public class TransitInventoryService {
 
     /** 解析逐一留存的行原始快照用；快照的键即源表表头。 */
     private static final ObjectMapper SNAPSHOT_JSON = new ObjectMapper();
+    private static final long TRANSIT_CACHE_NANOS = Duration.ofMinutes(5).toNanos();
 
     private final ShipmentRecordRepository shipmentRepository;
     private final ShipmentLogisticsRepository logisticsRepository;
     private final LogisticsRegisterSource logisticsRegisterSource;
     private final TransitChannelLeadTimeRepository channelLeadTimeRepository;
     private final TransitShipmentEtaRepository shipmentEtaRepository;
+    private final ConcurrentHashMap<Long, CachedTransitData> transitCache = new ConcurrentHashMap<>();
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private org.springframework.context.ApplicationEventPublisher events;
+
+    private record CachedTransitData(TransitData data, long createdAtNanos) {
+    }
+
+    public void invalidateCache() {
+        WorkspaceContext.current().ifPresentOrElse(
+                principal -> transitCache.remove(principal.workspaceId()),
+                transitCache::clear
+        );
+    }
+
+    @EventListener
+    public void onSupplyChainSynced(SupplyChainSyncedEvent event) {
+        invalidateCache();
+    }
+
+    @EventListener
+    public void onTransitTimingChanged(TransitTimingChangedEvent event) {
+        invalidateCache();
+    }
+
+    @EventListener
+    public void onWfsShipmentsSynced(WfsShipmentsSyncedEvent event) {
+        transitCache.remove(event.workspaceId());
+    }
 
     public TransitInventoryService(
             ShipmentRecordRepository shipmentRepository,
@@ -97,10 +129,15 @@ public class TransitInventoryService {
                 .map(TransitChannelLeadTime::getChannelName)
                 .collect(Collectors.toSet());
 
+        boolean added = false;
         for (String channel : allChannels) {
             if (!existing.contains(channel)) {
                 channelLeadTimeRepository.save(new TransitChannelLeadTime(channel, null, false));
+                added = true;
             }
+        }
+        if (added) {
+            invalidateCache();
         }
     }
 
@@ -139,8 +176,12 @@ public class TransitInventoryService {
      * <p>最后过滤申收差异合计为 0 的货件（无实际在途量，进表只会是空行）。
      */
     private Set<String> keptShipmentNos() {
+        return keptShipmentNos(shipmentRepository.findCurrentVersions());
+    }
+
+    private Set<String> keptShipmentNos(List<ShipmentRecord> records) {
         Map<String, Double> unitsByShipment = new LinkedHashMap<>();
-        for (ShipmentRecord record : shipmentRepository.findCurrentVersions()) {
+        for (ShipmentRecord record : records) {
             if (!IN_TRANSIT_STATUSES.contains(record.getLocalStatus())) {
                 continue;
             }
@@ -154,9 +195,21 @@ public class TransitInventoryService {
 
     @Transactional(readOnly = true)
     public TransitData load() {
-        Set<String> kept = keptShipmentNos();
+        Long workspaceId = WorkspaceContext.current()
+                .map(com.ai.walmartads.workspace.WorkspacePrincipal::workspaceId)
+                .orElse(null);
+        if (workspaceId != null) {
+            CachedTransitData cached = transitCache.get(workspaceId);
+            long now = System.nanoTime();
+            if (cached != null && now - cached.createdAtNanos() < TRANSIT_CACHE_NANOS) {
+                return cached.data();
+            }
+        }
+        List<ShipmentRecord> records = shipmentRepository.findCurrentVersions();
+        Set<String> kept = keptShipmentNos(records);
         Map<String, ShipmentLogisticsInfo> logisticsByShipment = logisticsByShipment();
-        Map<String, TransitChannelLeadTime> leadTimeByChannel = channelLeadTimeRepository.findAll().stream()
+        List<TransitChannelLeadTime> allLeadTimes = channelLeadTimeRepository.findAll();
+        Map<String, TransitChannelLeadTime> leadTimeByChannel = allLeadTimes.stream()
                 .collect(Collectors.toMap(TransitChannelLeadTime::getChannelName, value -> value));
         Map<String, LocalDate> manualArrivalByShipment = new LinkedHashMap<>();
         shipmentEtaRepository.findAll().forEach(eta -> {
@@ -167,9 +220,14 @@ public class TransitInventoryService {
 
         Map<String, MutableShipment> shipments = new LinkedHashMap<>();
         Map<String, Double> unitsBySku = new LinkedHashMap<>();
-        for (ShipmentRecord record : shipmentRepository.findCurrentVersions()) {
+        for (ShipmentRecord record : records) {
+            boolean isClosed = CLOSED_STATUS.equals(record.getLocalStatus());
+            boolean isKept = kept.contains(record.getShipmentNo());
+            if (!isClosed && !isKept) {
+                continue;
+            }
             double units = nonNegative(record.getReceiptDifference());
-            if (kept.contains(record.getShipmentNo())) {
+            if (isKept) {
                 unitsBySku.merge(record.getSku(), units, Double::sum);
             }
             MutableShipment shipment = shipments.computeIfAbsent(record.getShipmentNo(), key ->
@@ -271,15 +329,19 @@ public class TransitInventoryService {
         });
         views.sort(Comparator.comparing(TransitShipment::createdAt, Comparator.nullsLast(Comparator.reverseOrder())));
         completed.sort(Comparator.comparingDouble(TransitShipment::units).reversed());
-        return new TransitData(
+        TransitData data = new TransitData(
                 Map.copyOf(unitsBySku),
                 views,
                 completed,
-                channelLeadTimeRepository.findAll().stream()
+                allLeadTimes.stream()
                         .map(this::toView)
                         .sorted(Comparator.comparing(TransitChannel::channelName))
                         .toList()
         );
+        if (workspaceId != null) {
+            transitCache.put(workspaceId, new CachedTransitData(data, System.nanoTime()));
+        }
+        return data;
     }
 
     /** 人工补充 / 清空某货件的到达日期；arrivalDate 传 null 表示清空，回到系统推算。 */
@@ -298,6 +360,7 @@ public class TransitInventoryService {
                 .orElseGet(() -> new TransitShipmentEta(shipmentNo, null));
         value.updateArrivalDate(arrivalDate);
         shipmentEtaRepository.save(value);
+        invalidateCache();
         publishTimingChangedAfterCommit();
     }
 
@@ -307,7 +370,8 @@ public class TransitInventoryService {
         if (snapshotDate == null || horizonDays <= 0) {
             return List.of();
         }
-        Set<String> kept = keptShipmentNos();
+        List<ShipmentRecord> records = shipmentRepository.findCurrentVersions();
+        Set<String> kept = keptShipmentNos(records);
         Map<String, ShipmentLogisticsInfo> logisticsByShipment = logisticsByShipment();
         Map<String, TransitChannelLeadTime> leadTimeByChannel = channelLeadTimeRepository.findAll().stream()
                 .collect(Collectors.toMap(TransitChannelLeadTime::getChannelName, value -> value));
@@ -316,7 +380,7 @@ public class TransitInventoryService {
             if (eta.getArrivalDate() != null) manualArrivalByShipment.put(eta.getShipmentNo(), eta.getArrivalDate());
         });
         List<TransitSkuSupply> result = new ArrayList<>();
-        for (ShipmentRecord record : shipmentRepository.findCurrentVersions()) {
+        for (ShipmentRecord record : records) {
             if (!kept.contains(record.getShipmentNo())) {
                 continue;
             }
@@ -356,6 +420,7 @@ public class TransitInventoryService {
                 .orElseGet(() -> new TransitChannelLeadTime(channelName, null, false));
         value.updateManually(BigDecimal.valueOf(leadDays).setScale(2, RoundingMode.HALF_UP));
         TransitChannel result = toView(channelLeadTimeRepository.save(value));
+        invalidateCache();
         publishTimingChangedAfterCommit();
         return result;
     }

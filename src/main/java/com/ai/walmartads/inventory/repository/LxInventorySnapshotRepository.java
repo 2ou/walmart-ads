@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDate;
+import java.util.List;
 
 public interface LxInventorySnapshotRepository extends JpaRepository<LxInventorySnapshot, Long> {
 
@@ -15,8 +16,13 @@ public interface LxInventorySnapshotRepository extends JpaRepository<LxInventory
     @Query("delete from LxInventorySnapshot snapshot where snapshot.businessDate = :businessDate")
     int deleteByBusinessDate(@Param("businessDate") LocalDate businessDate);
 
+    List<LxInventorySnapshot> findByBusinessDate(LocalDate businessDate);
+
     @Query("select max(snapshot.businessDate) from LxInventorySnapshot snapshot")
     LocalDate findLatestBusinessDate();
 
     long countByBusinessDate(LocalDate businessDate);
+
+    @Query("select count(snapshot) from LxInventorySnapshot snapshot where snapshot.businessDate = :businessDate and snapshot.ats03Months is not null")
+    long countWfsStockV2ByBusinessDate(@Param("businessDate") LocalDate businessDate);
 }

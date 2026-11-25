@@ -25,7 +25,8 @@ public class WorkspaceLingXingConfigService {
     }
 
     public Config current() {
-        long workspaceId = WorkspaceContext.current().map(WorkspacePrincipal::workspaceId).orElse(1L);
+        long workspaceId = WorkspaceContext.current().map(WorkspacePrincipal::workspaceId).orElse(0L);
+        if (workspaceId <= 0) return unconfigured(workspaceId);
         List<Config> rows = jdbc.query("""
                 select id, mcp_base_url, mcp_key, store_id
                   from wm_ads_workspace where id=? and status='ACTIVE'
@@ -33,9 +34,12 @@ public class WorkspaceLingXingConfigService {
                 rs.getLong("id"), valueOr(rs.getString("mcp_base_url"), legacy.resolvedBaseUrl()),
                 rs.getString("mcp_key"), rs.getString("store_id"), legacy.resolvedPageSize(),
                 advertiserIds(rs.getLong("id"))), workspaceId);
-        if (!rows.isEmpty()) return rows.getFirst();
-        return new Config(workspaceId, legacy.resolvedBaseUrl(), legacy.apiKey(), legacy.resolvedStoreId(),
-                legacy.resolvedPageSize(), legacy.resolvedAdvertiserIds());
+        return rows.isEmpty() ? unconfigured(workspaceId) : rows.getFirst();
+    }
+
+    private Config unconfigured(long workspaceId) {
+        return new Config(workspaceId, legacy.resolvedBaseUrl(), null, null,
+                legacy.resolvedPageSize(), List.of());
     }
 
     public boolean currentConfigured() {
@@ -59,6 +63,14 @@ public class WorkspaceLingXingConfigService {
                 rs.getLong("id"), rs.getString("username"), rs.getString("status"),
                 rs.getString("store_id"), rs.getString("store_name"), rs.getString("store_abbreviation"),
                 rs.getBoolean("supply_chain_enabled"), 0L), args);
+    }
+
+    public boolean hasRecentValidSync(long workspaceId, String category, LocalDateTime since) {
+        Integer count = jdbc.queryForObject("""
+                select count(*) from wm_ads_workspace_sync_setting
+                 where workspace_id=? and sync_category=? and last_valid_data_at>=?
+                """, Integer.class, workspaceId, category, since);
+        return count != null && count > 0;
     }
 
     public List<WorkspacePrincipal> initializingWorkspaces() {

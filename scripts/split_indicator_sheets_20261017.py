@@ -2,11 +2,11 @@
 """按 7 个活动资格指标，把主表拆成 7 个子表（每个指标一张，只放该指标为 N 的行）。
 直接改写 xlsx 包结构：新增 sheet2..sheet8，主表 Sheet 原样不动。
 """
+import argparse
 import re
 import shutil
 import zipfile
 
-SRC = r"C:/Users/Administrator/Desktop/1016-Holiday Event 1-活动资格库存检查_10001456058_2026-10-16.xlsx"
 NS = 'xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"'
 
 INDICATORS = [
@@ -20,8 +20,8 @@ INDICATORS = [
 ]
 
 
-def main():
-    z = zipfile.ZipFile(SRC)
+def main(src):
+    z = zipfile.ZipFile(src)
     xml = z.read("xl/worksheets/sheet1.xml").decode("utf-8")
 
     # 拆行：保留每行原始单元格 XML（含样式 s、类型 t、值）
@@ -113,7 +113,7 @@ def main():
     ct = ct.replace("</Types>", add_ct + "</Types>")
 
     # 重打包
-    tmp = SRC + ".new"
+    tmp = src + ".new"
     zout = zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED)
     for item in z.infolist():
         if item.filename == "xl/workbook.xml":
@@ -129,9 +129,11 @@ def main():
         zout.writestr("xl/worksheets/sheet%d.xml" % sid, content.encode("utf-8"))
     zout.close()
     z.close()
-    shutil.move(tmp, SRC)
-    print("saved ->", SRC)
+    shutil.move(tmp, src)
+    print("saved ->", src)
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("workbook", help="库存检查工作簿路径")
+    main(parser.parse_args().workbook)

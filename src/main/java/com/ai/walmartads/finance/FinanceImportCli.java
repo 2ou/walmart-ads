@@ -11,7 +11,7 @@ import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import java.nio.file.Path;
 
 /**
- * Imports PNK finance profit Excel workbooks directly into MySQL without starting the web server.
+ * Imports workspace finance workbooks directly into MySQL without starting the web server.
  */
 public final class FinanceImportCli {
 
@@ -21,6 +21,7 @@ public final class FinanceImportCli {
     public static void main(String[] args) throws Exception {
         boolean migrate = false;
         long workspaceId = 1L;
+        String account = null;
         String dirArg = null;
         for (int i = 0; i < args.length; i++) {
             String arg = args[i];
@@ -28,13 +29,18 @@ public final class FinanceImportCli {
                 migrate = true;
             } else if ("--workspace".equals(arg) && i + 1 < args.length) {
                 workspaceId = Long.parseLong(args[++i]);
+            } else if ("--account".equals(arg)) {
+                if (i + 1 >= args.length || args[i + 1].startsWith("--")) {
+                    throw new IllegalArgumentException("请为 --account 提供账表中的财务账号。");
+                }
+                account = args[++i];
             } else {
                 dirArg = arg;
             }
         }
         if (dirArg == null || dirArg.isBlank()) {
             throw new IllegalArgumentException(
-                    "Usage: FinanceImportCli [--migrate] [--workspace 1] <finance_directory>");
+                    "Usage: FinanceImportCli [--migrate] [--workspace <id>] [--account <code>] <finance_directory>");
         }
 
         String url = setting("WALMART_ADS_DB_URL",
@@ -56,7 +62,7 @@ public final class FinanceImportCli {
                 new FinanceWorkbookParser(),
                 new DataSourceTransactionManager(dataSource)
         );
-        FinanceImportService.DirectoryImportResult result = service.importDirectory(Path.of(dirArg), workspaceId);
+        FinanceImportService.DirectoryImportResult result = service.importDirectory(Path.of(dirArg), workspaceId, account);
 
         ObjectMapper mapper = new ObjectMapper()
                 .findAndRegisterModules()

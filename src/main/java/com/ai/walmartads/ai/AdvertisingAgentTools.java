@@ -53,7 +53,7 @@ public class AdvertisingAgentTools {
                     commonDateSchema());
             case DIAGNOSIS -> tool(DIAGNOSIS, "读取款号广告诊断；可指定 parentSku，未指定时返回整体诊断摘要。",
                     commonDateSchema().toBuilder()
-                            .addStringProperty("parentSku", "可选款号，例如 PNK0079")
+                            .addStringProperty("parentSku", "可选，填当前店铺的父款号")
                             .build());
             case KEYWORDS -> tool(KEYWORDS, "读取手动广告关键词表现；支持款号、广告类型和返回条数筛选。",
                     commonDateSchema().toBuilder()
@@ -63,7 +63,7 @@ public class AdvertisingAgentTools {
                             .build());
             case HISTORY -> tool(HISTORY, "读取指定款号的历史广告生命周期汇总和广告明细。",
                     JsonObjectSchema.builder()
-                            .addStringProperty("parentSku", "必填款号，例如 PNK0079")
+                            .addStringProperty("parentSku", "必填，填当前店铺的父款号")
                             .required("parentSku")
                             .additionalProperties(false)
                             .build());

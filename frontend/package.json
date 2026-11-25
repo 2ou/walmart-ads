@@ -1,0 +1,30 @@
+{
+  "name": "walmart-ads-frontend",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Walmart Workbench React + TypeScript + Ant Design 5 UI module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build"
+  },
+  "dependencies": {
+    "@ant-design/icons": "^5.5.1",
+    "@heroui/react": "^2.8.10",
+    "antd": "^5.22.2",
+    "dayjs": "^1.11.13",
+    "framer-motion": "^11.15.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.17",
+    "typescript": "~5.6.3",
+    "vite": "^6.0.1"
+  }
+}

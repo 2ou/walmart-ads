@@ -5,6 +5,8 @@ import com.ai.walmartads.finance.FinanceEstimateService.EstimateOptions;
 import com.ai.walmartads.finance.FinanceEstimateService.EstimatedCycle;
 import com.ai.walmartads.finance.FinanceEstimateService.EstimatedStore;
 import com.ai.walmartads.finance.FinanceEstimateService.EstimatedStyle;
+import com.ai.walmartads.workspace.WorkspaceContext;
+import com.ai.walmartads.workspace.WorkspacePrincipal;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -29,7 +31,7 @@ import java.util.Set;
 import java.util.TreeSet;
 
 /**
- * Analytical query service for workspace-scoped PNK monthly store &amp; style financial profit data,
+ * Analytical query service for workspace-scoped monthly store &amp; style financial profit data,
  * seamlessly augmented with Option-A real-time estimates for un-finalized settlement cycles.
  */
 @Service
@@ -65,8 +67,9 @@ public class FinanceAnalyticsService {
             BigDecimal overrideOffsiteFeeCny
     ) {
         List<StoreRow> actualStoreRows = loadStoreRows();
+        String workspaceStoreName = WorkspaceContext.current().map(WorkspacePrincipal::storeName).orElse(null);
         if (actualStoreRows.isEmpty()) {
-            return OverviewPayload.empty();
+            return OverviewPayload.empty(workspaceStoreName);
         }
 
         StoreRow latestActual = actualStoreRows.getLast();
@@ -160,7 +163,7 @@ public class FinanceAnalyticsService {
 
         OverviewMeta meta = new OverviewMeta(
                 latestActual.accountCode(),
-                latestActual.companyName(),
+                latestActual.companyName() == null ? workspaceStoreName : latestActual.companyName(),
                 effStart,
                 effEnd,
                 selectedStoreRows.size(),
@@ -289,6 +292,19 @@ public class FinanceAnalyticsService {
 
     @Transactional(readOnly = true)
     public StyleDetailPayload styleDetail(String parentSkuParam, boolean includeEstimate) {
+        return styleDetail(parentSkuParam, includeEstimate, null, null, null, null, null);
+    }
+
+    @Transactional(readOnly = true)
+    public StyleDetailPayload styleDetail(
+            String parentSkuParam,
+            boolean includeEstimate,
+            String targetEstimateMonth,
+            LocalDate customStartDate,
+            LocalDate customEndDate,
+            BigDecimal exchangeRate,
+            BigDecimal offsiteFeeCny
+    ) {
         String parentSku = parentSkuParam == null ? "" : parentSkuParam.trim().toUpperCase(Locale.ROOT);
         if (parentSku.isEmpty()) {
             throw new IllegalArgumentException("款号不能为空");
@@ -298,6 +314,7 @@ public class FinanceAnalyticsService {
         List<StyleRow> actualRows = loadStyleRows(null, null, parentSku);
 
         List<StyleRow> estimatedRows = new ArrayList<>();
+        Map<String, EstimatedStyle> estimateByMonth = new HashMap<>();
         Map<String, String> periodByMonth = new HashMap<>();
         Map<String, String> stageByMonth = new HashMap<>();
         for (StoreRow sr : actualStores) {
@@ -309,13 +326,16 @@ public class FinanceAnalyticsService {
             StoreRow latest = actualStores.getLast();
             List<EstimatedCycle> cycles = estimateService.estimatePendingCycles(
                     latest.reportMonth(), latest.settlementPeriod(), latest.exchangeRate(),
-                    latest.accountCode(), latest.companyName(), EstimateOptions.defaults());
+                    latest.accountCode(), latest.companyName(),
+                    new EstimateOptions(normalizeMonth(targetEstimateMonth), customStartDate, customEndDate,
+                            exchangeRate, offsiteFeeCny));
             for (EstimatedCycle c : cycles) {
                 periodByMonth.put(c.reportMonth(), c.settlementPeriod());
                 stageByMonth.put(c.reportMonth(), c.estimateStage());
                 for (EstimatedStyle es : c.styles()) {
                     if (parentSku.equalsIgnoreCase(es.parentSku())) {
                         estimatedRows.add(toStyleRow(es));
+                        estimateByMonth.put(c.reportMonth(), es);
                     }
                 }
             }
@@ -346,6 +366,7 @@ public class FinanceAnalyticsService {
         List<StyleMonthDetail> months = new ArrayList<>();
         for (StyleRow r : allRows) {
             BigDecimal mRevCny = r.salesRevenueUsd().multiply(r.exchangeRate());
+            EstimatedStyle estimate = estimateByMonth.get(r.reportMonth());
             months.add(new StyleMonthDetail(
                     r.reportMonth(),
                     periodByMonth.get(r.reportMonth()),
@@ -378,7 +399,10 @@ public class FinanceAnalyticsService {
                     ratio(r.profitCny(), mRevCny),
                     r.estimated(),
                     stageByMonth.getOrDefault(r.reportMonth(), FinanceEstimateService.STAGE_ACTUAL),
-                    r.costBasis()
+                    r.costBasis(),
+                    estimate == null ? null : estimate.refundBasis(),
+                    estimate == null ? null : estimate.commissionBasis(),
+                    estimate == null ? null : operatingProfit(r.profitCny(), r.inventoryReimbursementUsd(), r.exchangeRate())
             ));
         }
 
@@ -485,6 +509,13 @@ public class FinanceAnalyticsService {
         }
         EstimatedCycle primary = selectedEstimates.getLast();
         boolean singleEstimate = selectedRows.size() == 1 && selectedEstimates.size() == 1;
+        int coverageDays = selectedEstimates.stream().mapToInt(EstimatedCycle::elapsedDays).sum();
+        int wfsCoveredDays = selectedEstimates.stream().mapToInt(EstimatedCycle::wfsCoveredDays).sum();
+        int storageCoveredDays = selectedEstimates.stream().mapToInt(EstimatedCycle::storageCoveredDays).sum();
+        int adCoveredDays = selectedEstimates.stream().mapToInt(EstimatedCycle::adCoveredDays).sum();
+        BigDecimal estimateOperatingProfit = selectedEstimates.stream().map(c -> operatingProfit(
+                        c.store().grossProfitCny(), c.store().inventoryReimbursementUsd(), c.exchangeRate()))
+                .reduce(ZERO, BigDecimal::add);
         return new EstimateContext(
                 primary.reportMonth(),
                 primary.estimateStage(),
@@ -498,11 +529,23 @@ public class FinanceAnalyticsService {
                 primary.defaultExchangeRate(),
                 primary.exchangeRate(),
                 primary.offsiteFeeCny(),
-                primary.wfsActualUsed(),
-                primary.storageActualUsed(),
+                coverageDays == wfsCoveredDays,
+                coverageDays == storageCoveredDays,
                 singleEstimate,
-                selectedEstimates.stream().map(EstimatedCycle::reportMonth).toList()
+                selectedEstimates.stream().map(EstimatedCycle::reportMonth).toList(),
+                coverageDays,
+                wfsCoveredDays,
+                storageCoveredDays,
+                adCoveredDays,
+                primary.wfsCoveredThrough() == null ? null : primary.wfsCoveredThrough().toString(),
+                primary.storageCoveredThrough() == null ? null : primary.storageCoveredThrough().toString(),
+                estimateOperatingProfit,
+                FinanceEstimateService.REFUND_COST_RECOVERY_RATE
         );
+    }
+
+    private static BigDecimal operatingProfit(BigDecimal profit, BigDecimal inventoryReimbursement, BigDecimal fx) {
+        return scale2(profit.subtract(inventoryReimbursement.multiply(fx)));
     }
 
     private StoreRow toStoreRow(EstimatedCycle cycle) {
@@ -634,15 +677,15 @@ public class FinanceAnalyticsService {
         BigDecimal fx = kpi.avgExchangeRate();
         BigDecimal revUsd = kpi.salesRevenueUsd();
         BigDecimal revCny = kpi.salesRevenueCny();
-        BigDecimal otherNetUsd = kpi.inventoryReimbursementUsd()
-                .add(kpi.inventoryDisposalUsd())
+        BigDecimal otherNetUsd = kpi.inventoryDisposalUsd()
                 .add(kpi.promoDiscountUsd())
                 .add(kpi.otherPlatformFeeUsd());
 
         String salesTag = !hasEstimate ? "财务正式" : (allEstimate ? "领星实测" : "正式+实测");
-        String adsTag = !hasEstimate ? "财务正式" : (allEstimate ? "领星实测" : "正式+实测");
-        String wfsTag = !hasEstimate ? "财务正式" : (ctx != null && ctx.wfsActualUsed() ? "WFS实测" : "费率预估");
-        String stoTag = !hasEstimate ? "财务正式" : (ctx != null && ctx.storageActualUsed() ? "WFS实测" : "费率预估");
+        String adsTag = !hasEstimate ? "财务正式" : ctx != null && ctx.adCoveredDays() < ctx.coverageDays()
+                ? "广告未齐" : salesTag;
+        String wfsTag = ctx == null ? "财务正式" : coverageTag(ctx.wfsCoveredDays(), ctx.coverageDays());
+        String stoTag = ctx == null ? "财务正式" : coverageTag(ctx.storageCoveredDays(), ctx.coverageDays());
         String estTag = !hasEstimate ? "财务正式" : (allEstimate ? "费率预估" : "含预估");
         String sumTag = !hasEstimate ? "财务正式" : (allEstimate ? "推算汇总" : "含预估");
         String offTag = !hasEstimate ? "财务正式" : (allEstimate ? "手工参数" : "含预估");
@@ -651,10 +694,16 @@ public class FinanceAnalyticsService {
         items.add(new BreakdownItem("sales", "销售收入", "REVENUE", kpi.salesRevenueUsd(), kpi.salesRevenueCny(), BigDecimal.ONE, salesTag));
         items.add(new BreakdownItem("refund", "销售订单退款", "PLATFORM_DEDUCTION", kpi.refundUsd(), scale2(kpi.refundUsd().multiply(fx)), ratio(kpi.refundUsd(), revUsd), estTag));
         items.add(new BreakdownItem("wfs", "WFS 配送费", "PLATFORM_DEDUCTION", kpi.wfsFeeUsd(), scale2(kpi.wfsFeeUsd().multiply(fx)), ratio(kpi.wfsFeeUsd(), revUsd), wfsTag));
-        items.add(new BreakdownItem("commission", "平台佣金", "PLATFORM_DEDUCTION", kpi.commissionUsd(), scale2(kpi.commissionUsd().multiply(fx)), ratio(kpi.commissionUsd(), revUsd), estTag));
+        items.add(new BreakdownItem("commission", "平台佣金", "PLATFORM_DEDUCTION", kpi.commissionUsd(), scale2(kpi.commissionUsd().multiply(fx)), ratio(kpi.commissionUsd(), revUsd), hasEstimate ? "按订单规则预估" : "财务正式"));
         items.add(new BreakdownItem("ads", "站内广告费", "PLATFORM_DEDUCTION", kpi.adSpendUsd(), scale2(kpi.adSpendUsd().multiply(fx)), ratio(kpi.adSpendUsd(), revUsd), adsTag));
         items.add(new BreakdownItem("storage", "WFS 仓储费", "PLATFORM_DEDUCTION", kpi.storageFeeUsd(), scale2(kpi.storageFeeUsd().multiply(fx)), ratio(kpi.storageFeeUsd(), revUsd), stoTag));
-        items.add(new BreakdownItem("other_platform", "赔偿/处理/折扣及其他", "PLATFORM_ADJUSTMENT", scale2(otherNetUsd), scale2(otherNetUsd.multiply(fx)), ratio(otherNetUsd, revUsd), wfsTag));
+        if (!isZero(kpi.inventoryReimbursementUsd())) {
+            BigDecimal reimbursement = kpi.inventoryReimbursementUsd();
+            items.add(new BreakdownItem("inventory_reimbursement", "库存赔偿及找回冲回", "PLATFORM_ADJUSTMENT",
+                    reimbursement, scale2(reimbursement.multiply(fx)), ratio(reimbursement, revUsd),
+                    hasEstimate ? "账单已记录" : "财务正式"));
+        }
+        items.add(new BreakdownItem("other_platform", "处理/折扣及其他", "PLATFORM_ADJUSTMENT", scale2(otherNetUsd), scale2(otherNetUsd.multiply(fx)), ratio(otherNetUsd, revUsd), wfsTag));
         items.add(new BreakdownItem("settlement", "平台结算净额", "SUBTOTAL", kpi.netSettlementUsd(), kpi.netSettlementCny(), kpi.settlementRatio(), sumTag));
         items.add(new BreakdownItem("purchase", "产品采购成本", "CNY_COST", null, kpi.purchaseCostCny().negate(), ratio(kpi.purchaseCostCny().negate(), revCny), estTag));
         items.add(new BreakdownItem("first_leg", "头程运费", "CNY_COST", null, kpi.firstLegFreightCny().negate(), ratio(kpi.firstLegFreightCny().negate(), revCny), estTag));
@@ -663,6 +712,11 @@ public class FinanceAnalyticsService {
         }
         items.add(new BreakdownItem("profit", "最终毛利", "PROFIT", null, kpi.grossProfitCny(), kpi.profitMargin(), sumTag));
         return items;
+    }
+
+    private static String coverageTag(int coveredDays, int periodDays) {
+        if (coveredDays == 0) return "费率预估";
+        return coveredDays == periodDays ? "WFS实扣" : "实扣+预估";
     }
 
     private List<StyleAggregate> aggregateStyles(
@@ -996,9 +1050,9 @@ public class FinanceAnalyticsService {
             FilterOptions filterOptions,
             List<StyleAggregate> styles
     ) {
-        public static OverviewPayload empty() {
+        private static OverviewPayload empty(String workspaceStoreName) {
             return new OverviewPayload(
-                    new OverviewMeta("PNK-US", "斐凡", null, null, 0, null, List.of(), List.of(), List.of(),
+                    new OverviewMeta(null, workspaceStoreName, null, null, 0, null, List.of(), List.of(), List.of(),
                             0, 0, null, true, List.of(), null, false, false, null),
                     null, null, List.of(), List.of(),
                     new StyleSummary(0, 0, 0, 0, List.of(), 0, ZERO, ZERO, ZERO, ZERO),
@@ -1033,7 +1087,15 @@ public class FinanceAnalyticsService {
             boolean wfsActualUsed,
             boolean storageActualUsed,
             boolean customDatesEditable,
-            List<String> includedEstimateMonths
+            List<String> includedEstimateMonths,
+            int coverageDays,
+            int wfsCoveredDays,
+            int storageCoveredDays,
+            int adCoveredDays,
+            String wfsCoveredThrough,
+            String storageCoveredThrough,
+            BigDecimal operatingProfitCny,
+            BigDecimal refundCostRecoveryRate
     ) {
     }
 
@@ -1276,7 +1338,10 @@ public class FinanceAnalyticsService {
             BigDecimal profitMargin,
             boolean estimated,
             String estimateStage,
-            String costBasis
+            String costBasis,
+            String refundBasis,
+            String commissionBasis,
+            BigDecimal operatingProfitCny
     ) {
     }
 }

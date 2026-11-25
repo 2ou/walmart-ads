@@ -13,6 +13,8 @@ import java.io.ByteArrayOutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
@@ -32,9 +34,9 @@ class WorkspaceOwnershipServiceTest {
 
     @BeforeEach
     void setUp() {
-        WorkspaceContext.set(new WorkspacePrincipal(1L, "PINKSIR", "ACTIVE", "1", "PINKSIR", "PNK", false, 1L));
+        WorkspaceContext.set(new WorkspacePrincipal(1L, "DEMO", "ACTIVE", "1", "Demo shop", "DEMO", false, 1L));
         jdbc = mock(JdbcTemplate.class);
-        when(jdbc.queryForObject(anyString(), eq(String.class), eq(1L))).thenReturn("PNK");
+        when(jdbc.queryForObject(anyString(), eq(String.class), eq(1L))).thenReturn("DEMO");
         service = new WorkspaceOwnershipService(jdbc);
     }
 
@@ -45,7 +47,7 @@ class WorkspaceOwnershipServiceTest {
 
     @Test
     void ignoresHiddenTemplateMetadataAndVisibleFieldDescription() throws Exception {
-        Path workbookPath = temp.resolve("PNK0079-upload.xlsx");
+        Path workbookPath = temp.resolve("DEMO0079-upload.xlsx");
         try (XSSFWorkbook workbook = new XSSFWorkbook()) {
             var metadata = workbook.createSheet("Hidden_product_content");
             metadata.createRow(0).createCell(0).setCellValue("SKU");
@@ -56,7 +58,7 @@ class WorkspaceOwnershipServiceTest {
             data.createRow(3).createCell(3).setCellValue("SKU");
             data.createRow(4).createCell(3).setCellValue("sku");
             data.createRow(5).createCell(3).setCellValue("Alphanumeric, 50 characters - " + "x".repeat(120));
-            data.createRow(6).createCell(3).setCellValue("PNK0079-C-Army Green-S-WFS");
+            data.createRow(6).createCell(3).setCellValue("DEMO0079-C-Army Green-S-WFS");
             try (OutputStream output = Files.newOutputStream(workbookPath)) {
                 workbook.write(output);
             }
@@ -91,5 +93,16 @@ class WorkspaceOwnershipServiceTest {
         verify(jdbc).update(anyString(), eq(1L), eq("PRODUCT"), eq("foreign.xlsx"),
                 eq("ABC001-Blue-M-WFS"), org.mockito.ArgumentMatchers.contains("允许前缀"),
                 isNull(), isNull());
+    }
+
+    @Test
+    void findsCampaignStylesUsingOnlyPrefixesStoredForTheCurrentWorkspace() {
+        when(jdbc.queryForObject(anyString(), eq(String.class), eq(1L))).thenReturn("DEMO, ALT-");
+        var findStyle = service.currentParentSkuFinder();
+        assertEquals("DEMO0079", findStyle.apply("OTHER001 - demo0079 exact"));
+        assertEquals("ALT-302", findStyle.apply("alt-302 auto"));
+        assertNull(findStyle.apply("OTHER001 auto"));
+        when(jdbc.queryForObject(anyString(), eq(String.class), eq(1L))).thenReturn(null);
+        assertNull(service.currentParentSkuFinder().apply("DEMO0079"));
     }
 }

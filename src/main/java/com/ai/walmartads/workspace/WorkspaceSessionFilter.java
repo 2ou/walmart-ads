@@ -50,7 +50,7 @@ public class WorkspaceSessionFilter extends OncePerRequestFilter {
                 response.sendError(403);
                 return;
             }
-            if (isPinksirResetPath(path) && !isLoopback(request)) {
+            if (isPrimaryResetPath(path) && !isLoopback(request)) {
                 response.sendError(403);
                 return;
             }
@@ -86,20 +86,19 @@ public class WorkspaceSessionFilter extends OncePerRequestFilter {
     private boolean isPublic(String path) {
         if (path.startsWith("/api/browser-bridge/")) return true;
         if (path.equals("/login.html") || path.equals("/auth.css") || path.equals("/auth.js")
-                || path.equals("/pinksir-reset.html") || path.equals("/pinksir-reset.js")
+                || isPrimaryResetPath(path)
                 || path.startsWith("/favicon") || path.startsWith("/error")) return true;
         if (path.equals("/api/auth/status") || path.equals("/api/auth/login")
-                || path.equals("/api/auth/register/discover") || path.equals("/api/auth/register")
-                || path.equals("/api/auth/pinksir-reset")) return true;
+                || path.equals("/api/auth/register/discover") || path.equals("/api/auth/register")) return true;
         if ((path.equals("/setup.html") || path.equals("/setup.js")) && accounts.setupRequired()) return true;
         if ((path.equals("/api/auth/setup") || path.equals("/api/auth/discover") || path.equals("/api/auth/bootstrap"))
                 && accounts.setupRequired()) return true;
         return path.equals("/actuator/health") || path.equals("/api/health");
     }
 
-    private boolean isPinksirResetPath(String path) {
-        return path.equals("/pinksir-reset.html") || path.equals("/pinksir-reset.js")
-                || path.equals("/api/auth/pinksir-reset");
+    private boolean isPrimaryResetPath(String path) {
+        return path.equals("/primary-reset.html") || path.equals("/primary-reset.js")
+                || path.equals("/api/auth/primary-reset");
     }
 
     private boolean isLocalSetupPath(String path) {

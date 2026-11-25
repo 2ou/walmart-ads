@@ -26,7 +26,8 @@ public class DataConnectorStore {
     @Transactional
     public void ensureWorkspace(WorkspacePrincipal principal) {
         for (ConnectorSource source : ConnectorSource.values()) {
-            boolean enabled = source != ConnectorSource.SUPPLY_CHAIN || principal.supplyChainEnabled();
+            boolean enabled = source == ConnectorSource.LINGXING_INVENTORY
+                    || (source.usesBrowser() && principal.supplyChainEnabled());
             jdbc.update("""
                     insert into wm_ads_connector_source_state(workspace_id,source_code,enabled,status)
                     values (?,?,?,'WAITING')
@@ -137,6 +138,7 @@ public class DataConnectorStore {
     @Transactional
     public void requestBrowserSync(long workspaceId, Collection<ConnectorSource> sources, String triggeredBy) {
         for (ConnectorSource source : sources) {
+            if (!source.usesBrowser()) continue;
             jdbc.update("""
                     update wm_ads_connector_source_state
                        set status='WAITING_BROWSER',last_started_at=now(6),
@@ -182,7 +184,7 @@ public class DataConnectorStore {
                 select source_code
                   from wm_ads_connector_source_state
                  where workspace_id=? and enabled=1 and status='WAITING_BROWSER'
-                   and source_code <> 'LINGXING_INVENTORY'
+                   and source_code = 'SUPPLY_CHAIN'
                  order by source_code
                 """, String.class, workspaceId);
     }
@@ -194,7 +196,7 @@ public class DataConnectorStore {
         return jdbc.update("""
                 update wm_ads_connector_source_state
                    set status='FAILED',last_failure_at=now(6),last_message=?
-                 where workspace_id=? and status='WAITING_BROWSER'
+                 where workspace_id=? and status='WAITING_BROWSER' and source_code='SUPPLY_CHAIN'
                    and last_started_at<?
                 """, message, workspaceId, LocalDateTime.now().minusMinutes(safeMinutes));
     }

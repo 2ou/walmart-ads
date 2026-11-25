@@ -4,26 +4,14 @@ const TEMPLATE_PREFIX = "lingxingRequestTemplate:";
 const HEARTBEAT_ALARM = "workbench-current-chrome-heartbeat";
 
 const SOURCES = {
-  LINGXING_WFS: {
-    origin: "https://czyx.lingxing.com",
-    origins: ["https://czyx.lingxing.com", "https://gw.lingxingerp.com"],
-    path: "/mp-platform-warehouse-api/api/cargo/list",
-    page: "https://czyx.lingxing.com/erp/mmulti/pwShipment",
-    endpoint: "/lingxing-wfs-shipments"
-  },
   SUPPLY_CHAIN: {
     origin: "https://czyxgyl.shangyiku.top",
     page: "https://czyxgyl.shangyiku.top/produce/deliverGoods"
   }
 };
 
-const pendingBodies = new Map();
 const syncing = new Map();
-const scheduledSyncs = new Map();
 let scheduledSupplySync = null;
-
-/** 单次重放的合法总量上限：超过说明页面筛选条件丢了（抓到全库），必须报错而不是硬翻页。 */
-const MAX_FETCH_ROWS = { LINGXING_WFS: 20000, DEFAULT: 20000 };
 
 async function settings() {
   const stored = await chrome.storage.local.get(SETTINGS_KEY);
@@ -69,190 +57,10 @@ async function heartbeat() {
   const data = await api("/heartbeat");
   await saveSettings({ ...current, online: true, lastSeenAt: new Date().toISOString(), lastError: null });
   await refreshBadge();
-  for (const source of (data?.pendingSources || [])) {
-    if (source === "SUPPLY_CHAIN") syncSupply().catch(() => {});
-    else if (SOURCES[source]) scheduleLingxingSync(source);
+  if (current.sources?.includes("SUPPLY_CHAIN") && data?.pendingSources?.includes("SUPPLY_CHAIN")) {
+    syncSupply().catch(() => {});
   }
   return data;
-}
-
-function bodyFrom(details) {
-  const body = details.requestBody;
-  if (!body) return null;
-  if (body.formData) {
-    const params = new URLSearchParams();
-    Object.entries(body.formData).forEach(([key, values]) => (values || []).forEach((value) => params.append(key, value)));
-    return params.toString();
-  }
-  const chunks = body.raw || [];
-  const length = chunks.reduce((total, chunk) => total + (chunk.bytes?.byteLength || 0), 0);
-  if (!length) return null;
-  const merged = new Uint8Array(length);
-  let offset = 0;
-  chunks.forEach((chunk) => {
-    if (!chunk.bytes) return;
-    const bytes = new Uint8Array(chunk.bytes);
-    merged.set(bytes, offset);
-    offset += bytes.byteLength;
-  });
-  return new TextDecoder().decode(merged);
-}
-
-function headersFrom(headers = []) {
-  const blocked = /^(cookie|host|content-length|origin|referer|accept-encoding|connection|sec-|proxy-)/i;
-  const result = {};
-  headers.forEach((header) => {
-    const name = String(header.name || "").trim();
-    if (name && typeof header.value === "string" && !blocked.test(name)) result[name] = header.value;
-  });
-  return result;
-}
-
-function sourceForUrl(url) {
-  try {
-    const parsed = new URL(url);
-    return Object.entries(SOURCES).find(([, source]) => source.path
-      && (source.origins || [source.origin]).includes(parsed.origin)
-      && parsed.pathname === source.path)?.[0] || null;
-  } catch {
-    return null;
-  }
-}
-
-function ownRequest(details) {
-  return String(details.initiator || "").startsWith(`chrome-extension://${chrome.runtime.id}`);
-}
-
-function firstArray(payload) {
-  return [payload?.data?.list, payload?.data?.rows, payload?.data?.records, payload?.data?.items,
-    payload?.list, payload?.rows, payload?.records, payload?.items].find(Array.isArray) || null;
-}
-
-function totalOf(payload) {
-  const value = [payload?.data?.total, payload?.data?.total_count, payload?.data?.totalCount,
-    payload?.total, payload?.total_count, payload?.totalCount, payload?.count]
-    .map(Number).find(Number.isFinite);
-  return value == null ? null : Math.max(0, value);
-}
-
-function canonicalWfs(template) {
-  return transformBody(template, (value) => ({ ...value, queryValues: [], queryValue: "",
-      cargoStatusList: [], cargoLocalStatusList: [], shipStatus: null, hasShippingList: null,
-      shippingListStatuses: [], diffOfDeclareAndShip: null, diffOfDeclareAndSign: null,
-      diffOfSignAndDeclare: null, startTime: null, endTime: null, offset: 0, length: 500 }));
-}
-
-function transformBody(template, transform) {
-  if (!template.body) throw new Error("没有捕获到领星列表请求体，请刷新对应页面后重试");
-  try {
-    return { ...template, body: JSON.stringify(transform(JSON.parse(template.body))) };
-  } catch {
-    const params = new URLSearchParams(template.body);
-    if (![...params.keys()].length) throw new Error("领星列表请求体无法识别，请刷新对应页面后重试");
-    return { ...template, body: new URLSearchParams(transform(Object.fromEntries(params.entries()))).toString() };
-  }
-}
-
-function canonicalTemplate(template, sourceCode) {
-  if (sourceCode === "LINGXING_WFS") return canonicalWfs(template);
-  return template;
-}
-
-function pagination(template, sourceCode) {
-  const contentType = Object.entries(template.headers || {})
-    .find(([name]) => name.toLowerCase() === "content-type")?.[1] || "";
-  if (template.body && (contentType.includes("json") || template.body.trim().startsWith("{"))) {
-    try {
-      const value = JSON.parse(template.body);
-      if (Object.hasOwn(value, "offset") && Object.hasOwn(value, "length")
-          && sourceCode === "LINGXING_WFS") {
-        const size = Number(value.length);
-        return { size, apply(page) { return { ...template, body: JSON.stringify({ ...value, offset: (page - 1) * size }) }; } };
-      }
-      const pageKey = ["page", "page_no", "pageNo", "page_num", "pageNum", "current", "current_page"]
-        .find((key) => Object.hasOwn(value, key));
-      const sizeKey = ["page_size", "pageSize", "limit", "per_page", "perPage"]
-        .find((key) => Object.hasOwn(value, key));
-      if (pageKey && sizeKey) {
-        return { size: Number(value[sizeKey]), apply(page) { return { ...template,
-          body: JSON.stringify({ ...value, [pageKey]: page }) }; } };
-      }
-    } catch { /* form/query fallback below */ }
-  }
-  if (template.body) {
-    const params = new URLSearchParams(template.body);
-    const pageKey = ["page", "page_no", "pageNo", "page_num", "pageNum", "current", "current_page"]
-      .find((key) => params.has(key));
-    const sizeKey = ["page_size", "pageSize", "limit", "per_page", "perPage"].find((key) => params.has(key));
-    if (pageKey && sizeKey) return { size: Number(params.get(sizeKey)), apply(page) {
-      const next = new URLSearchParams(params); next.set(pageKey, String(page));
-      return { ...template, body: next.toString() };
-    } };
-  }
-  const url = new URL(template.url);
-  const pageKey = ["page", "page_no", "pageNo", "page_num", "pageNum", "current", "current_page"]
-    .find((key) => url.searchParams.has(key));
-  const sizeKey = ["page_size", "pageSize", "limit", "per_page", "perPage"].find((key) => url.searchParams.has(key));
-  if (!pageKey || !sizeKey) return null;
-  return { size: Number(url.searchParams.get(sizeKey)), apply(page) {
-    const next = new URL(template.url); next.searchParams.set(pageKey, String(page));
-    return { ...template, url: next.toString() };
-  } };
-}
-
-async function fetchTemplate(template, sourceCode) {
-  const response = await fetch(template.url, {
-    method: template.method,
-    headers: template.headers,
-    body: ["GET", "HEAD"].includes(template.method) ? undefined : template.body,
-    credentials: "include",
-    cache: "no-store",
-    signal: AbortSignal.timeout(60000)
-  });
-  const payload = await response.json().catch(() => null);
-  if (!response.ok || payload == null || (sourceCode === "LINGXING_WFS" && Number(payload.code) !== 1)) {
-    const error = new Error(`领星读取失败（HTTP ${response.status}）`);
-    error.loginRequired = response.status === 401 || response.status === 403;
-    throw error;
-  }
-  return payload;
-}
-
-async function fetchAll(normalized, sourceCode) {
-  const paging = pagination(normalized, sourceCode);
-  const first = await fetchTemplate(paging ? paging.apply(1) : normalized, sourceCode);
-  const firstRows = firstArray(first);
-  const total = totalOf(first);
-  const limit = MAX_FETCH_ROWS[sourceCode] || MAX_FETCH_ROWS.DEFAULT;
-  if (total != null && total > limit) {
-    throw new Error(`领星返回总量 ${total} 行，超过单次上限 ${limit}，疑似页面筛选条件丢失（未选中本店铺），已保留原数据`);
-  }
-  if (!firstRows) throw new Error("领星列表响应结构无法识别，已保留原数据");
-  if (!paging || paging.size <= 0) {
-    if (total != null && firstRows.length < total) {
-      throw new Error(`领星只读取到 ${firstRows.length}/${total} 行且无法分页，已保留原数据`);
-    }
-    return first;
-  }
-  if (total != null && firstRows.length >= total) return first;
-  const rows = [...firstRows];
-  const pageCount = total == null
-    ? Math.min(100, Math.ceil(limit / paging.size))
-    : Math.min(100, Math.ceil(total / paging.size));
-  for (let page = 2; page <= pageCount; page += 1) {
-    const payload = await fetchTemplate(paging.apply(page), sourceCode);
-    const pageRows = firstArray(payload);
-    if (!pageRows) throw new Error(`领星第 ${page} 页结构无法识别，已保留原数据`);
-    rows.push(...pageRows);
-    if (!pageRows.length || pageRows.length < paging.size || (total != null && rows.length >= total)) break;
-    if (rows.length >= limit) throw new Error(`领星读取已达到安全上限 ${limit} 行，已保留原数据`);
-  }
-  if (total != null && rows.length < total) throw new Error(`领星只读取到 ${rows.length}/${total} 行，已保留原数据`);
-  if (total == null && rows.length > 0 && rows.length % paging.size === 0) {
-    throw new Error(`领星分页没有返回总数，读取到 ${rows.length} 行后仍未结束，已保留原数据`);
-  }
-  const resolvedTotal = total == null ? rows.length : total;
-  return { ...first, data: { ...(first.data || {}), list: rows, total: resolvedTotal } };
 }
 
 async function reportFailure(source, error) {
@@ -267,50 +75,6 @@ async function reportFailure(source, error) {
   const current = await settings();
   if (current) await saveSettings({ ...current, lastError: error?.message || "同步失败" });
   await refreshBadge();
-}
-
-async function syncLingxing(sourceCode) {
-  if (syncing.has(sourceCode)) return syncing.get(sourceCode);
-  const task = (async () => {
-    try {
-      const stored = await chrome.storage.session.get(TEMPLATE_PREFIX + sourceCode);
-      const template = stored[TEMPLATE_PREFIX + sourceCode];
-      if (!template) {
-        const error = new Error("尚未读取领星 WFS 货件页面，请点击“打开页面”并刷新，读取后自动同步");
-        error.pageRequired = true;
-        throw error;
-      }
-      const current = await settings();
-      const normalized = canonicalTemplate(template, sourceCode);
-      const response = await fetchAll(normalized, sourceCode);
-      const result = await api(SOURCES[sourceCode].endpoint, "POST", {
-        sourceUrl: normalized.url,
-        response,
-        capturedAt: new Date().toISOString()
-      });
-      if (current) await saveSettings({ ...current, lastSyncAt: new Date().toISOString(), lastError: null });
-      return result;
-    } catch (error) {
-      if (error?.loginRequired) await chrome.storage.session.remove(TEMPLATE_PREFIX + sourceCode);
-      await reportFailure(sourceCode, error);
-      throw error;
-    } finally {
-      syncing.delete(sourceCode);
-      await refreshBadge();
-    }
-  })();
-  syncing.set(sourceCode, task);
-  return task;
-}
-
-function scheduleLingxingSync(source) {
-  const previous = scheduledSyncs.get(source);
-  if (previous) clearTimeout(previous);
-  const timer = setTimeout(() => {
-    scheduledSyncs.delete(source);
-    syncLingxing(source).catch(() => {});
-  }, 800);
-  scheduledSyncs.set(source, timer);
 }
 
 function bearer(headers = []) {
@@ -411,27 +175,18 @@ async function ensurePage(sourceCode, activeForLogin, refreshExisting = false) {
 
 async function runCommand(command) {
   if (!command?.action) return heartbeat();
-  if (command.action === "OPEN_PAGE") {
-    if (!SOURCES[command.source]) throw new Error("未知的数据源");
-    return ensurePage(command.source, true, true);
-  }
-  if (command.action === "LOGIN") {
-    if (command.system === "SUPPLY_CHAIN") {
-      return ensurePage("SUPPLY_CHAIN", true);
+  if (command.action === "OPEN_PAGE" || command.action === "LOGIN") {
+    if ((command.source || command.system) !== "SUPPLY_CHAIN") {
+      throw new Error("领星数据已改由 MCP 同步，请在工作台的领星 MCP 同步计划中操作");
     }
-    return ensurePage("LINGXING_WFS", true);
+    return ensurePage("SUPPLY_CHAIN", true, command.action === "OPEN_PAGE");
   }
   if (command.action !== "SYNC") throw new Error("未知的浏览器连接指令");
   const requested = command.source || "ALL";
+  if (!["ALL", "SUPPLY_CHAIN"].includes(requested)) return [];
   const current = await settings();
-  const targets = requested === "ALL"
-    ? (current?.sources || ["LINGXING_WFS"]) : [requested];
-  const results = [];
-  for (const source of targets) {
-    if (!SOURCES[source]) continue;
-    results.push(source === "SUPPLY_CHAIN" ? await syncSupply() : await syncLingxing(source));
-  }
-  return results;
+  if (!current?.sources?.includes("SUPPLY_CHAIN")) return [];
+  return [await syncSupply()];
 }
 
 async function acceptWorkbenchSession(message) {
@@ -445,7 +200,8 @@ async function acceptWorkbenchSession(message) {
     workspaceId: bootstrap.workspaceId,
     storeName: bootstrap.storeName || "",
     storeAbbreviation: bootstrap.storeAbbreviation || "",
-    sources: Array.isArray(bootstrap.sources) ? bootstrap.sources : [],
+    sources: Array.isArray(bootstrap.sources)
+      ? bootstrap.sources.filter((source) => source === "SUPPLY_CHAIN") : [],
     connectedAt: new Date().toISOString(),
     lastError: null
   });
@@ -477,45 +233,18 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
   return true;
 });
 
-chrome.webRequest.onBeforeRequest.addListener((details) => {
-  const source = sourceForUrl(details.url);
-  if (!source || ownRequest(details) || details.method === "OPTIONS") return;
-  pendingBodies.set(details.requestId, bodyFrom(details));
-}, { urls: [
-  "https://czyx.lingxing.com/mp-platform-warehouse-api/api/cargo/list*",
-  "https://gw.lingxingerp.com/mp-platform-warehouse-api/api/cargo/list*"
-] }, ["requestBody"]);
-
 chrome.webRequest.onBeforeSendHeaders.addListener((details) => {
-  if (details.url.startsWith("https://czyxgyl.shangyiku.top/prod-api/") && details.method !== "OPTIONS") {
-    saveSupplyToken(bearer(details.requestHeaders)).catch(() => {});
-    return;
-  }
-  const source = sourceForUrl(details.url);
-  if (!source || ownRequest(details) || details.method === "OPTIONS") return;
-  const template = {
-    url: details.url,
-    method: details.method || "POST",
-    headers: headersFrom(details.requestHeaders),
-    body: pendingBodies.get(details.requestId) || null,
-    capturedAt: new Date().toISOString()
-  };
-  pendingBodies.delete(details.requestId);
-  chrome.storage.session.set({ [TEMPLATE_PREFIX + source]: template })
-    .then(() => scheduleLingxingSync(source)).catch(() => {});
-}, { urls: [
-  "https://czyxgyl.shangyiku.top/prod-api/*",
-  "https://czyx.lingxing.com/mp-platform-warehouse-api/api/cargo/list*",
-  "https://gw.lingxingerp.com/mp-platform-warehouse-api/api/cargo/list*"
-] }, ["requestHeaders", "extraHeaders"]);
-
+  if (details.method !== "OPTIONS") saveSupplyToken(bearer(details.requestHeaders)).catch(() => {});
+}, { urls: ["https://czyxgyl.shangyiku.top/prod-api/*"] }, ["requestHeaders", "extraHeaders"]);
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === HEARTBEAT_ALARM) heartbeat().catch(() => {});
 });
 
 async function bootstrap() {
-  // 国内仓库存已由 MCP 接管，不再保存旧版插件捕获的请求模板。
-  await chrome.storage.session.remove(TEMPLATE_PREFIX + "LINGXING_INVENTORY");
+  // 领星数据已由 MCP 接管，清理旧版插件保留的领星请求模板。
+  await chrome.storage.session.remove([
+    TEMPLATE_PREFIX + "LINGXING_INVENTORY", TEMPLATE_PREFIX + "LINGXING_WFS"
+  ]);
   // 同名 alarm 再次 create 会取消并重建；Service Worker 每次唤醒都执行 bootstrap，
   // 因此必须只补建缺失 alarm，不能把下一次心跳永远向后推。
   if (!await chrome.alarms.get(HEARTBEAT_ALARM)) {

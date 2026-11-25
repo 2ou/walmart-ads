@@ -1,6 +1,7 @@
 package com.ai.walmartads.workspace;
 
 import com.ai.walmartads.lingxingorder.LingXingOrderSyncService;
+import com.ai.walmartads.inventory.application.LingxingWfsMcpSyncService;
 import com.ai.walmartads.pricemonitor.PriceMonitorService;
 import com.ai.walmartads.walmartad.WalmartAdSyncService;
 import com.ai.walmartads.walmartcomment.WalmartCommentSyncService;
@@ -8,10 +9,13 @@ import com.ai.walmartads.walmartlisting.LingXingClient;
 import com.ai.walmartads.walmartlisting.WalmartListingSyncService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -26,6 +30,9 @@ public class WorkspaceSyncScheduler {
 
     /** 同步周期（小时）。0/6/12/18 点各一轮。 */
     private static final int SYNC_INTERVAL_HOURS = 6;
+    static final String WFS_SHIPMENTS = "WFS_SHIPMENTS";
+    static final int WFS_SHIPMENT_MINUTE = 15;
+    private static final ZoneId SCHEDULE_ZONE = ZoneId.of("Asia/Shanghai");
 
     /** 价格监控是纯本地计算（不调领星），独立每小时跑，不跟着商品同步降频。 */
     private static final int PRICE_MONITOR_MINUTE = 55;
@@ -40,7 +47,7 @@ public class WorkspaceSyncScheduler {
     private static final int AD_REVISION_HOUR = 6;
 
     /** 所有可能长时间运行、需要僵尸回收的类目。 */
-    private static final String[] RECYCLABLE_CATEGORIES = {"PRODUCTS", "INVENTORY", "SALES", "ADS", "REVIEWS", "HISTORY"};
+    private static final String[] RECYCLABLE_CATEGORIES = {"PRODUCTS", "INVENTORY", "SALES", "ADS", "REVIEWS", "HISTORY", WFS_SHIPMENTS};
 
     /** RUNNING 超过该时长视为上次进程已中断（正常单类目同步远小于此值）。 */
     private static final int STALE_RUNNING_MINUTES = 30;
@@ -53,6 +60,7 @@ public class WorkspaceSyncScheduler {
     private final PriceMonitorService prices;
     private final WorkspaceInitializationService initialization;
     private final LingXingMcpCoordinator mcpCoordinator;
+    private final LingxingWfsMcpSyncService wfsShipments;
 
     public WorkspaceSyncScheduler(
             WorkspaceLingXingConfigService configs,
@@ -62,7 +70,8 @@ public class WorkspaceSyncScheduler {
             WalmartCommentSyncService comments,
             PriceMonitorService prices,
             WorkspaceInitializationService initialization,
-            LingXingMcpCoordinator mcpCoordinator
+            LingXingMcpCoordinator mcpCoordinator,
+            LingxingWfsMcpSyncService wfsShipments
     ) {
         this.configs = configs;
         this.listings = listings;
@@ -72,12 +81,58 @@ public class WorkspaceSyncScheduler {
         this.prices = prices;
         this.initialization = initialization;
         this.mcpCoordinator = mcpCoordinator;
+        this.wfsShipments = wfsShipments;
     }
 
     /** One scheduler fans out into tenant-bound work; no sync runs without an explicit WorkspaceContext. */
     @Scheduled(cron = "0 * * * * *", zone = "Asia/Shanghai")
     public void tick() {
-        tickAt(LocalDateTime.now());
+        tickAt(LocalDateTime.now(SCHEDULE_ZONE));
+    }
+
+    /** Bootstrap the new source promptly, and catch up a missed cycle after a restart. */
+    @EventListener(ApplicationReadyEvent.class)
+    public void catchUpWfsShipmentsAfterStartup() {
+        Thread.startVirtualThread(() -> {
+            try {
+                LocalDateTime productSince = LocalDateTime.now(SCHEDULE_ZONE).minusHours(1);
+                Set<Long> checkedWorkspaces = new HashSet<>();
+                for (String cadence : List.of("HOURLY", "SIX_HOURLY")) {
+                    for (WorkspacePrincipal principal : configs.activeWorkspaces("PRODUCTS", cadence, null)) {
+                        if (!checkedWorkspaces.add(principal.workspaceId())) {
+                            continue;
+                        }
+                        boolean recentSync = configs.hasRecentValidSync(principal.workspaceId(), "PRODUCTS", productSince);
+                        boolean hasWfsV2 = WorkspaceContext.callAs(principal, listings::hasWfsStockV2Snapshot);
+                        if (!recentSync || !hasWfsV2) {
+                            log.info("启动自动补跑商品与 WFS 库存 v2 同步：workspaceId={}, recentSync={}, hasWfsV2={}",
+                                    principal.workspaceId(), recentSync, hasWfsV2);
+                            WorkspaceContext.runAs(principal, () -> {
+                                Outcome outcome = runCategoryBound(principal, "PRODUCTS", () -> {
+                                    var summary = listings.syncNow("STARTUP_CATCHUP");
+                                    return new SyncResult(summary.status(), summary.fetchedCount(),
+                                            summary.updatedCount(), summary.errorMessage());
+                                }, "STARTUP_CATCHUP");
+                                mirrorOutcome(principal, "INVENTORY", outcome);
+                            });
+                        }
+                    }
+                }
+            } catch (Exception exception) {
+                log.warn("商品与 WFS 库存启动补跑检查失败：{}", exception.getMessage());
+            }
+            try {
+                LocalDateTime since = LocalDateTime.now(SCHEDULE_ZONE).minusHours(SYNC_INTERVAL_HOURS);
+                for (WorkspacePrincipal principal : configs.activeWorkspaces(WFS_SHIPMENTS, "SIX_HOURLY", null)) {
+                    if (!configs.hasRecentValidSync(principal.workspaceId(), WFS_SHIPMENTS, since)) {
+                        WorkspaceContext.runAs(principal, () ->
+                                runCategoryBound(principal, WFS_SHIPMENTS, this::syncWfsShipments, "STARTUP_CATCHUP"));
+                    }
+                }
+            } catch (Exception exception) {
+                log.warn("WFS 货件启动补跑检查失败：{}", exception.getMessage());
+            }
+        });
     }
 
     void tickAt(LocalDateTime now) {
@@ -104,6 +159,11 @@ public class WorkspaceSyncScheduler {
 
         configs.activeWorkspaces("ADS", "HOURLY", minute).forEach(principal ->
                 runHourly(principal, "ADS"));
+
+        if (now.getHour() % SYNC_INTERVAL_HOURS == 0 && minute == WFS_SHIPMENT_MINUTE) {
+            configs.activeWorkspaces(WFS_SHIPMENTS, "SIX_HOURLY", minute).forEach(principal ->
+                    runCategory(principal, WFS_SHIPMENTS, this::syncWfsShipments));
+        }
 
         if (minute == PRICE_MONITOR_MINUTE) {
             runPriceMonitor();
@@ -202,13 +262,16 @@ public class WorkspaceSyncScheduler {
 
     /** Manual runs use the same per-workspace lease and MCP rate limiter as scheduled runs. */
     public void startManualSync(String category) {
-        if (!Set.of("PRODUCTS", "INVENTORY", "SALES", "ADS", "REVIEWS").contains(category)) {
+        if (!Set.of("PRODUCTS", "INVENTORY", "SALES", "ADS", "REVIEWS", WFS_SHIPMENTS).contains(category)) {
             throw new IllegalArgumentException("不支持手动同步此类数据");
         }
         WorkspacePrincipal principal = WorkspaceContext.requirePrincipal();
         if (!principal.ready()) throw new IllegalArgumentException("请先完成店铺绑定");
         WorkspaceLingXingConfigService.Config config = configs.current();
         if (!config.configured()) throw new IllegalArgumentException("请先配置领星 MCP 和店铺");
+        if ("ADS".equals(category) && config.advertiserIds().isEmpty()) {
+            throw new IllegalArgumentException("请先在店铺管理中绑定广告账号");
+        }
         LingXingMcpCoordinator.RuntimeStatus runtime = mcpCoordinator.status(config.baseUrl(), config.apiKey(), category);
         if (runtime.coolingDown()) throw new IllegalArgumentException("领星 MCP 正在限流冷却，请稍后重试");
         WorkspaceLingXingConfigService.SyncLease lease = configs.tryStartSync(principal.workspaceId(), category, "MANUAL");
@@ -246,13 +309,25 @@ public class WorkspaceSyncScheduler {
                 var result = comments.syncNow("MANUAL");
                 yield new SyncResult(result.status(), result.fetchedCount(), result.insertedCount() + result.updatedCount(), result.errorMessage());
             }
+            case WFS_SHIPMENTS -> syncWfsShipments();
             default -> throw new IllegalArgumentException("不支持手动同步此类数据");
         };
     }
 
+    private SyncResult syncWfsShipments() {
+        var result = wfsShipments.syncNow();
+        String message = "同步 %d 票货件，%d 条 SKU 明细，在途 %s 件".formatted(
+                result.importedShipments(), result.importedRows(), result.transitUnits().stripTrailingZeros().toPlainString());
+        return new SyncResult("SUCCESS", result.sourceShipments(), result.importedRows(), message);
+    }
+
     private Outcome runCategoryBound(WorkspacePrincipal principal, String category, SyncAction action) {
+        return runCategoryBound(principal, category, action, "CRON");
+    }
+
+    private Outcome runCategoryBound(WorkspacePrincipal principal, String category, SyncAction action, String trigger) {
         WorkspaceLingXingConfigService.SyncLease lease =
-                configs.tryStartSync(principal.workspaceId(), category, "CRON");
+                configs.tryStartSync(principal.workspaceId(), category, trigger);
         if (lease == null) {
             log.info("Workspace sync already leased workspaceId={}, category={}", principal.workspaceId(), category);
             return Outcome.DEFERRED;
@@ -301,7 +376,7 @@ public class WorkspaceSyncScheduler {
             configs.finishSync(lease, success ? status : "FAILED", result.message(), result.fetched(),
                     result.written(), integrity, null);
             return success ? Outcome.SUCCESS : Outcome.FAILED;
-        } catch (LingXingClient.RateLimitedException limited) {
+        } catch (LingXingClient.RateLimitedException | LingXingMcpCoordinator.CoolingDownException limited) {
             // 冷却中不是失败：标记 DEFERRED，保留上一次真实结果，避免页面每个整点报红。
             runtime = mcpCoordinator.status(config.baseUrl(), config.apiKey(), category);
             configs.finishSync(lease, "DEFERRED", limited.getMessage(), 0, 0,

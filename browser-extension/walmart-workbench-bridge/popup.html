@@ -18,11 +18,10 @@
   <h1>当前浏览器数据连接</h1>
   <p class="sub">复用此 Chrome 的登录状态，不启动专属浏览器。</p>
   <div class="card"><div class="state"><span id="dot" class="dot"></span><span id="state">等待工作台</span></div><small id="store">请打开并登录沃尔玛工作台</small></div>
-  <button id="syncAll">立即同步全部</button>
-  <div class="row"><button data-source="LINGXING_WFS">WFS 货件</button><button data-source="SUPPLY_CHAIN">供应链</button></div>
+  <button id="syncAll">立即同步供应链</button>
   <div class="row"><button id="openWorkbench">打开工作台</button></div>
-  <small>国内仓库存由工作台通过领星 MCP 自动同步。</small>
-  <div id="message"></div>
+  <small>国内仓库存和 WFS 货件由工作台通过领星 MCP 同步。</small>
+  <div id="message" role="status"></div>
   <script src="popup.js"></script>
 </body>
 </html>

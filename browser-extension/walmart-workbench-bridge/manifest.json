@@ -1,13 +1,11 @@
 {
   "manifest_version": 3,
   "name": "沃尔玛工作台 · 当前浏览器数据连接",
-  "version": "2.0.6",
-  "description": "复用当前 Chrome 登录状态，同步领星 WFS 货件与供应链数据。",
+  "version": "2.0.7",
+  "description": "复用当前 Chrome 登录状态，同步供应链生产与物流数据。",
   "permissions": ["alarms", "storage", "tabs", "webRequest"],
   "host_permissions": [
     "https://czyxgyl.shangyiku.top/*",
-    "https://czyx.lingxing.com/*",
-    "https://gw.lingxingerp.com/*",
     "http://localhost/*",
     "http://127.0.0.1/*"
   ],

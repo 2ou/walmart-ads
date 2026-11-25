@@ -6,6 +6,7 @@ import com.ai.walmartads.importing.domain.ProductRecord;
 import com.ai.walmartads.importing.repository.ProductRecordRepository;
 import com.ai.walmartads.inventory.application.LxInventorySnapshotWriter;
 import com.ai.walmartads.inventory.domain.LxInventorySnapshot;
+import com.ai.walmartads.inventory.repository.LxInventorySnapshotRepository;
 import com.ai.walmartads.workspace.WorkspaceLingXingConfigService;
 import com.ai.walmartads.workspace.LingXingMcpCoordinator;
 import com.ai.walmartads.walmartlisting.domain.WalmartListingSyncLog;
@@ -24,10 +25,13 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
- * 沃尔玛在线商品 MCP 每小时同步：拉取领星 {@code platform_listing_walmart_list} 全量（翻页），
+ * 沃尔玛在线商品 MCP 每小时同步：拉取领星 {@code platform_listing_walmart_list} 全量（翻页）
+ * 并合并 {@code wfs_stock_v2_list}（WFS 库龄、预留拆解、官方预测与冗余、采购成本），
  * 按 SKU 回写产品库运营列（只更新已存在行，不新建 SKU），并落一条同步记录。
  *
  * <p>营销属性列（color/size/pattern/material/key_features 等）一律不动，仅 MCP 给得动的运营字段被回写。
@@ -37,6 +41,7 @@ public class WalmartListingSyncService {
 
     private static final Logger log = LoggerFactory.getLogger(WalmartListingSyncService.class);
     private static final DateTimeFormatter DATE_TIME = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+    private static final Pattern NUMBER_PATTERN = Pattern.compile("(-?\\d+(?:\\.\\d+)?)");
 
     private final LingXingProperties properties;
     private final ProductRecordRepository productRepository;
@@ -50,6 +55,8 @@ public class WalmartListingSyncService {
     private LingXingMcpCoordinator mcpCoordinator;
     @Autowired(required = false)
     private com.ai.walmartads.product.application.ProductCatalogService productCatalogService;
+    @Autowired(required = false)
+    private LxInventorySnapshotRepository snapshotRepository;
 
     public WalmartListingSyncService(
             LingXingProperties properties,
@@ -65,6 +72,18 @@ public class WalmartListingSyncService {
         this.objectMapper = objectMapper;
         this.inventorySnapshotWriter = inventorySnapshotWriter;
         this.skuMappingSyncService = skuMappingSyncService;
+    }
+
+    /** 当前最新业务日的库存快照是否已包含 WFS Stock V2 扩展字段（用于启动自动补跑判断）。 */
+    public boolean hasWfsStockV2Snapshot() {
+        if (snapshotRepository == null) {
+            return true;
+        }
+        LocalDate latest = snapshotRepository.findLatestBusinessDate();
+        if (latest == null) {
+            return false;
+        }
+        return snapshotRepository.countWfsStockV2ByBusinessDate(latest) > 0;
     }
 
     public SyncSummary syncNow(String triggeredBy) {
@@ -94,6 +113,7 @@ public class WalmartListingSyncService {
             // instead of being recorded as success and replacing the inventory snapshot.
             // 日期必须与 writeInventorySnapshot 用的业务日一致，否则校验与写入会错位一天。
             inventorySnapshotWriter.assertComplete(UsBusinessDate.usToday(), bySku.size());
+            Map<String, WalmartWfsStockDto> wfsBySku = fetchWfsStockSafely(client, config.storeId());
             List<ProductRecord> products = productRepository
                     .findAllBySkuInAndCurrentVersionTrue(bySku.keySet());
             int updated = 0;
@@ -103,7 +123,7 @@ public class WalmartListingSyncService {
                 if (dto == null) {
                     continue;
                 }
-                if (applyTo(product, dto)) {
+                if (applyTo(product, dto, wfsBySku.get(product.getSku()))) {
                     dirtyProducts.add(product);
                 }
                 updated++;
@@ -114,7 +134,7 @@ public class WalmartListingSyncService {
                     productCatalogService.invalidate();
                 }
             }
-            writeInventorySnapshot(bySku, products);
+            writeInventorySnapshot(bySku, products, wfsBySku);
             String mappingError = rewriteSkuMapping(listings);
             long duration = System.currentTimeMillis() - start;
             record.setFetchedCount(listings.size());
@@ -146,12 +166,40 @@ public class WalmartListingSyncService {
     }
 
     /**
-     * 领星库存快照（V49）：以本次在线商品拉取结果整窗替换「当天」快照。
-     *
-     * <p>可售量口径 = {@code wfs_available_quantity + available_quantity}（与沃尔玛后台报表逐 SKU 实测一致）。
-     * 走独立事务，且异常只记录不抛出 —— 库存快照写入失败不得影响在线商品同步主流程。
+     * 安全拉取 WFS 库存列表-v2：异常或限流时只记告警并降级为空 Map，不阻塞在线商品与价格监控主链路。
      */
-    private void writeInventorySnapshot(Map<String, WalmartListingDto> bySku, List<ProductRecord> products) {
+    private Map<String, WalmartWfsStockDto> fetchWfsStockSafely(LingXingClient client, String storeId) {
+        try {
+            List<WalmartWfsStockDto> items = client.fetchAllWfsStockV2(storeId);
+            Map<String, WalmartWfsStockDto> bySku = new LinkedHashMap<>();
+            for (WalmartWfsStockDto item : items) {
+                String key = blankToNull(item.msku);
+                if (key == null) {
+                    key = blankToNull(item.sku);
+                }
+                if (key != null) {
+                    bySku.putIfAbsent(key.trim(), item);
+                }
+            }
+            return bySku;
+        } catch (Exception exception) {
+            log.warn("领星 WFS 库存 v2 拉取失败（将自动继承当日历史明细，不阻塞商品主同步）：{}", exception.getMessage());
+            return Map.of();
+        }
+    }
+
+    /**
+     * 领星库存快照（V49 + V93）：以本次在线商品与 WFS v2 合并结果整窗替换「当天」快照。
+     *
+     * <p>可售量口径 = {@code wfs_available_quantity + available_quantity}（与沃尔玛后台报表逐 SKU 实测一致）；
+     * WFS 扩展明细（库龄 5 档、预留锁仓拆解、官方预测/冗余/售罄率/断货日、采购成本）来自 {@code wfs_stock_v2_list}。
+     * 若本次 WFS v2 拉取失败，自动继承当天上一版快照中的扩展明细。
+     */
+    private void writeInventorySnapshot(
+            Map<String, WalmartListingDto> bySku,
+            List<ProductRecord> products,
+            Map<String, WalmartWfsStockDto> wfsBySku
+    ) {
         try {
             Map<String, ProductRecord> productBySku = products.stream()
                     .filter(product -> product.getSku() != null)
@@ -165,24 +213,80 @@ public class WalmartListingSyncService {
             // 比销量数据提前一天，跨日对账时出现「当天有销量但没库存」的假缺口。
             LocalDate businessDate = UsBusinessDate.usToday();
             LocalDateTime snapshotAt = LocalDateTime.now();
+            Map<String, LxInventorySnapshot> previousBySku = Map.of();
+            if ((wfsBySku == null || wfsBySku.isEmpty()) && snapshotRepository != null) {
+                previousBySku = snapshotRepository.findByBusinessDate(businessDate).stream()
+                        .filter(existing -> existing.getSku() != null)
+                        .collect(Collectors.toMap(
+                                LxInventorySnapshot::getSku,
+                                existing -> existing,
+                                (first, second) -> first
+                        ));
+            }
             List<LxInventorySnapshot> rows = new ArrayList<>(bySku.size());
             for (WalmartListingDto dto : bySku.values()) {
                 ProductRecord product = productBySku.get(dto.sku);
-                rows.add(new LxInventorySnapshot(businessDate, snapshotAt, dto.sku)
+                LxInventorySnapshot row = new LxInventorySnapshot(businessDate, snapshotAt, dto.sku)
                         .withParentSku(product == null ? null : product.getParentSku())
                         .withItemId(blankToNull(dto.itemId))
                         .withGtin(blankToNull(dto.gtin))
                         .withItemName(product == null ? null : product.getProductName())
                         .withBrand(product == null ? null : product.getBrand())
                         .withListingStatus(mapStatus(dto.status))
-                        .withQuantities(dto.wfsAvailable, dto.nonWfsAvailable));
+                        .withQuantities(dto.wfsAvailable, dto.nonWfsAvailable);
+                WalmartWfsStockDto wfs = wfsBySku == null ? null : wfsBySku.get(dto.sku);
+                if (wfs != null) {
+                    applyWfsDetails(row, wfs, product);
+                } else {
+                    LxInventorySnapshot previous = previousBySku.get(dto.sku);
+                    if (previous != null) {
+                        row.copyWfsDetailsFrom(previous);
+                    }
+                    if (row.getPurchaseCost() == null && product != null && product.getPurchaseCost() != null) {
+                        row.setPurchaseCost(product.getPurchaseCost());
+                    }
+                }
+                rows.add(row);
             }
             int written = inventorySnapshotWriter.replaceDay(businessDate, snapshotAt, rows);
-            log.info("领星库存快照已整窗替换：businessDate={}, rows={}", businessDate, written);
+            log.info("领星库存快照已整窗替换：businessDate={}, rows={}, wfsMatched={}",
+                    businessDate, written, wfsBySku == null ? 0 : wfsBySku.size());
         } catch (LxInventorySnapshotWriter.IncompleteSnapshotException exception) {
             throw exception;
         } catch (Exception exception) {
             log.error("领星库存快照写入失败（不影响在线商品同步）：{}", exception.getMessage());
+        }
+    }
+
+    private static void applyWfsDetails(LxInventorySnapshot row, WalmartWfsStockDto wfs, ProductRecord product) {
+        row.setReservedUnits(parseFlexInt(wfs.reservedQuantity));
+        row.setInboundUnits(parseFlexInt(wfs.inboundQuantity));
+        row.setSuggestedUnits(parseFlexInt(wfs.suggestedUnits));
+        row.setSurplusUnits(parseFlexInt(wfs.surplusUnits));
+        row.setForecastedDaysSupply(parseDaysOfSupply(wfs.daysOfSupply));
+        row.setOutOfStockDate(parseLocalDate(wfs.outOfStockDate));
+        row.setSellThroughRate(parseDecimal(wfs.sellThroughRate));
+        row.setItemLifecycle(blankToNull(wfs.itemLifecycle));
+        row.setOnhandUnits(parseFlexInt(wfs.onhandQuantity));
+        row.setUnabledWarehousingUnits(parseFlexInt(wfs.unabledWarehousingQuantity));
+        row.setInventoryReviewUnits(parseFlexInt(wfs.inventoryReviewQuantity));
+        row.setDamagedUnits(parseFlexInt(wfs.damagedQuantity));
+        row.setAts03Months(parseFlexInt(wfs.ats03Months));
+        row.setAts36Months(parseFlexInt(wfs.ats36Months));
+        row.setAts69Months(parseFlexInt(wfs.ats69Months));
+        row.setAts912Months(parseFlexInt(wfs.ats912Months));
+        row.setAts1YearPlus(parseFlexInt(wfs.ats1Years));
+        row.setFirstInStockDate(parseLocalDate(wfs.firstInStockDate));
+        row.setSalesForecastW1To4(parseDecimal(wfs.salesForecastWeek1to4));
+        row.setSalesForecastW5To8(parseDecimal(wfs.salesForecastWeek5to8));
+        row.setSalesForecastW9To12(parseDecimal(wfs.salesForecastWeek9to12));
+        row.setWfsStockStatus(blankToNull(wfs.stockStatus));
+        row.setCustomerFavorite(wfs.customerFavorite);
+        BigDecimal cost = parsePositiveDecimal(wfs.purchasePrice);
+        if (cost != null) {
+            row.setPurchaseCost(cost);
+        } else if (product != null && product.getPurchaseCost() != null) {
+            row.setPurchaseCost(product.getPurchaseCost());
         }
     }
 
@@ -210,7 +314,7 @@ public class WalmartListingSyncService {
         }
     }
 
-    private boolean applyTo(ProductRecord product, WalmartListingDto d) {
+    private boolean applyTo(ProductRecord product, WalmartListingDto d, WalmartWfsStockDto wfs) {
         boolean changed = false;
         changed |= updateDecimal(product.getPrice(), parseDecimal(d.price), product::setPrice);
         changed |= updateDecimal(product.getStrikethroughPrice(), parseDecimal(d.strikethroughPrice), product::setStrikethroughPrice);
@@ -233,6 +337,12 @@ public class WalmartListingSyncService {
         changed |= updateValue(product.getOfferEndDate(), parseDateTime(d.offerEndDate), product::setOfferEndDate);
         changed |= updateValue(product.getItemUrl(), blankToNull(d.itemUrl), product::setItemUrl);
         changed |= updateValue(product.getPromotionJson(), promotionJson(d.promotionDataList), product::setPromotionJson);
+        if (wfs != null) {
+            BigDecimal purchaseCost = parsePositiveDecimal(wfs.purchasePrice);
+            if (purchaseCost != null) {
+                changed |= updateDecimal(product.getPurchaseCost(), purchaseCost, product::setPurchaseCost);
+            }
+        }
         if (changed) {
             product.setLastSyncedAt(LocalDateTime.now());
         }
@@ -280,6 +390,52 @@ public class WalmartListingSyncService {
         } catch (NumberFormatException exception) {
             return null;
         }
+    }
+
+    private static Integer parseFlexInt(String value) {
+        BigDecimal dec = parseDecimal(value);
+        return dec == null ? null : dec.intValue();
+    }
+
+    private static BigDecimal parsePositiveDecimal(String value) {
+        BigDecimal dec = parseDecimal(value);
+        return (dec != null && dec.compareTo(BigDecimal.ZERO) > 0) ? dec : null;
+    }
+
+    private static BigDecimal parseDaysOfSupply(String value) {
+        BigDecimal direct = parseDecimal(value);
+        if (direct != null) {
+            return direct;
+        }
+        String v = blankToNull(value);
+        if (v == null) {
+            return null;
+        }
+        Matcher matcher = NUMBER_PATTERN.matcher(v);
+        if (matcher.find()) {
+            try {
+                return new BigDecimal(matcher.group(1));
+            } catch (NumberFormatException ignored) {
+                return null;
+            }
+        }
+        return null;
+    }
+
+    private static LocalDate parseLocalDate(String value) {
+        String v = blankToNull(value);
+        if (v == null) {
+            return null;
+        }
+        String trimmed = v.trim();
+        if (trimmed.length() >= 10) {
+            try {
+                return LocalDate.parse(trimmed.substring(0, 10));
+            } catch (RuntimeException ignored) {
+                return null;
+            }
+        }
+        return null;
     }
 
     private static LocalDateTime parseDateTime(String value) {

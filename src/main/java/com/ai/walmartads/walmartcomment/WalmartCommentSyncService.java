@@ -77,8 +77,7 @@ public class WalmartCommentSyncService {
     private final SkuMappingRepository skuMappingRepository;
     private final TransactionTemplate transactionTemplate;
     private final ObjectMapper objectMapper;
-    @Autowired(required = false)
-    private WorkspaceLingXingConfigService workspaceConfig;
+    private final WorkspaceLingXingConfigService workspaceConfig;
     @Autowired(required = false)
     private LingXingMcpCoordinator mcpCoordinator;
 
@@ -88,7 +87,8 @@ public class WalmartCommentSyncService {
             WalmartCommentSyncLogRepository logRepository,
             SkuMappingRepository skuMappingRepository,
             PlatformTransactionManager transactionManager,
-            ObjectMapper objectMapper
+            ObjectMapper objectMapper,
+            WorkspaceLingXingConfigService workspaceConfig
     ) {
         this.properties = properties;
         this.commentRepository = commentRepository;
@@ -96,6 +96,7 @@ public class WalmartCommentSyncService {
         this.skuMappingRepository = skuMappingRepository;
         this.transactionTemplate = new TransactionTemplate(transactionManager);
         this.objectMapper = objectMapper;
+        this.workspaceConfig = workspaceConfig;
     }
 
     /**
@@ -103,8 +104,8 @@ public class WalmartCommentSyncService {
      * 评价每日至多几十条变更，日级拉取已足够新鲜。
      */
     public void scheduledSync() {
-        if (!currentConfig().configured()) {
-            log.debug("领星 MCP 未配置（walmart.ads.lingxing.enabled=false 或缺少 api-key），跳过评价同步");
+        if (!workspaceConfig.currentConfigured()) {
+            log.debug("当前工作区未配置领星 MCP 和店铺，跳过评价同步");
             return;
         }
         try {
@@ -151,7 +152,7 @@ public class WalmartCommentSyncService {
      * 全量接口当前仅数页，按 comment_id upsert 可安全、低成本地自动修复迟到评价。
      */
     public void scheduledReconcile() {
-        if (!currentConfig().configured()) {
+        if (!workspaceConfig.currentConfigured()) {
             return;
         }
         try {
@@ -165,7 +166,7 @@ public class WalmartCommentSyncService {
      * 同步指定窗口。窗口无硬上限（评价接口允许跨年），但需 start ≤ end。
      */
     public SyncSummary syncWindow(String triggeredBy, LocalDate requestedStart, LocalDate requestedEnd) {
-        WorkspaceLingXingConfigService.Config config = currentConfig();
+        WorkspaceLingXingConfigService.Config config = workspaceConfig.current();
         if (!config.configured()) {
             throw new IllegalStateException("领星 MCP 未配置，无法同步 Walmart 评价");
         }
@@ -265,12 +266,6 @@ public class WalmartCommentSyncService {
         }
         log.info("领星 Walmart 评价拉取完成：窗口 {} ~ {}，total={}，拉回={} 条", start, end, total, all.size());
         return all;
-    }
-
-    private WorkspaceLingXingConfigService.Config currentConfig() {
-        if (workspaceConfig != null) return workspaceConfig.current();
-        return new WorkspaceLingXingConfigService.Config(1L, properties.resolvedBaseUrl(), properties.apiKey(),
-                properties.resolvedStoreId(), properties.resolvedPageSize(), properties.resolvedAdvertiserIds());
     }
 
     // ---------------------------------------------------------------- 落库

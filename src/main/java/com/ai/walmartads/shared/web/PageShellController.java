@@ -11,8 +11,6 @@ import java.nio.charset.StandardCharsets;
 @RestController
 public class PageShellController {
 
-    private static final String STYLE_TAG = "<link rel=\"stylesheet\" href=\"/returns.css\">";
-    private static final String SCRIPT_TAG = "<script src=\"/returns.js?v=20261106-zero-refunds\" defer></script>";
     private volatile String page;
 
     @GetMapping(value = {"/", "/index.html"}, produces = MediaType.TEXT_HTML_VALUE)
@@ -21,11 +19,8 @@ public class PageShellController {
         if (cached != null) {
             return cached;
         }
-        String source = new ClassPathResource("static/index.html")
+        cached = new ClassPathResource("static/index.html")
                 .getContentAsString(StandardCharsets.UTF_8);
-        cached = source
-                .replace("</head>", STYLE_TAG + "</head>")
-                .replace("</body>", SCRIPT_TAG + "</body>");
         page = cached;
         return cached;
     }
